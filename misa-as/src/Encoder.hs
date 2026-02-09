@@ -1,7 +1,7 @@
 module Encoder (encodeProgram) where
 
 
-import Architecture
+import Grammar
 
 import Data.Bits (shiftL, (.|.), (.&.))
 import Data.Word (Word8)

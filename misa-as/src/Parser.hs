@@ -1,7 +1,7 @@
 module Parser (parseProgram) where
 
 
-import Architecture
+import Grammar
 
 import Text.Megaparsec
 import Text.Megaparsec.Char
@@ -27,21 +27,20 @@ parseSymbol = L.symbol parseSkip
 
 
 parseRegister :: Parser Register
-parseRegister = parseLexeme $ do
+parseRegister = parseLexeme (do
   _ <- char 'R'
   n <- L.decimal
   if n >= minRegister && n <= maxRegister then
     return (toEnum n)
   else
-    fail "Unknown register"
+    fail "Unknown register")
 
 
 parseImmediate :: Parser Word8
-parseImmediate = parseLexeme $ choice
-  [string "0x" *> L.hexadecimal,
-   string "0o" *> L.octal,
-   string "0b" *> L.binary,
-                  L.decimal]
+parseImmediate = parseLexeme (choice [string "0x" *> L.hexadecimal,
+                                      string "0o" *> L.octal,
+                                      string "0b" *> L.binary,
+                                      L.decimal])
 
 
 parseInstruction :: Parser Instruction

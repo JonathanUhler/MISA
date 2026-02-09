@@ -1,4 +1,4 @@
-module Architecture (Register(..), Instruction(..), minRegister, maxRegister) where
+module Grammar (Register(..), Instruction(..), minRegister, maxRegister) where
 
 
 import Data.Word (Word8)

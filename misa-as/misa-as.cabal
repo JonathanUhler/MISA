@@ -25,8 +25,9 @@ source-repository head
 
 library
   exposed-modules:
-      Architecture
       Encoder
+      Grammar
+      ObjectFile
       Parser
   other-modules:
       Paths_misa_as
