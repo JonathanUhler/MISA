@@ -25,9 +25,8 @@ source-repository head
 
 library
   exposed-modules:
-      Encoder
       Grammar
-      ObjectFile
+      Lexer
       Parser
   other-modules:
       Paths_misa_as
@@ -38,10 +37,6 @@ library
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
-    , bytestring
-    , megaparsec
-    , parser-combinators
-    , text
   default-language: Haskell2010
 
 executable misa-as
@@ -55,11 +50,7 @@ executable misa-as
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
-    , bytestring
-    , megaparsec
     , misa-as
-    , parser-combinators
-    , text
   default-language: Haskell2010
 
 test-suite misa-as-test
@@ -74,9 +65,5 @@ test-suite misa-as-test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
-    , bytestring
-    , megaparsec
     , misa-as
-    , parser-combinators
-    , text
   default-language: Haskell2010
