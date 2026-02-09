@@ -57,3 +57,5 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - misa-as
+    - hspec
+    - hspec-discover

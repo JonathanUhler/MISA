@@ -1,4 +1,4 @@
-module Grammar (Opcode(..), Register(..), Directive(..)) where
+module Grammar (Opcode(..), minRegister, maxRegister, Register(..), Directive(..)) where
 
 
 data Opcode
@@ -15,7 +15,14 @@ data Opcode
   | LI
   | JLZ
   | HALT
-  deriving (Show, Enum)
+  deriving (Show, Enum, Eq)
+
+
+minRegister :: Int
+minRegister = 0
+
+maxRegister :: Int
+maxRegister = 15
 
 
 data Register
@@ -35,11 +42,11 @@ data Register
   | R13
   | R14
   | R15
-  deriving (Show, Enum)
+  deriving (Show, Enum, Eq)
 
 
 data Directive
   = WordDirective
   | ArrayDirective
   | SectionDirective
-  deriving (Show, Enum)
+  deriving (Show, Enum, Eq)
