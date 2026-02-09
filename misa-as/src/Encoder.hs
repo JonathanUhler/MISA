@@ -1,7 +1,8 @@
-module Encoder (encodeInstruction) where
+module Encoder (encodeProgram) where
 
 
-import Architecture (Register(..), Instruction(..))
+import Architecture
+
 import Data.Bits (shiftL, (.|.), (.&.))
 import Data.Word (Word8)
 
@@ -32,10 +33,16 @@ encodeInstruction (SUB  rd  rs1 rs2) = encodeFormat1Instruction 0x2 rd  rs1  rs2
 encodeInstruction (AND  rd  rs1 rs2) = encodeFormat1Instruction 0x3 rd  rs1  rs2
 encodeInstruction (OR   rd  rs1 rs2) = encodeFormat1Instruction 0x4 rd  rs1  rs2
 encodeInstruction (XOR  rd  rs1 rs2) = encodeFormat1Instruction 0x5 rd  rs1  rs2
-encodeInstruction (LW   rd)          = encodeFormat2Instruction 0x8 rd  0x00
-encodeInstruction (SW   rd)          = encodeFormat2Instruction 0x9 rd  0x00
+encodeInstruction (LW   rd  imm)     = encodeFormat2Instruction 0x8 rd  imm
+encodeInstruction (SW   rd  imm)     = encodeFormat2Instruction 0x9 rd  imm
 encodeInstruction (LA   rs1 rs2)     = encodeFormat3Instruction 0xA rs1 rs2
 encodeInstruction (SA   rs1 rs2)     = encodeFormat3Instruction 0xB rs1 rs2
 encodeInstruction (LI   rd  imm)     = encodeFormat2Instruction 0xC rd  imm
 encodeInstruction (JLZ  rd  imm)     = encodeFormat2Instruction 0xD rd  imm
 encodeInstruction (HALT imm)         = encodeFormat2Instruction 0xF R0  imm
+
+
+encodeProgram :: [Instruction] -> [Word8]
+encodeProgram [] = []
+encodeProgram (i : is) = [lowByte, highByte] ++ encodeProgram is
+  where (lowByte, highByte) = encodeInstruction i
