@@ -1,4 +1,52 @@
-module Grammar (Opcode(..), minRegister, maxRegister, Register(..), Directive(..)) where
+module Grammar (Program,
+                Statement(..),
+                Instruction(..),
+                Label,
+                Directive(..),
+                Opcode(..),
+                Register(..),
+                minRegister,
+                maxRegister) where
+
+
+import Data.Int (Int8)
+
+
+type Program = [Statement]
+
+
+data Statement
+  = InstructionStatement Instruction
+  | LabelStatement Label
+  | DirectiveStatement Directive
+  deriving Show
+
+
+data Instruction
+  = AddInstruction  Register Register Register
+  | AdcInstruction  Register Register Register
+  | SubInstruction  Register Register Register
+  | AndInstruction  Register Register Register
+  | OrInstruction   Register Register Register
+  | XorInstruction  Register Register Register
+  | LwInstruction   Register Int8
+  | SwInstruction   Register Int8
+  | LaInstruction   Register Register
+  | SaInstruction   Register Register
+  | LiInstruction   Register Int8
+  | JlzInstruction  Register Int8
+  | HaltInstruction Int8
+  deriving Show
+
+
+type Label = String
+
+
+data Directive
+  = WordDirective    Int8
+  | ArrayDirective   [Int8]
+  | SectionDirective String
+  deriving Show
 
 
 data Opcode
@@ -42,11 +90,4 @@ data Register
   | R13
   | R14
   | R15
-  deriving (Show, Enum, Eq)
-
-
-data Directive
-  = WordDirective
-  | ArrayDirective
-  | SectionDirective
   deriving (Show, Enum, Eq)
