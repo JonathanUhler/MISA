@@ -19,7 +19,7 @@ data Statement
   = InstructionStatement Instruction
   | LabelStatement Label
   | DirectiveStatement Directive
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 
 data Instruction
@@ -36,7 +36,7 @@ data Instruction
   | LiInstruction   Register Word8
   | JlzInstruction  Register Word8
   | HaltInstruction Word8
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 
 type Label = String
@@ -46,7 +46,7 @@ data Directive
   = WordDirective    Word8
   | ArrayDirective   [Word8]
   | SectionDirective String
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 
 data Opcode
@@ -63,7 +63,7 @@ data Opcode
   | LI
   | JLZ
   | HALT
-  deriving (Show, Enum, Eq)
+  deriving (Show, Enum, Eq, Ord)
 
 
 minRegister :: Int
@@ -90,4 +90,4 @@ data Register
   | R13
   | R14
   | R15
-  deriving (Show, Enum, Eq)
+  deriving (Show, Enum, Eq, Ord)
