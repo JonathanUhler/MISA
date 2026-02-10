@@ -52,6 +52,10 @@ data RelocationType = LowRelocation | HighRelocation
   deriving (Show, Enum)
 
 
+magicHeader :: String
+magicHeader = "MISA_LF "
+
+
 packString :: String -> [Word8]
 packString string
   = packDoubleWord (fromIntegral (length packedString)) ++ packedString
@@ -152,5 +156,7 @@ packSection (Section name code symbols relocations)
 packBinaryObject :: BinaryObject -> [Word8]
 packBinaryObject [] = packDoubleWord 0
 packBinaryObject sections
-  = packDoubleWord (fromIntegral (length sections)) ++ packedSections
+  =  B.unpack (E.encodeUtf8 (T.pack magicHeader))
+  ++ packDoubleWord (fromIntegral (length sections))
+  ++ packedSections
   where packedSections = concatMap packSection sections
