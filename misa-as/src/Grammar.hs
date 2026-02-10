@@ -9,7 +9,7 @@ module Grammar (Program,
                 maxRegister) where
 
 
-import Data.Int (Int8)
+import Data.Word (Word8)
 
 
 type Program = [Statement]
@@ -19,7 +19,7 @@ data Statement
   = InstructionStatement Instruction
   | LabelStatement Label
   | DirectiveStatement Directive
-  deriving Show
+  deriving (Show, Eq)
 
 
 data Instruction
@@ -29,24 +29,24 @@ data Instruction
   | AndInstruction  Register Register Register
   | OrInstruction   Register Register Register
   | XorInstruction  Register Register Register
-  | LwInstruction   Register Int8
-  | SwInstruction   Register Int8
+  | LwInstruction   Register Word8
+  | SwInstruction   Register Word8
   | LaInstruction   Register Register
   | SaInstruction   Register Register
-  | LiInstruction   Register Int8
-  | JlzInstruction  Register Int8
-  | HaltInstruction Int8
-  deriving Show
+  | LiInstruction   Register Word8
+  | JlzInstruction  Register Word8
+  | HaltInstruction Word8
+  deriving (Show, Eq)
 
 
 type Label = String
 
 
 data Directive
-  = WordDirective    Int8
-  | ArrayDirective   [Int8]
+  = WordDirective    Word8
+  | ArrayDirective   [Word8]
   | SectionDirective String
-  deriving Show
+  deriving (Show, Eq)
 
 
 data Opcode

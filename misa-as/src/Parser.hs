@@ -5,7 +5,7 @@ import Grammar
 import Lexer
 
 import Control.Applicative ((<|>))
-import Data.Int (Int8)
+import Data.Word (Word8)
 
 
 isValidImm :: Int -> Int -> Bool
@@ -51,7 +51,7 @@ parserGetLabel (IdentifierToken label : ColonToken : tokens) = Just (LabelStatem
 parserGetLabel _                                             = Nothing
 
 
-buildArrayDirective :: [Token] -> ([Int8], [Token])
+buildArrayDirective :: [Token] -> ([Word8], [Token])
 buildArrayDirective (NumberToken x : tokens) | isValidImm x 8
   = (fromIntegral x : xs, rest)
   where (xs, rest) = buildArrayDirective tokens
@@ -61,8 +61,11 @@ buildArrayDirective tokens = ([], tokens)
 parserGetDirective :: [Token] -> Maybe (Statement, [Token])
 parserGetDirective (PeriodToken : IdentifierToken "word" : NumberToken x : tokens) | isValidImm x 8
   = Just (DirectiveStatement (WordDirective (fromIntegral x)), tokens)
-parserGetDirective (PeriodToken : IdentifierToken "array" : tokens)
-  = Just (DirectiveStatement (ArrayDirective array), rest)
+parserGetDirective (PeriodToken : IdentifierToken "array" : tokens) =
+  if length array > 0 then
+    Just (DirectiveStatement (ArrayDirective array), rest)
+  else
+    Nothing
   where (array, rest) = buildArrayDirective tokens
 parserGetDirective (PeriodToken : IdentifierToken "section" : IdentifierToken section : tokens)
   = Just (DirectiveStatement (SectionDirective section), tokens)

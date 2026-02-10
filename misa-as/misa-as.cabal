@@ -27,6 +27,7 @@ library
   exposed-modules:
       Grammar
       Lexer
+      ObjectFile
       Parser
   other-modules:
       Paths_misa_as
@@ -58,6 +59,7 @@ test-suite misa-as-test
   main-is: Spec.hs
   other-modules:
       LexerSpec
+      ParserSpec
       Paths_misa_as
   autogen-modules:
       Paths_misa_as
