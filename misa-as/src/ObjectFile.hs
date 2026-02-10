@@ -1,6 +1,7 @@
 module ObjectFile (BinaryObject,
                    Section(..),
                    Code,
+                   CodeElement(..),
                    SymbolTable,
                    Symbol(..),
                    RelocationTable,
@@ -24,7 +25,13 @@ data Section = Section Label Code SymbolTable RelocationTable
   deriving Show
 
 
-type Code = [Instruction]
+type Code = [CodeElement]
+
+
+data CodeElement
+  = InstructionCode Instruction
+  | LiteralCode [Word8]
+  deriving Show
 
 
 type SymbolTable = [Symbol]
@@ -99,8 +106,13 @@ packInstruction (HaltInstruction imm)
 
 packCode :: Code -> [Word8]
 packCode code
-  = packDoubleWord (fromIntegral (length packedInstructions)) ++ packedInstructions
-  where packedInstructions = concatMap packInstruction code
+  = packDoubleWord (fromIntegral (length packedCode)) ++ packedCode
+  where packedCode = concatMap packCodeElement code
+
+
+packCodeElement :: CodeElement -> [Word8]
+packCodeElement (InstructionCode instruction) = packInstruction instruction
+packCodeElement (LiteralCode bytes) = bytes
 
 
 packSymbols :: SymbolTable -> [Word8]

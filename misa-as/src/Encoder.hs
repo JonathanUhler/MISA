@@ -20,11 +20,15 @@ encoderSplitSections statements
           in encoderSplitAcc currSection rest newAcc
 
 
-encoderGetInstructions :: Program -> [Instruction]
-encoderGetInstructions [] = []
-encoderGetInstructions (InstructionStatement instruction : statements)
-  = encoderGetInstructions statements ++ [instruction]
-encoderGetInstructions (_ : statements) = encoderGetInstructions statements
+encoderGetCode :: Program -> Code
+encoderGetCode [] = []
+encoderGetCode (InstructionStatement instruction : statements)
+  = encoderGetCode statements ++ [InstructionCode instruction]
+encoderGetCode (DirectiveStatement (WordDirective word) : statements)
+  = encoderGetCode statements ++ [LiteralCode [word]]
+encoderGetCode (DirectiveStatement (ArrayDirective array) : statements)
+  = encoderGetCode statements ++ [LiteralCode array]
+encoderGetCode (_ : statements) = encoderGetCode statements
 
 
 encoderGetSymbols :: Program -> SymbolTable
@@ -44,10 +48,10 @@ encoderGetRelocations _ = []  -- TODO: Implement when instructions with label im
 
 
 encoderCreateSection :: (Label, Program) -> Section
-encoderCreateSection (name, statements) = Section name instructions symbols relocations
-  where instructions = encoderGetInstructions statements
-        symbols      = encoderGetSymbols statements
-        relocations  = encoderGetRelocations statements
+encoderCreateSection (name, statements) = Section name code symbols relocations
+  where code        = encoderGetCode statements
+        symbols     = encoderGetSymbols statements
+        relocations = encoderGetRelocations statements
 
 
 encoderRun :: Program -> BinaryObject
