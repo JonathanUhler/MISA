@@ -55,11 +55,11 @@ program.
 encoderGetCode :: Program -> Code
 encoderGetCode [] = []
 encoderGetCode (InstructionStatement instruction : statements)
-  = encoderGetCode statements ++ [InstructionCode instruction]
+  = InstructionCode instruction : encoderGetCode statements
 encoderGetCode (DirectiveStatement (WordDirective word) : statements)
-  = encoderGetCode statements ++ [LiteralCode [word]]
+  = LiteralCode [word] : encoderGetCode statements
 encoderGetCode (DirectiveStatement (ArrayDirective array) : statements)
-  = encoderGetCode statements ++ [LiteralCode array]
+  = LiteralCode array : encoderGetCode statements
 encoderGetCode (_ : statements) = encoderGetCode statements
 
 

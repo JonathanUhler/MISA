@@ -13,7 +13,6 @@ import Grammar
 
 import Control.Applicative ((<|>))
 import Data.Char (isAlpha, isAlphaNum, isSpace)
-import Data.List (stripPrefix)
 import Numeric (readDec, readBin, readHex, readOct)
 
 
@@ -63,22 +62,25 @@ If parsing succeeds, the opcode token and the remainder of the input string with
 are returned as a tuple. Otherwise `Nothing` is returned.
 -}
 lexerGetOpcode :: String -> Maybe (Token, String)
-lexerGetOpcode cs
-  | Just rest <- stripPrefix "ADD"  cs = Just (OpcodeToken ADD,  rest)
-  | Just rest <- stripPrefix "ADC"  cs = Just (OpcodeToken ADC,  rest)
-  | Just rest <- stripPrefix "SUB"  cs = Just (OpcodeToken SUB,  rest)
-  | Just rest <- stripPrefix "AND"  cs = Just (OpcodeToken AND,  rest)
-  | Just rest <- stripPrefix "OR"   cs = Just (OpcodeToken OR,   rest)
-  | Just rest <- stripPrefix "XOR"  cs = Just (OpcodeToken XOR,  rest)
-  | Just rest <- stripPrefix "LW"   cs = Just (OpcodeToken LW,   rest)
-  | Just rest <- stripPrefix "SW"   cs = Just (OpcodeToken SW,   rest)
-  | Just rest <- stripPrefix "LA"   cs = Just (OpcodeToken LA,   rest)
-  | Just rest <- stripPrefix "SA"   cs = Just (OpcodeToken SA,   rest)
-  | Just rest <- stripPrefix "LI"   cs = Just (OpcodeToken LI,   rest)
-  | Just rest <- stripPrefix "JLZ"  cs = Just (OpcodeToken JLZ,  rest)
-  | Just rest <- stripPrefix "JZ"   cs = Just (OpcodeToken JZ,   rest)
-  | Just rest <- stripPrefix "HALT" cs = Just (OpcodeToken HALT, rest)
-  | otherwise                           = Nothing
+lexerGetOpcode cs =
+  case lexerGetIdentifier cs of
+    Just (identifier, rest) -> case identifier of
+      IdentifierToken "ADD"  -> Just (OpcodeToken ADD,  rest)
+      IdentifierToken "ADC"  -> Just (OpcodeToken ADC,  rest)
+      IdentifierToken "SUB"  -> Just (OpcodeToken SUB,  rest)
+      IdentifierToken "AND"  -> Just (OpcodeToken AND,  rest)
+      IdentifierToken "OR"   -> Just (OpcodeToken OR,   rest)
+      IdentifierToken "XOR"  -> Just (OpcodeToken XOR,  rest)
+      IdentifierToken "LW"   -> Just (OpcodeToken LW,   rest)
+      IdentifierToken "SW"   -> Just (OpcodeToken SW,   rest)
+      IdentifierToken "LA"   -> Just (OpcodeToken LA,   rest)
+      IdentifierToken "SA"   -> Just (OpcodeToken SA,   rest)
+      IdentifierToken "LI"   -> Just (OpcodeToken LI,   rest)
+      IdentifierToken "JLZ"  -> Just (OpcodeToken JLZ,  rest)
+      IdentifierToken "JZ"   -> Just (OpcodeToken JZ,   rest)
+      IdentifierToken "HALT" -> Just (OpcodeToken HALT, rest)
+      _                      -> Nothing
+    Nothing -> Nothing
 
 
 {- |
@@ -88,12 +90,27 @@ If parsing succeeds, the register token and the remainder of the input string wi
 are returned as a tuple. Otherwise `Nothing` is returned.
 -}
 lexerGetRegister :: String -> Maybe (Token, String)
-lexerGetRegister ('R' : cs) =
-    case readDec cs of
-      [(r, remainder)] | minRegister <= r && r <= maxRegister ->
-        Just (RegisterToken (toEnum r), drop (length cs - length remainder) cs)
-      _                                                  -> Nothing
-lexerGetRegister _ = Nothing
+lexerGetRegister cs =
+  case lexerGetIdentifier cs of
+    Just (identifier, rest) -> case identifier of
+      IdentifierToken "R0"  -> Just (RegisterToken R0,  rest)
+      IdentifierToken "R1"  -> Just (RegisterToken R1,  rest)
+      IdentifierToken "R2"  -> Just (RegisterToken R2,  rest)
+      IdentifierToken "R3"  -> Just (RegisterToken R3,  rest)
+      IdentifierToken "R4"  -> Just (RegisterToken R4,  rest)
+      IdentifierToken "R5"  -> Just (RegisterToken R5,  rest)
+      IdentifierToken "R6"  -> Just (RegisterToken R6,  rest)
+      IdentifierToken "R7"  -> Just (RegisterToken R7,  rest)
+      IdentifierToken "R8"  -> Just (RegisterToken R8,  rest)
+      IdentifierToken "R9"  -> Just (RegisterToken R9,  rest)
+      IdentifierToken "R10" -> Just (RegisterToken R10, rest)
+      IdentifierToken "R11" -> Just (RegisterToken R11, rest)
+      IdentifierToken "R12" -> Just (RegisterToken R12, rest)
+      IdentifierToken "R13" -> Just (RegisterToken R13, rest)
+      IdentifierToken "R14" -> Just (RegisterToken R14, rest)
+      IdentifierToken "R15" -> Just (RegisterToken R15, rest)
+      _                     -> Nothing
+    Nothing -> Nothing
 
 
 {- |

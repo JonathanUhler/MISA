@@ -34,7 +34,7 @@ object file/final binary), symbols defined within the section and their section-
 and relocations used in the section with section-relative addresses to the "holes" in the code.
 -}
 data Section = Section Label Code SymbolTable RelocationTable
-  deriving Show
+  deriving (Show, Eq)
 
 
 -- | The type of a section's code, which is a list of instructions or binary literals.
@@ -47,7 +47,7 @@ data CodeElement
   = InstructionCode Instruction
   -- | Literal binary data in the code of a section (e.g. from .array/.word directives).
   | LiteralCode [Word8]
-  deriving Show
+  deriving (Show, Eq)
 
 
 -- | The type of a symbol table.
@@ -56,7 +56,7 @@ type SymbolTable = [Symbol]
 
 -- | The type of a symbol in a section, which is a labeled section-relative address.
 data Symbol = Symbol Label Word16
-  deriving Show
+  deriving (Show, Eq)
 
 
 -- | The type of a relocation table.
@@ -69,7 +69,7 @@ missing symbol existed in the assembly code. The relocation includes the name of
 and which part of the symbol (e.g. high or low word) should be used to fill the hole.
 -}
 data Relocation = Relocation RelocationType Word16 Label
-  deriving Show
+  deriving (Show, Eq)
 
 
 -- | How to fill a relocation.
@@ -78,7 +78,7 @@ data RelocationType
   = LowRelocation
   -- | Use the upper half of the 16-bit word referred to by the relocation symbol to fill the hole.
   | HighRelocation
-  deriving (Show, Enum)
+  deriving (Show, Enum, Eq)
 
 
 -- | A magic 8-byte string that appears at the start of every object file in little-endian order.

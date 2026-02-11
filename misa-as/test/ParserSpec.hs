@@ -11,7 +11,7 @@ import Test.Hspec
 spec :: Spec
 spec = do
   describe "parserRun" $ do
-    it "parses nothing" $
+    it "parses the empty program" $
       parserRun [] `shouldBe` ([], [])
     it "parses single instructions" $ do
       parserRun (fst (lexerRun "ADD R1 R2 R3")) `shouldBe`
@@ -46,6 +46,10 @@ spec = do
         ([InstructionStatement (JlzInstruction R1 (IntImmediate 0))], [])
       parserRun (fst (lexerRun "JLZ R1 x")) `shouldBe`
         ([InstructionStatement (JlzInstruction R1 (LabelImmediate "x"))], [])
+      parserRun (fst (lexerRun "JZ R1 0")) `shouldBe`
+        ([InstructionStatement (JzInstruction R1 (IntImmediate 0))], [])
+      parserRun (fst (lexerRun "JZ R1 x")) `shouldBe`
+        ([InstructionStatement (JzInstruction R1 (LabelImmediate "x"))], [])
       parserRun (fst (lexerRun "HALT 0")) `shouldBe`
         ([InstructionStatement (HaltInstruction (IntImmediate 0))], [])
       parserRun (fst (lexerRun "HALT x")) `shouldBe`

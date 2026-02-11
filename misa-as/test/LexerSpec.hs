@@ -10,7 +10,7 @@ import Test.Hspec
 spec :: Spec
 spec = do
   describe "lexerRun" $ do
-    it "lexes nothing" $
+    it "lexes the empty program" $
       lexerRun "" `shouldBe` ([], "")
     it "lexes whitespace" $
       lexerRun "\n\r\t " `shouldBe` ([], "")
@@ -36,6 +36,8 @@ spec = do
       lexerRun "LI" `shouldBe` ([OpcodeToken LI], "")
       lexerRun "JLZ" `shouldBe` ([OpcodeToken JLZ], "")
       lexerRun "HALT" `shouldBe` ([OpcodeToken HALT], "")
+    it "lexes identifiers which start with opcodes" $
+      lexerRun "ADDITION" `shouldBe` ([IdentifierToken "ADDITION"], "")
     it "lexes registers" $ do
       lexerRun "R0" `shouldBe` ([RegisterToken R0], "")
       lexerRun "R1" `shouldBe` ([RegisterToken R1], "")
@@ -53,6 +55,8 @@ spec = do
       lexerRun "R13" `shouldBe` ([RegisterToken R13], "")
       lexerRun "R14" `shouldBe` ([RegisterToken R14], "")
       lexerRun "R15" `shouldBe` ([RegisterToken R15], "")
+    it "lexes identifiers which start with registers" $
+      lexerRun "R0LABEL" `shouldBe` ([IdentifierToken "R0LABEL"], "")
     it "lexes single-digit numbers" $ do
       lexerRun "0x1" `shouldBe` ([NumberToken 1], "")
       lexerRun "0b1" `shouldBe` ([NumberToken 1], "")

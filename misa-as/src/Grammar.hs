@@ -13,9 +13,7 @@ module Grammar (Program,
                 Directive(..),
                 Opcode(..),
                 Register(..),
-                Immediate(..),
-                minRegister,
-                maxRegister) where
+                Immediate(..)) where
 
 
 import Data.Word (Word8)
@@ -101,15 +99,6 @@ data Opcode
   | JZ
   | HALT
   deriving (Show, Enum, Eq, Ord)
-
-
--- | The minimum general purpose register number, inclusive (R0)
-minRegister :: Int
-minRegister = 0
-
--- | The maximum general purpose register number, inclusive (R15)
-maxRegister :: Int
-maxRegister = 15
 
 
 -- | The list of general purpose register names.
