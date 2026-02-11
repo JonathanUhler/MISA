@@ -116,53 +116,39 @@ All base instructions will be 2-byte lists, and some pseudo-instructions may exp
 one base instruction.
 -}
 packInstruction :: Instruction -> [Word8]
-packInstruction (AddInstruction rd rs1 rs2)
-  = [0x0 .|. shiftL (fromIntegral (fromEnum rd)) 4,
-     fromIntegral (fromEnum rs1) .|. shiftL (fromIntegral (fromEnum rs2)) 4]
-packInstruction (AdcInstruction rd rs1 rs2)
-  = [0x1 .|. shiftL (fromIntegral (fromEnum rd)) 4,
-     fromIntegral (fromEnum rs1) .|. shiftL (fromIntegral (fromEnum rs2)) 4]
-packInstruction (SubInstruction rd rs1 rs2)
-  = [0x2 .|. shiftL (fromIntegral (fromEnum rd)) 4,
-     fromIntegral (fromEnum rs1) .|. shiftL (fromIntegral (fromEnum rs2)) 4]
-packInstruction (AndInstruction rd rs1 rs2)
-  = [0x3 .|. shiftL (fromIntegral (fromEnum rd)) 4,
-     fromIntegral (fromEnum rs1) .|. shiftL (fromIntegral (fromEnum rs2)) 4]
-packInstruction (OrInstruction rd rs1 rs2)
-  = [0x4 .|. shiftL (fromIntegral (fromEnum rd)) 4,
-     fromIntegral (fromEnum rs1) .|. shiftL (fromIntegral (fromEnum rs2)) 4]
-packInstruction (XorInstruction rd rs1 rs2)
-  = [0x5 .|. shiftL (fromIntegral (fromEnum rd)) 4,
-     fromIntegral (fromEnum rs1) .|. shiftL (fromIntegral (fromEnum rs2)) 4]
-packInstruction (LwInstruction rd imm)
-  = [0x8 .|. shiftL (fromIntegral (fromEnum rd)) 4,
-     packImmediate imm]
-packInstruction (SwInstruction rd imm)
-  = [0x9 .|. shiftL (fromIntegral (fromEnum rd)) 4,
-     packImmediate imm]
-packInstruction (LaInstruction rs1 rs2)
-  = [0xA,
-     fromIntegral (fromEnum rs1) .|. shiftL (fromIntegral (fromEnum rs2)) 4]
-packInstruction (SaInstruction rs1 rs2)
-  = [0xB,
-     fromIntegral (fromEnum rs1) .|. shiftL (fromIntegral (fromEnum rs2)) 4]
-packInstruction (LiInstruction rd imm)
-  = [0xC .|. shiftL (fromIntegral (fromEnum rd)) 4,
-     packImmediate imm]
-packInstruction (JlzInstruction rd imm)
-  = [0xD .|. shiftL (fromIntegral (fromEnum rd)) 4,
-     packImmediate imm]
-packInstruction (JzInstruction rd imm)
-  = [0xE .|. shiftL (fromIntegral (fromEnum rd)) 4,
-     packImmediate imm]
-packInstruction (HaltInstruction imm)
-  = [0xF,
-     packImmediate imm]
+packInstruction instruction = case instruction of
+  AddInstruction rd rs1 rs2 -> packRRR 0x0 rd rs1 rs2
+  AdcInstruction rd rs1 rs2 -> packRRR 0x1 rd rs1 rs2
+  SubInstruction rd rs1 rs2 -> packRRR 0x2 rd rs1 rs2
+  AndInstruction rd rs1 rs2 -> packRRR 0x3 rd rs1 rs2
+  OrInstruction rd rs1 rs2  -> packRRR 0x4 rd rs1 rs2
+  XorInstruction rd rs1 rs2 -> packRRR 0x5 rd rs1 rs2
+  LwInstruction rd imm      -> packRI 0x8 rd imm
+  SwInstruction rd imm      -> packRI 0x9 rd imm
+  LaInstruction rs1 rs2     -> packRR 0xA rs1 rs2
+  SaInstruction rs1 rs2     -> packRR 0xB rs1 rs2
+  LiInstruction rd imm      -> packRI 0xC rd imm
+  JlzInstruction rd imm     -> packRI 0xD rd imm
+  JzInstruction rd imm      -> packRI 0xE rd imm
+  HaltInstruction imm       -> packI 0xF imm
+  where packRRR :: Word8 -> Register -> Register -> Register -> [Word8]
+        packRRR op rd rs1 rs2 = [op .|. shiftL (fromR rd) 4, fromR rs1 .|. shiftL (fromR rs2) 4]
 
+        packRI :: Word8 -> Register -> Immediate -> [Word8]
+        packRI op rd imm = [op .|. shiftL (fromR rd) 4, fromI imm]
 
-packImmediate :: Immediate -> Word8
-packImmediate (IntImmediate n)   = fromIntegral n
-packImmediate (LabelImmediate _) = 0x00
+        packRR :: Word8 -> Register -> Register-> [Word8]
+        packRR op rs1 rs2 = [op, fromR rs1 .|. shiftL (fromR rs2) 4]
+
+        packI :: Word8 -> Immediate -> [Word8]
+        packI op imm = [op, fromI imm]
+
+        fromI :: Immediate -> Word8
+        fromI (IntImmediate n) = fromIntegral n
+        fromI (LabelImmediate _) = 0x00
+
+        fromR :: Register -> Word8
+        fromR r = fromIntegral (fromEnum r)
 
 
 {- |

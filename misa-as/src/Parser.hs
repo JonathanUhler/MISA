@@ -14,70 +14,52 @@ import Data.Word (Word8)
 
 
 {- |
-Returns whether the provided integer literal could fit in an unsigned integer type of the
-provided width.
--}
-isValidImm :: Int -> Int -> Bool
-isValidImm imm width = 0 <= imm && imm <= 2 ^ width - 1
-
-
-{- |
 Tries to parse an assembly instruction from the head of the provided list of tokens.
 
 If parsing succeeds, a tuple containing the instruction and the remaining tokens with the consumed
 tokens removed is returned. Otherwise `Nothing` is returned.
 -}
 parserGetInst :: [Token] -> Maybe (Statement, [Token])
--- Instructions with three registers
-parserGetInst (OpcodeToken ADD : RegisterToken rd : RegisterToken rs1 : RegisterToken rs2 : tokens)
-  = Just (InstructionStatement (AddInstruction rd rs1 rs2), tokens)
-parserGetInst (OpcodeToken ADC : RegisterToken rd : RegisterToken rs1 : RegisterToken rs2 : tokens)
-  = Just (InstructionStatement (AdcInstruction rd rs1 rs2), tokens)
-parserGetInst (OpcodeToken SUB : RegisterToken rd : RegisterToken rs1 : RegisterToken rs2 : tokens)
-  = Just (InstructionStatement (SubInstruction rd rs1 rs2), tokens)
-parserGetInst (OpcodeToken AND : RegisterToken rd : RegisterToken rs1 : RegisterToken rs2 : tokens)
-  = Just (InstructionStatement (AndInstruction rd rs1 rs2), tokens)
-parserGetInst (OpcodeToken OR : RegisterToken rd : RegisterToken rs1 : RegisterToken rs2 : tokens)
-  = Just (InstructionStatement (OrInstruction rd rs1 rs2), tokens)
-parserGetInst (OpcodeToken XOR : RegisterToken rd : RegisterToken rs1 : RegisterToken rs2 : tokens)
-  = Just (InstructionStatement (XorInstruction rd rs1 rs2), tokens)
--- Instructions with a register and an immediate
-parserGetInst (OpcodeToken LW : RegisterToken rd : NumberToken imm : tokens) | isValidImm imm 8
-  = Just (InstructionStatement (LwInstruction rd (IntImmediate imm)), tokens)
-parserGetInst (OpcodeToken LW : RegisterToken rd : IdentifierToken imm : tokens)
-  = Just (InstructionStatement (LwInstruction rd (LabelImmediate imm)), tokens)
-
-parserGetInst (OpcodeToken SW : RegisterToken rd : NumberToken imm : tokens) | isValidImm imm 8
-  = Just (InstructionStatement (SwInstruction rd (IntImmediate imm)), tokens)
-parserGetInst (OpcodeToken SW : RegisterToken rd : IdentifierToken imm : tokens)
-  = Just (InstructionStatement (SwInstruction rd (LabelImmediate imm)), tokens)
-
-parserGetInst (OpcodeToken LI : RegisterToken rd : NumberToken imm : tokens) | isValidImm imm 8
-  = Just (InstructionStatement (LiInstruction rd (IntImmediate imm)), tokens)
-parserGetInst (OpcodeToken LI : RegisterToken rd : IdentifierToken imm : tokens)
-  = Just (InstructionStatement (LiInstruction rd (LabelImmediate imm)), tokens)
-
-parserGetInst (OpcodeToken JLZ : RegisterToken rd : NumberToken imm : tokens) | isValidImm imm 8
-  = Just (InstructionStatement (JlzInstruction rd (IntImmediate imm)), tokens)
-parserGetInst (OpcodeToken JLZ : RegisterToken rd : IdentifierToken imm : tokens)
-  = Just (InstructionStatement (JlzInstruction rd (LabelImmediate imm)), tokens)
-
-parserGetInst (OpcodeToken JZ : RegisterToken rd : NumberToken imm : tokens) | isValidImm imm 8
-  = Just (InstructionStatement (JzInstruction rd (IntImmediate imm)), tokens)
-parserGetInst (OpcodeToken JZ : RegisterToken rd : IdentifierToken imm : tokens)
-  = Just (InstructionStatement (JzInstruction rd (LabelImmediate imm)), tokens)
--- Instructions with two registers
-parserGetInst (OpcodeToken LA : RegisterToken rs1 : RegisterToken rs2 : tokens)
-  = Just (InstructionStatement (LaInstruction rs1 rs2), tokens)
-parserGetInst (OpcodeToken SA : RegisterToken rs1 : RegisterToken rs2 : tokens)
-  = Just (InstructionStatement (SaInstruction rs1 rs2), tokens)
--- Instructions with just an immediate
-parserGetInst (OpcodeToken HALT : NumberToken imm : tokens) | isValidImm imm 8
-  = Just (InstructionStatement (HaltInstruction (IntImmediate imm)), tokens)
-parserGetInst (OpcodeToken HALT : IdentifierToken imm : tokens)
-  = Just (InstructionStatement (HaltInstruction (LabelImmediate imm)), tokens)
--- Not a known instruction
-parserGetInst _ = Nothing
+parserGetInst tokens = case tokens of
+  (OpcodeToken op : RegisterToken rd : RegisterToken rs1 : RegisterToken rs2 : rest) ->
+    case op of
+      ADD -> Just (InstructionStatement (AddInstruction rd rs1 rs2), rest)
+      ADC -> Just (InstructionStatement (AdcInstruction rd rs1 rs2), rest)
+      SUB -> Just (InstructionStatement (SubInstruction rd rs1 rs2), rest)
+      AND -> Just (InstructionStatement (AndInstruction rd rs1 rs2), rest)
+      OR  -> Just (InstructionStatement (OrInstruction rd rs1 rs2), rest)
+      XOR -> Just (InstructionStatement (XorInstruction rd rs1 rs2), rest)
+      _   -> Nothing
+  (OpcodeToken op : RegisterToken rd : NumberToken imm : rest) ->
+    case op of
+      LW  -> Just (InstructionStatement (LwInstruction rd (IntImmediate imm)), rest)
+      SW  -> Just (InstructionStatement (SwInstruction rd (IntImmediate imm)), rest)
+      LI  -> Just (InstructionStatement (LiInstruction rd (IntImmediate imm)), rest)
+      JLZ -> Just (InstructionStatement (JlzInstruction rd (IntImmediate imm)), rest)
+      JZ  -> Just (InstructionStatement (JzInstruction rd (IntImmediate imm)), rest)
+      _   -> Nothing
+  (OpcodeToken op : RegisterToken rd : IdentifierToken imm : rest) ->
+    case op of
+      LW  -> Just (InstructionStatement (LwInstruction rd (LabelImmediate imm)), rest)
+      SW  -> Just (InstructionStatement (SwInstruction rd (LabelImmediate imm)), rest)
+      LI  -> Just (InstructionStatement (LiInstruction rd (LabelImmediate imm)), rest)
+      JLZ -> Just (InstructionStatement (JlzInstruction rd (LabelImmediate imm)), rest)
+      JZ  -> Just (InstructionStatement (JzInstruction rd (LabelImmediate imm)), rest)
+      _   -> Nothing
+  (OpcodeToken op : RegisterToken rs1 : RegisterToken rs2 : rest) ->
+    case op of
+      LA -> Just (InstructionStatement (LaInstruction rs1 rs2), rest)
+      SA -> Just (InstructionStatement (SaInstruction rs1 rs2), rest)
+      _  -> Nothing
+  (OpcodeToken op : NumberToken imm : rest) ->
+    case op of
+      HALT -> Just (InstructionStatement (HaltInstruction (IntImmediate imm)), rest)
+      _    -> Nothing
+  (OpcodeToken op : IdentifierToken imm : rest) ->
+    case op of
+      HALT -> Just (InstructionStatement (HaltInstruction (LabelImmediate imm)), rest)
+      _    -> Nothing
+  _ -> Nothing
 
 
 {- |
@@ -102,7 +84,7 @@ Returns a tuple containing the .array directive contents/words and the remaining
 consumed `NumberToken`s removed.
 -}
 buildArrayDirective :: [Token] -> ([Word8], [Token])
-buildArrayDirective (NumberToken x : tokens) | isValidImm x 8
+buildArrayDirective (NumberToken x : tokens)
   = (fromIntegral x : xs, rest)
   where (xs, rest) = buildArrayDirective tokens
 buildArrayDirective tokens = ([], tokens)
@@ -115,13 +97,11 @@ If parsing succeeds, a tuple containing the directive and its payload (if applic
 the remaining tokens with the consumed tokens removed is returned. Otherwise `Nothing` is returned.
 -}
 parserGetDirective :: [Token] -> Maybe (Statement, [Token])
-parserGetDirective (PeriodToken : IdentifierToken "word" : NumberToken x : tokens) | isValidImm x 8
+parserGetDirective (PeriodToken : IdentifierToken "word" : NumberToken x : tokens)
   = Just (DirectiveStatement (WordDirective (fromIntegral x)), tokens)
-parserGetDirective (PeriodToken : IdentifierToken "array" : tokens) =
-  if length array > 0 then
-    Just (DirectiveStatement (ArrayDirective array), rest)
-  else
-    Nothing
+parserGetDirective (PeriodToken : IdentifierToken "array" : tokens)
+  | array /= [] = Just (DirectiveStatement (ArrayDirective array), rest)
+  | otherwise   = Nothing
   where (array, rest) = buildArrayDirective tokens
 parserGetDirective (PeriodToken : IdentifierToken "section" : IdentifierToken section : tokens)
   = Just (DirectiveStatement (SectionDirective section), tokens)
