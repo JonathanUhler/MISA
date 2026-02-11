@@ -14,6 +14,13 @@ import Data.Word (Word8)
 
 
 {- |
+Returns whether the provided integer can fit in an unsigned word of the provided width.
+-}
+isAWord :: Int -> Int -> Bool
+isAWord n wordSize = 0 <= n && n <= 2 ^ wordSize - 1
+
+
+{- |
 Tries to parse an assembly instruction from the head of the provided list of tokens.
 
 If parsing succeeds, a tuple containing the instruction and the remaining tokens with the consumed
@@ -56,7 +63,7 @@ parserGetInstruction tokens = case tokens of
   _ -> Nothing
   where getImmediate :: Token -> Maybe Immediate
         getImmediate immToken = case immToken of
-          NumberToken n         -> Just (IntImmediate n)
+          NumberToken n | isAWord n 8 -> Just (IntImmediate n)
           IdentifierToken label -> Just (LabelImmediate label)
           _                     -> Nothing
 
@@ -83,7 +90,7 @@ Returns a tuple containing the .array directive contents/words and the remaining
 consumed `NumberToken`s removed.
 -}
 buildArrayDirective :: [Token] -> ([Word8], [Token])
-buildArrayDirective (NumberToken x : tokens)
+buildArrayDirective (NumberToken x : tokens) | isAWord x 8
   = (fromIntegral x : xs, rest)
   where (xs, rest) = buildArrayDirective tokens
 buildArrayDirective tokens = ([], tokens)
@@ -96,7 +103,7 @@ If parsing succeeds, a tuple containing the directive and its payload (if applic
 the remaining tokens with the consumed tokens removed is returned. Otherwise `Nothing` is returned.
 -}
 parserGetDirective :: [Token] -> Maybe (Statement, [Token])
-parserGetDirective (PeriodToken : IdentifierToken "word" : NumberToken x : tokens)
+parserGetDirective (PeriodToken : IdentifierToken "word" : NumberToken x : tokens) | isAWord x 8
   = Just (DirectiveStatement (WordDirective (fromIntegral x)), tokens)
 parserGetDirective (PeriodToken : IdentifierToken "array" : tokens)
   | array /= [] = Just (DirectiveStatement (ArrayDirective array), rest)

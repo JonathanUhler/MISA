@@ -27,19 +27,29 @@ spec = do
       parserRun (fst (lexerRun "XOR R1 R2 R3")) `shouldBe`
         ([InstructionStatement (XorInstruction R1 R2 R3)], [])
       parserRun (fst (lexerRun "LW R1 0")) `shouldBe`
-        ([InstructionStatement (LwInstruction R1 0)], [])
+        ([InstructionStatement (LwInstruction R1 (IntImmediate 0))], [])
+      parserRun (fst (lexerRun "LW R1 x")) `shouldBe`
+        ([InstructionStatement (LwInstruction R1 (LabelImmediate "x"))], [])
       parserRun (fst (lexerRun "SW R1 0")) `shouldBe`
-        ([InstructionStatement (SwInstruction R1 0)], [])
+        ([InstructionStatement (SwInstruction R1 (IntImmediate 0))], [])
+      parserRun (fst (lexerRun "SW R1 x")) `shouldBe`
+        ([InstructionStatement (SwInstruction R1 (LabelImmediate "x"))], [])
       parserRun (fst (lexerRun "LA R1 R2")) `shouldBe`
         ([InstructionStatement (LaInstruction R1 R2)], [])
       parserRun (fst (lexerRun "SA R1 R2")) `shouldBe`
         ([InstructionStatement (SaInstruction R1 R2)], [])
       parserRun (fst (lexerRun "LI R1 0")) `shouldBe`
-        ([InstructionStatement (LiInstruction R1 0)], [])
+        ([InstructionStatement (LiInstruction R1 (IntImmediate 0))], [])
+      parserRun (fst (lexerRun "LI R1 x")) `shouldBe`
+        ([InstructionStatement (LiInstruction R1 (LabelImmediate "x"))], [])
       parserRun (fst (lexerRun "JLZ R1 0")) `shouldBe`
-        ([InstructionStatement (JlzInstruction R1 0)], [])
+        ([InstructionStatement (JlzInstruction R1 (IntImmediate 0))], [])
+      parserRun (fst (lexerRun "JLZ R1 x")) `shouldBe`
+        ([InstructionStatement (JlzInstruction R1 (LabelImmediate "x"))], [])
       parserRun (fst (lexerRun "HALT 0")) `shouldBe`
-        ([InstructionStatement (HaltInstruction 0)], [])
+        ([InstructionStatement (HaltInstruction (IntImmediate 0))], [])
+      parserRun (fst (lexerRun "HALT x")) `shouldBe`
+        ([InstructionStatement (HaltInstruction (LabelImmediate "x"))], [])
     it "parses single labels" $ do
       parserRun (fst (lexerRun "_:")) `shouldBe` ([LabelStatement "_"], [])
       parserRun (fst (lexerRun "x:")) `shouldBe` ([LabelStatement "x"], [])
@@ -61,14 +71,14 @@ spec = do
       parserRun (fst (lexerRun ".section foo")) `shouldBe`
         ([DirectiveStatement (SectionDirective "foo")], [])
     it "parses full programs" $ do
-      parserRun (fst (lexerRun ".word 1\nLI R1 0xFF\nLI R2 1\nLOOP:\nSUB R1 R1 R2\nJLZ R1 0\n"))
+      parserRun (fst (lexerRun ".word 1\nLI R1 0xFF\nLI R2 1\nLOOP:\nSUB R1 R1 R2\nJLZ R1 LOOP\n"))
         `shouldBe`
         ([DirectiveStatement (WordDirective 1),
-          InstructionStatement (LiInstruction R1 255),
-          InstructionStatement (LiInstruction R2 1),
+          InstructionStatement (LiInstruction R1 (IntImmediate 255)),
+          InstructionStatement (LiInstruction R2 (IntImmediate 1)),
           LabelStatement "LOOP",
           InstructionStatement (SubInstruction R1 R1 R2),
-          InstructionStatement (JlzInstruction R1 0)], [])
+          InstructionStatement (JlzInstruction R1 (LabelImmediate "LOOP"))], [])
     it "fails for large immediates" $ do
       parserRun (fst (lexerRun "LI R1 0x100")) `shouldBe`
         ([], fst (lexerRun "LI R1 0x100"))
