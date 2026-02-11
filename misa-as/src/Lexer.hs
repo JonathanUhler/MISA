@@ -120,22 +120,14 @@ If parsing succeeds, the number token and the remainder of the input string with
 are returned as a tuple. Otherwise `Nothing` is returned.
 -}
 lexerGetNumber :: String -> Maybe (Token, String)
-lexerGetNumber ('0' : 'b' : cs) =
-  case readBin cs of
-    [(number, remainder)] -> Just (NumberToken number, drop (length cs - length remainder) cs)
-    _                     -> Nothing
-lexerGetNumber ('0' : 'x' : cs) =
-  case readHex cs of
-    [(number, remainder)] -> Just (NumberToken number, drop (length cs - length remainder) cs)
-    _                     -> Nothing
-lexerGetNumber ('0' : 'o' : cs) =
-  case readOct cs of
-    [(number, remainder)] -> Just (NumberToken number, drop (length cs - length remainder) cs)
-    _                     -> Nothing
-lexerGetNumber cs =
-  case readDec cs of
-    [(number, remainder)] -> Just (NumberToken number, drop (length cs - length remainder) cs)
-    _                     -> Nothing
+lexerGetNumber cs = case cs of
+  ('0' : 'b' : rest) -> parseNumber readBin rest
+  ('0' : 'x' : rest) -> parseNumber readHex rest
+  ('0' : 'o' : rest) -> parseNumber readOct rest
+  rest               -> parseNumber readDec rest
+  where parseNumber numberParser numberStr = case numberParser numberStr of
+          [(number, remainder)] -> Just (NumberToken number, remainder)
+          _                     -> Nothing
 
 
 {- |

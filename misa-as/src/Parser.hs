@@ -19,8 +19,8 @@ Tries to parse an assembly instruction from the head of the provided list of tok
 If parsing succeeds, a tuple containing the instruction and the remaining tokens with the consumed
 tokens removed is returned. Otherwise `Nothing` is returned.
 -}
-parserGetInst :: [Token] -> Maybe (Statement, [Token])
-parserGetInst tokens = case tokens of
+parserGetInstruction :: [Token] -> Maybe (Statement, [Token])
+parserGetInstruction tokens = case tokens of
   (OpcodeToken op : RegisterToken rd : RegisterToken rs1 : RegisterToken rs2 : rest) ->
     case op of
       ADD -> Just (InstructionStatement (AddInstruction rd rs1 rs2), rest)
@@ -30,36 +30,35 @@ parserGetInst tokens = case tokens of
       OR  -> Just (InstructionStatement (OrInstruction rd rs1 rs2), rest)
       XOR -> Just (InstructionStatement (XorInstruction rd rs1 rs2), rest)
       _   -> Nothing
-  (OpcodeToken op : RegisterToken rd : NumberToken imm : rest) ->
-    case op of
-      LW  -> Just (InstructionStatement (LwInstruction rd (IntImmediate imm)), rest)
-      SW  -> Just (InstructionStatement (SwInstruction rd (IntImmediate imm)), rest)
-      LI  -> Just (InstructionStatement (LiInstruction rd (IntImmediate imm)), rest)
-      JLZ -> Just (InstructionStatement (JlzInstruction rd (IntImmediate imm)), rest)
-      JZ  -> Just (InstructionStatement (JzInstruction rd (IntImmediate imm)), rest)
-      _   -> Nothing
-  (OpcodeToken op : RegisterToken rd : IdentifierToken imm : rest) ->
-    case op of
-      LW  -> Just (InstructionStatement (LwInstruction rd (LabelImmediate imm)), rest)
-      SW  -> Just (InstructionStatement (SwInstruction rd (LabelImmediate imm)), rest)
-      LI  -> Just (InstructionStatement (LiInstruction rd (LabelImmediate imm)), rest)
-      JLZ -> Just (InstructionStatement (JlzInstruction rd (LabelImmediate imm)), rest)
-      JZ  -> Just (InstructionStatement (JzInstruction rd (LabelImmediate imm)), rest)
-      _   -> Nothing
   (OpcodeToken op : RegisterToken rs1 : RegisterToken rs2 : rest) ->
     case op of
       LA -> Just (InstructionStatement (LaInstruction rs1 rs2), rest)
       SA -> Just (InstructionStatement (SaInstruction rs1 rs2), rest)
       _  -> Nothing
-  (OpcodeToken op : NumberToken imm : rest) ->
-    case op of
-      HALT -> Just (InstructionStatement (HaltInstruction (IntImmediate imm)), rest)
-      _    -> Nothing
-  (OpcodeToken op : IdentifierToken imm : rest) ->
-    case op of
-      HALT -> Just (InstructionStatement (HaltInstruction (LabelImmediate imm)), rest)
-      _    -> Nothing
+  (OpcodeToken op : RegisterToken rd : immToken : rest) ->
+    case maybeImm of
+      Just imm -> case op of
+        LW  -> Just (InstructionStatement (LwInstruction rd imm), rest)
+        SW  -> Just (InstructionStatement (SwInstruction rd imm), rest)
+        LI  -> Just (InstructionStatement (LiInstruction rd imm), rest)
+        JLZ -> Just (InstructionStatement (JlzInstruction rd imm), rest)
+        JZ  -> Just (InstructionStatement (JzInstruction rd imm), rest)
+        _   -> Nothing
+      Nothing -> Nothing
+    where maybeImm = getImmediate immToken
+  (OpcodeToken op : immToken : rest) ->
+    case maybeImm of
+      Just imm -> case op of
+        HALT -> Just (InstructionStatement (HaltInstruction imm), rest)
+        _    -> Nothing
+      Nothing -> Nothing
+    where maybeImm = getImmediate immToken
   _ -> Nothing
+  where getImmediate :: Token -> Maybe Immediate
+        getImmediate immToken = case immToken of
+          NumberToken n         -> Just (IntImmediate n)
+          IdentifierToken label -> Just (LabelImmediate label)
+          _                     -> Nothing
 
 
 {- |
@@ -116,7 +115,7 @@ remainder of the token list as a tuple. If no statement matches the tokens, `Not
 -}
 parserGetNextStatement :: [Token] -> Maybe (Statement, [Token])
 parserGetNextStatement tokens
-  =   parserGetInst tokens
+  =   parserGetInstruction tokens
   <|> parserGetLabel tokens
   <|> parserGetDirective tokens
 
