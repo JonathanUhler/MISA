@@ -43,13 +43,29 @@ parserGetInst (OpcodeToken XOR : RegisterToken rd : RegisterToken rs1 : Register
   = Just (InstructionStatement (XorInstruction rd rs1 rs2), tokens)
 -- Instructions with a register and an immediate
 parserGetInst (OpcodeToken LW : RegisterToken rd : NumberToken imm : tokens) | isValidImm imm 8
-  = Just (InstructionStatement (LwInstruction rd (fromIntegral imm)), tokens)
+  = Just (InstructionStatement (LwInstruction rd (IntImmediate imm)), tokens)
+parserGetInst (OpcodeToken LW : RegisterToken rd : IdentifierToken imm : tokens)
+  = Just (InstructionStatement (LwInstruction rd (LabelImmediate imm)), tokens)
+
 parserGetInst (OpcodeToken SW : RegisterToken rd : NumberToken imm : tokens) | isValidImm imm 8
-  = Just (InstructionStatement (SwInstruction rd (fromIntegral imm)), tokens)
+  = Just (InstructionStatement (SwInstruction rd (IntImmediate imm)), tokens)
+parserGetInst (OpcodeToken SW : RegisterToken rd : IdentifierToken imm : tokens)
+  = Just (InstructionStatement (SwInstruction rd (LabelImmediate imm)), tokens)
+
 parserGetInst (OpcodeToken LI : RegisterToken rd : NumberToken imm : tokens) | isValidImm imm 8
-  = Just (InstructionStatement (LiInstruction rd (fromIntegral imm)), tokens)
+  = Just (InstructionStatement (LiInstruction rd (IntImmediate imm)), tokens)
+parserGetInst (OpcodeToken LI : RegisterToken rd : IdentifierToken imm : tokens)
+  = Just (InstructionStatement (LiInstruction rd (LabelImmediate imm)), tokens)
+
 parserGetInst (OpcodeToken JLZ : RegisterToken rd : NumberToken imm : tokens) | isValidImm imm 8
-  = Just (InstructionStatement (JlzInstruction rd (fromIntegral imm)), tokens)
+  = Just (InstructionStatement (JlzInstruction rd (IntImmediate imm)), tokens)
+parserGetInst (OpcodeToken JLZ : RegisterToken rd : IdentifierToken imm : tokens)
+  = Just (InstructionStatement (JlzInstruction rd (LabelImmediate imm)), tokens)
+
+parserGetInst (OpcodeToken JZ : RegisterToken rd : NumberToken imm : tokens) | isValidImm imm 8
+  = Just (InstructionStatement (JzInstruction rd (IntImmediate imm)), tokens)
+parserGetInst (OpcodeToken JZ : RegisterToken rd : IdentifierToken imm : tokens)
+  = Just (InstructionStatement (JzInstruction rd (LabelImmediate imm)), tokens)
 -- Instructions with two registers
 parserGetInst (OpcodeToken LA : RegisterToken rs1 : RegisterToken rs2 : tokens)
   = Just (InstructionStatement (LaInstruction rs1 rs2), tokens)
@@ -57,7 +73,9 @@ parserGetInst (OpcodeToken SA : RegisterToken rs1 : RegisterToken rs2 : tokens)
   = Just (InstructionStatement (SaInstruction rs1 rs2), tokens)
 -- Instructions with just an immediate
 parserGetInst (OpcodeToken HALT : NumberToken imm : tokens) | isValidImm imm 8
-  = Just (InstructionStatement (HaltInstruction (fromIntegral imm)), tokens)
+  = Just (InstructionStatement (HaltInstruction (IntImmediate imm)), tokens)
+parserGetInst (OpcodeToken HALT : IdentifierToken imm : tokens)
+  = Just (InstructionStatement (HaltInstruction (LabelImmediate imm)), tokens)
 -- Not a known instruction
 parserGetInst _ = Nothing
 

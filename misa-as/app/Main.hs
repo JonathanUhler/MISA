@@ -9,7 +9,6 @@ import Parser
 import System.Environment (getArgs)
 import System.Exit (die)
 import qualified Data.ByteString as B
-import Data.Word (Word8)
 
 
 main :: IO ()

@@ -73,19 +73,19 @@ calling `encoderSplitSection`. It is assumed that no section directives are pres
 program.
 -}
 encoderGetSymbols :: Program -> SymbolTable
-encoderGetSymbols statements = encoderGetSymbolsWithPc statements 0
-  where encoderGetSymbolsWithPc :: Program -> Word16 -> SymbolTable
-        encoderGetSymbolsWithPc [] _ = []
-        encoderGetSymbolsWithPc (InstructionStatement _ : rest) address
-          = encoderGetSymbolsWithPc rest (address + 2)
-        encoderGetSymbolsWithPc (DirectiveStatement (WordDirective _) : rest) address
-          = encoderGetSymbolsWithPc rest (address + 1)
-        encoderGetSymbolsWithPc (DirectiveStatement (ArrayDirective array) : rest) address
-          = encoderGetSymbolsWithPc rest (address + fromIntegral (length array))
-        encoderGetSymbolsWithPc (LabelStatement label : rest) address
-          = [Symbol label address] ++ encoderGetSymbolsWithPc rest address
-        encoderGetSymbolsWithPc (_ : rest) address
-          = encoderGetSymbolsWithPc rest address
+encoderGetSymbols statements = getSymbolsWithPc statements 0
+  where getSymbolsWithPc :: Program -> Word16 -> SymbolTable
+        getSymbolsWithPc [] _ = []
+        getSymbolsWithPc (InstructionStatement _ : rest) address
+          = getSymbolsWithPc rest (address + 2)
+        getSymbolsWithPc (DirectiveStatement (WordDirective _) : rest) address
+          = getSymbolsWithPc rest (address + 1)
+        getSymbolsWithPc (DirectiveStatement (ArrayDirective array) : rest) address
+          = getSymbolsWithPc rest (address + fromIntegral (length array))
+        getSymbolsWithPc (LabelStatement label : rest) address
+          = [Symbol label address] ++ getSymbolsWithPc rest address
+        getSymbolsWithPc (_ : rest) address
+          = getSymbolsWithPc rest address
 
 
 {- |
@@ -98,7 +98,30 @@ calling `encoderSplitSection`. It is assumed that no section directives are pres
 program.
 -}
 encoderGetRelocations :: Program -> RelocationTable
-encoderGetRelocations _ = []  -- TODO: Implement when instructions with label immediates are added
+encoderGetRelocations statements = getRelocationsWithPc statements 0
+  where getRelocationsWithPc :: Program -> Word16 -> RelocationTable
+        getRelocationsWithPc [] _ = []
+        getRelocationsWithPc (InstructionStatement instruction : rest) address
+          = case encoderGetLabelImmediate instruction of
+              Just label -> [Relocation LowRelocation (address + 1) label]
+                         ++ getRelocationsWithPc rest (address + 2)
+              Nothing    -> getRelocationsWithPc rest (address + 2)
+        getRelocationsWithPc (DirectiveStatement (WordDirective _) : rest) address
+          = getRelocationsWithPc rest (address + 1)
+        getRelocationsWithPc (DirectiveStatement (ArrayDirective array) : rest) address
+          = getRelocationsWithPc rest (address + fromIntegral (length array))
+        getRelocationsWithPc (_ : rest) address
+          = getRelocationsWithPc rest address
+
+
+encoderGetLabelImmediate :: Instruction -> Maybe Label
+encoderGetLabelImmediate (LwInstruction _ (LabelImmediate label))  = Just label
+encoderGetLabelImmediate (SwInstruction _ (LabelImmediate label))  = Just label
+encoderGetLabelImmediate (LiInstruction _ (LabelImmediate label))  = Just label
+encoderGetLabelImmediate (JlzInstruction _ (LabelImmediate label)) = Just label
+encoderGetLabelImmediate (JzInstruction _ (LabelImmediate label))  = Just label
+encoderGetLabelImmediate (HaltInstruction (LabelImmediate label))  = Just label
+encoderGetLabelImmediate _                                         = Nothing
 
 
 {- |

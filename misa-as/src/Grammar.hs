@@ -13,6 +13,7 @@ module Grammar (Program,
                 Directive(..),
                 Opcode(..),
                 Register(..),
+                Immediate(..),
                 minRegister,
                 maxRegister) where
 
@@ -50,19 +51,21 @@ data Instruction
   -- | The bitwise xor instruction, XOR RD RS1 RS2 => RD = RS1 ^ RS2
   | XorInstruction  Register Register Register
   -- | The load word instruction, LW RD IMM => RD = Memory[AR + IMM]
-  | LwInstruction   Register Word8
+  | LwInstruction   Register Immediate
   -- | The store word instruction, SW RD IMM => Memory[AR + IMM] = RD
-  | SwInstruction   Register Word8
+  | SwInstruction   Register Immediate
   -- | The load from address register instruction, LA RS1 RS2 => RS1 = AR[15:8]; RS2 = AR[7:0]
   | LaInstruction   Register Register
   -- | The store to address register instruction, SA RS1 RS2 => AR[15:8] = RS1; AR[7:0] = RS2
   | SaInstruction   Register Register
   -- | The load immediate instruction, LI RD IMM => RD = IMM
-  | LiInstruction   Register Word8
+  | LiInstruction   Register Immediate
   -- | The jump and link if zero instruction, JLZ RD IMM => if !(RD), {AR = PC + 2; PC = AR + IMM}
-  | JlzInstruction  Register Word8
+  | JlzInstruction  Register Immediate
+  -- | The jump if zero instruction, JZ RD IMM => if !(RD), {PC = AR + IMM}
+  | JzInstruction   Register Immediate
   -- | The halt processor instruction, HALT IMM => exit(IMM)
-  | HaltInstruction Word8
+  | HaltInstruction Immediate
   deriving (Show, Eq, Ord)
 
 
@@ -95,6 +98,7 @@ data Opcode
   | SA
   | LI
   | JLZ
+  | JZ
   | HALT
   deriving (Show, Enum, Eq, Ord)
 
@@ -127,3 +131,9 @@ data Register
   | R14
   | R15
   deriving (Show, Enum, Eq, Ord)
+
+
+data Immediate
+  = IntImmediate Int
+  | LabelImmediate Label
+  deriving (Show, Eq, Ord)

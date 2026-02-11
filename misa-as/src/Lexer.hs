@@ -76,6 +76,7 @@ lexerGetOpcode cs
   | Just rest <- stripPrefix "SA"   cs = Just (OpcodeToken SA,   rest)
   | Just rest <- stripPrefix "LI"   cs = Just (OpcodeToken LI,   rest)
   | Just rest <- stripPrefix "JLZ"  cs = Just (OpcodeToken JLZ,  rest)
+  | Just rest <- stripPrefix "JZ"   cs = Just (OpcodeToken JZ,   rest)
   | Just rest <- stripPrefix "HALT" cs = Just (OpcodeToken HALT, rest)
   | otherwise                           = Nothing
 
