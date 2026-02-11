@@ -1,3 +1,11 @@
+{- |
+Grammar definition for the MISA assembler language.
+
+The grammar is context-free and defined by the production rules outlines with the `data` types
+in this file, where the start variable is `Program`.
+
+Author: Jonathan Uhler
+-}
 module Grammar (Program,
                 Statement(..),
                 Instruction(..),
@@ -12,43 +20,68 @@ module Grammar (Program,
 import Data.Word (Word8)
 
 
+-- | The start symbol for the grammar of a full program (the contents of an assembly file).
 type Program = [Statement]
 
 
+-- | The type of every line of an assembly program (the most broad classification of lexemes).
 data Statement
+  -- | A statement which is an instruction containing an opcode and operands.
   = InstructionStatement Instruction
+  -- | A statement which is a label declaration.
   | LabelStatement Label
+  -- | A statement which is a reserved assembler or linker directive.
   | DirectiveStatement Directive
   deriving (Show, Eq, Ord)
 
 
+-- | The type of an instruction in the assembly language.
 data Instruction
+  -- | The add instruction, ADD RD RS1 RS2 => RD = RS1 + RS2
   = AddInstruction  Register Register Register
+  -- | The add with carry instruction, ADC RD RS1 RS2 => RD = RS1 + RS2 + CarryOut
   | AdcInstruction  Register Register Register
+  -- | The subtract instruction, SUB RD RS1 RS2 => RD = RS1 - RS2
   | SubInstruction  Register Register Register
+  -- | The bitwise and instruction, AND RD RS1 RS2 => RD = RS1 & RS2
   | AndInstruction  Register Register Register
+  -- | The bitwise or instruction, OR RD RS1 RS2 => RD = RS1 | RS2
   | OrInstruction   Register Register Register
+  -- | The bitwise xor instruction, XOR RD RS1 RS2 => RD = RS1 ^ RS2
   | XorInstruction  Register Register Register
+  -- | The load word instruction, LW RD IMM => RD = Memory[AR + IMM]
   | LwInstruction   Register Word8
+  -- | The store word instruction, SW RD IMM => Memory[AR + IMM] = RD
   | SwInstruction   Register Word8
+  -- | The load from address register instruction, LA RS1 RS2 => RS1 = AR[15:8]; RS2 = AR[7:0]
   | LaInstruction   Register Register
+  -- | The store to address register instruction, SA RS1 RS2 => AR[15:8] = RS1; AR[7:0] = RS2
   | SaInstruction   Register Register
+  -- | The load immediate instruction, LI RD IMM => RD = IMM
   | LiInstruction   Register Word8
+  -- | The jump and link if zero instruction, JLZ RD IMM => if !(RD), {AR = PC + 2; PC = AR + IMM}
   | JlzInstruction  Register Word8
+  -- | The halt processor instruction, HALT IMM => exit(IMM)
   | HaltInstruction Word8
   deriving (Show, Eq, Ord)
 
 
+-- | The type of a label definition/name.
 type Label = String
 
 
+-- | The type of an assembler or linker directive.
 data Directive
+  -- | The .word directive, .word X => produce byte X in output
   = WordDirective    Word8
+  -- | The .array directive, .array X1 X2 ... => produce bytes X1 X2 ... in output
   | ArrayDirective   [Word8]
+  -- | The .section directive, .section NAME => place following binary in section called NAME
   | SectionDirective String
   deriving (Show, Eq, Ord)
 
 
+-- | The list of instruction opcodes.
 data Opcode
   = ADD
   | ADC
@@ -66,13 +99,16 @@ data Opcode
   deriving (Show, Enum, Eq, Ord)
 
 
+-- | The minimum general purpose register number, inclusive (R0)
 minRegister :: Int
 minRegister = 0
 
+-- | The maximum general purpose register number, inclusive (R15)
 maxRegister :: Int
 maxRegister = 15
 
 
+-- | The list of general purpose register names.
 data Register
   = R0
   | R1
