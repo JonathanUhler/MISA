@@ -43,6 +43,38 @@ encoderSplitSections statements
           in encoderSplitAcc currSection rest newAcc
 
 
+encoderResolvePseudoInstructions :: Program -> Program
+encoderResolvePseudoInstructions [] = []
+encoderResolvePseudoInstructions (statement : statements) =
+  case statement of
+    (InstructionStatement instruction) ->
+      (map InstructionStatement resolved) ++ encoderResolvePseudoInstructions statements
+      where resolved = case instruction of
+              NotInstruction rd rs1      -> [XorInstruction rd rs1 rs1]
+              MovInstruction rd rs1      -> [OrInstruction rd rs1 R0]
+              LdiInstruction rs1 rs2 imm -> [LiInstruction rs1 (encoderGetLowImmediate imm),
+                                             LiInstruction rs2 (encoderGetHighImmediate imm)]
+              CallInstruction imm        -> [LiInstruction R1 (encoderGetLowImmediate imm),
+                                             LiInstruction R2 (encoderGetHighImmediate imm),
+                                             SaInstruction R2 R1,
+                                             JlzInstruction R0 (IntImmediate Low 0)]
+              EntryInstruction           -> [LaInstruction R2 R1]
+              RetInstruction             -> [SaInstruction R2 R1,
+                                             JzInstruction R0 (IntImmediate Low 0)]
+              PushInstruction rs1        -> [SaInstruction R4 R3,
+                                             SwInstruction rs1 (IntImmediate Low 0),
+                                             LiInstruction R15 (IntImmediate Low 0xFF),
+                                             AddInstruction R3 R3 R15,
+                                             AdcInstruction R4 R4 R15]
+              PopInstruction rs1         -> [LiInstruction R15 (IntImmediate Low 1),
+                                             AddInstruction R3 R3 R15,
+                                             AdcInstruction R4 R4 R0,
+                                             SaInstruction R4 R3,
+                                             LwInstruction rs1 (IntImmediate Low 0)]
+              _                          -> [instruction]
+    _ -> statement : encoderResolvePseudoInstructions statements
+
+
 {- |
 Collects all of the instruction statements and memory directives (e.g. .word, .array) from the
 input program and returns them as a list of code elements, which are the `Instruction`s themselves
@@ -103,9 +135,9 @@ encoderGetRelocations statements = getRelocationsWithPc statements 0
         getRelocationsWithPc [] _ = []
         getRelocationsWithPc (InstructionStatement instruction : rest) address
           = case encoderGetLabelImmediate instruction of
-              Just label -> [Relocation LowRelocation (address + 1) label]
-                         ++ getRelocationsWithPc rest (address + 2)
-              Nothing    -> getRelocationsWithPc rest (address + 2)
+              Just (LabelImmediate part label) -> [Relocation (fromPart part) (address + 1) label]
+                                               ++ getRelocationsWithPc rest (address + 2)
+              _                                -> getRelocationsWithPc rest (address + 2)
         getRelocationsWithPc (DirectiveStatement (WordDirective _) : rest) address
           = getRelocationsWithPc rest (address + 1)
         getRelocationsWithPc (DirectiveStatement (ArrayDirective array) : rest) address
@@ -113,15 +145,30 @@ encoderGetRelocations statements = getRelocationsWithPc statements 0
         getRelocationsWithPc (_ : rest) address
           = getRelocationsWithPc rest address
 
+        fromPart :: ImmediatePart -> RelocationType
+        fromPart Full = LowRelocation
+        fromPart Low  = LowRelocation
+        fromPart High = HighRelocation
 
-encoderGetLabelImmediate :: Instruction -> Maybe Label
-encoderGetLabelImmediate (LwInstruction _ (LabelImmediate label))  = Just label
-encoderGetLabelImmediate (SwInstruction _ (LabelImmediate label))  = Just label
-encoderGetLabelImmediate (LiInstruction _ (LabelImmediate label))  = Just label
-encoderGetLabelImmediate (JlzInstruction _ (LabelImmediate label)) = Just label
-encoderGetLabelImmediate (JzInstruction _ (LabelImmediate label))  = Just label
-encoderGetLabelImmediate (HaltInstruction (LabelImmediate label))  = Just label
-encoderGetLabelImmediate _                                         = Nothing
+
+encoderGetLabelImmediate :: Instruction -> Maybe Immediate
+encoderGetLabelImmediate (LwInstruction _ label)  = Just label
+encoderGetLabelImmediate (SwInstruction _ label)  = Just label
+encoderGetLabelImmediate (LiInstruction _ label)  = Just label
+encoderGetLabelImmediate (JlzInstruction _ label) = Just label
+encoderGetLabelImmediate (JzInstruction _ label)  = Just label
+encoderGetLabelImmediate (HaltInstruction label)  = Just label
+encoderGetLabelImmediate _                        = Nothing
+
+
+encoderGetLowImmediate :: Immediate -> Immediate
+encoderGetLowImmediate (IntImmediate _ n)       = IntImmediate Low n
+encoderGetLowImmediate (LabelImmediate _ label) = LabelImmediate Low label
+
+
+encoderGetHighImmediate :: Immediate -> Immediate
+encoderGetHighImmediate (IntImmediate _ n)       = IntImmediate High n
+encoderGetHighImmediate (LabelImmediate _ label) = LabelImmediate High label
 
 
 {- |
@@ -143,4 +190,5 @@ the linker. For more information on the object file format, see `BinaryObject`.
 -}
 encoderRun :: Program -> BinaryObject
 encoderRun [] = []
-encoderRun statements = map encoderCreateSection (encoderSplitSections statements)
+encoderRun statements =
+  map encoderCreateSection (encoderSplitSections (encoderResolvePseudoInstructions statements))

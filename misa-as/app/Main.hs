@@ -25,7 +25,7 @@ main = do
 
       let (program, unparsed) = parserRun tokens
       if unparsed /= []
-        then die ("Semantic Error: Unexpected input at: " ++ show (take 10 unparsed) ++ "...")
+        then die ("Semantic Error: Unexpected input at: " ++ show (take 10 unparsed) ++ "... got " ++ show program)
         else return ()
 
       let object = encoderRun program

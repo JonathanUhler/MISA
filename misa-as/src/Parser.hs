@@ -27,45 +27,92 @@ If parsing succeeds, a tuple containing the instruction and the remaining tokens
 tokens removed is returned. Otherwise `Nothing` is returned.
 -}
 parserGetInstruction :: [Token] -> Maybe (Statement, [Token])
-parserGetInstruction tokens = case tokens of
-  (OpcodeToken op : RegisterToken rd : RegisterToken rs1 : RegisterToken rs2 : rest) ->
-    case op of
-      ADD -> Just (InstructionStatement (AddInstruction rd rs1 rs2), rest)
-      ADC -> Just (InstructionStatement (AdcInstruction rd rs1 rs2), rest)
-      SUB -> Just (InstructionStatement (SubInstruction rd rs1 rs2), rest)
-      AND -> Just (InstructionStatement (AndInstruction rd rs1 rs2), rest)
-      OR  -> Just (InstructionStatement (OrInstruction rd rs1 rs2), rest)
-      XOR -> Just (InstructionStatement (XorInstruction rd rs1 rs2), rest)
-      _   -> Nothing
-  (OpcodeToken op : RegisterToken rs1 : RegisterToken rs2 : rest) ->
-    case op of
-      LA -> Just (InstructionStatement (LaInstruction rs1 rs2), rest)
-      SA -> Just (InstructionStatement (SaInstruction rs1 rs2), rest)
-      _  -> Nothing
-  (OpcodeToken op : RegisterToken rd : immToken : rest) ->
-    case maybeImm of
-      Just imm -> case op of
-        LW  -> Just (InstructionStatement (LwInstruction rd imm), rest)
-        SW  -> Just (InstructionStatement (SwInstruction rd imm), rest)
-        LI  -> Just (InstructionStatement (LiInstruction rd imm), rest)
-        JLZ -> Just (InstructionStatement (JlzInstruction rd imm), rest)
-        JZ  -> Just (InstructionStatement (JzInstruction rd imm), rest)
+parserGetInstruction tokens =
+  getRRR tokens <|>
+  getRRI tokens <|>
+  getRR tokens <|>
+  getRI tokens <|>
+  getR tokens <|>
+  getI tokens <|>
+  getOp tokens
+
+  where
+    getRRR (OpcodeToken op : RegisterToken rd : RegisterToken rs1 : RegisterToken rs2 : rest) =
+      case op of
+        -- Base instructions
+        ADD -> Just (InstructionStatement (AddInstruction rd rs1 rs2), rest)
+        ADC -> Just (InstructionStatement (AdcInstruction rd rs1 rs2), rest)
+        SUB -> Just (InstructionStatement (SubInstruction rd rs1 rs2), rest)
+        AND -> Just (InstructionStatement (AndInstruction rd rs1 rs2), rest)
+        OR  -> Just (InstructionStatement (OrInstruction rd rs1 rs2), rest)
+        XOR -> Just (InstructionStatement (XorInstruction rd rs1 rs2), rest)
         _   -> Nothing
-      Nothing -> Nothing
-    where maybeImm = getImmediate immToken
-  (OpcodeToken op : immToken : rest) ->
-    case maybeImm of
-      Just imm -> case op of
-        HALT -> Just (InstructionStatement (HaltInstruction imm), rest)
+    getRRR _ = Nothing
+
+    getRRI (OpcodeToken op : RegisterToken rs1 : RegisterToken rs2 : immToken : rest) =
+      case getImmediate immToken of
+        Just imm -> case op of
+          -- Pseudo instructions
+          LDI -> Just (InstructionStatement (LdiInstruction rs1 rs2 imm), rest)
+          _   -> Nothing
+        Nothing -> Nothing
+    getRRI _ = Nothing
+
+    getRR (OpcodeToken op : RegisterToken rs1 : RegisterToken rs2 : rest) =
+      case op of
+        -- Base instructions
+        LA  -> Just (InstructionStatement (LaInstruction rs1 rs2), rest)
+        SA  -> Just (InstructionStatement (SaInstruction rs1 rs2), rest)
+        -- Pseudo instructionsw
+        NOT -> Just (InstructionStatement (NotInstruction rs1 rs2), rest)
+        MOV -> Just (InstructionStatement (MovInstruction rs1 rs2), rest)
+        _   -> Nothing
+    getRR _ = Nothing
+
+    getRI (OpcodeToken op : RegisterToken rd : immToken : rest) =
+      case getImmediate immToken of
+        Just imm -> case op of
+          -- Base instructions
+          LW  -> Just (InstructionStatement (LwInstruction rd imm), rest)
+          SW  -> Just (InstructionStatement (SwInstruction rd imm), rest)
+          LI  -> Just (InstructionStatement (LiInstruction rd imm), rest)
+          JLZ -> Just (InstructionStatement (JlzInstruction rd imm), rest)
+          JZ  -> Just (InstructionStatement (JzInstruction rd imm), rest)
+          _   -> Nothing
+        Nothing -> Nothing
+    getRI _ = Nothing
+
+    getR (OpcodeToken op : RegisterToken rs1 : rest) =
+      case op of
+        PUSH -> Just (InstructionStatement (PushInstruction rs1), rest)
+        POP  -> Just (InstructionStatement (PopInstruction rs1), rest)
         _    -> Nothing
-      Nothing -> Nothing
-    where maybeImm = getImmediate immToken
-  _ -> Nothing
-  where getImmediate :: Token -> Maybe Immediate
-        getImmediate immToken = case immToken of
-          NumberToken n | isAWord n 8 -> Just (IntImmediate n)
-          IdentifierToken label -> Just (LabelImmediate label)
-          _                     -> Nothing
+    getR _ = Nothing
+
+    getI (OpcodeToken op : immToken : rest) =
+      case getImmediate immToken of
+        Just imm -> case op of
+          -- Base instructions
+          HALT -> Just (InstructionStatement (HaltInstruction imm), rest)
+          -- Pseudo instructions
+          CALL -> Just (InstructionStatement (CallInstruction imm), rest)
+          _    -> Nothing
+        Nothing -> Nothing
+    getI _ = Nothing
+
+    getOp (OpcodeToken op : rest) =
+      case op of
+        -- Pseudo instructions
+        ENTRY -> Just (InstructionStatement EntryInstruction, rest)
+        RET   -> Just (InstructionStatement RetInstruction, rest)
+        _     -> Nothing
+    getOp _ = Nothing
+
+    getImmediate :: Token -> Maybe Immediate
+    getImmediate immToken = case immToken of
+      NumberToken n         -> Just (IntImmediate Full n)
+      IdentifierToken label -> Just (LabelImmediate Full label)
+      _                     -> Nothing
 
 
 {- |

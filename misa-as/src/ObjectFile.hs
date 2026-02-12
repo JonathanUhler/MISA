@@ -117,20 +117,23 @@ one base instruction.
 -}
 packInstruction :: Instruction -> [Word8]
 packInstruction instruction = case instruction of
-  AddInstruction rd rs1 rs2 -> packRRR 0x0 rd rs1 rs2
-  AdcInstruction rd rs1 rs2 -> packRRR 0x1 rd rs1 rs2
-  SubInstruction rd rs1 rs2 -> packRRR 0x2 rd rs1 rs2
-  AndInstruction rd rs1 rs2 -> packRRR 0x3 rd rs1 rs2
-  OrInstruction rd rs1 rs2  -> packRRR 0x4 rd rs1 rs2
-  XorInstruction rd rs1 rs2 -> packRRR 0x5 rd rs1 rs2
-  LwInstruction rd imm      -> packRI 0x8 rd imm
-  SwInstruction rd imm      -> packRI 0x9 rd imm
-  LaInstruction rs1 rs2     -> packRR 0xA rs1 rs2
-  SaInstruction rs1 rs2     -> packRR 0xB rs1 rs2
-  LiInstruction rd imm      -> packRI 0xC rd imm
-  JlzInstruction rd imm     -> packRI 0xD rd imm
-  JzInstruction rd imm      -> packRI 0xE rd imm
-  HaltInstruction imm       -> packI 0xF imm
+  -- Base instructions
+  AddInstruction rd rs1 rs2  -> packRRR 0x0 rd rs1 rs2
+  AdcInstruction rd rs1 rs2  -> packRRR 0x1 rd rs1 rs2
+  SubInstruction rd rs1 rs2  -> packRRR 0x2 rd rs1 rs2
+  AndInstruction rd rs1 rs2  -> packRRR 0x3 rd rs1 rs2
+  OrInstruction rd rs1 rs2   -> packRRR 0x4 rd rs1 rs2
+  XorInstruction rd rs1 rs2  -> packRRR 0x5 rd rs1 rs2
+  LwInstruction rd imm       -> packRI 0x8 rd imm
+  SwInstruction rd imm       -> packRI 0x9 rd imm
+  LaInstruction rs1 rs2      -> packRR 0xA rs1 rs2
+  SaInstruction rs1 rs2      -> packRR 0xB rs1 rs2
+  LiInstruction rd imm       -> packRI 0xC rd imm
+  JlzInstruction rd imm      -> packRI 0xD rd imm
+  JzInstruction rd imm       -> packRI 0xE rd imm
+  HaltInstruction imm        -> packI 0xF imm
+  _                          -> error ("Cannot encode pseudo instruction" ++ show instruction)
+
   where packRRR :: Word8 -> Register -> Register -> Register -> [Word8]
         packRRR op rd rs1 rs2 = [op .|. shiftL (fromR rd) 4, fromR rs1 .|. shiftL (fromR rs2) 4]
 
@@ -143,9 +146,13 @@ packInstruction instruction = case instruction of
         packI :: Word8 -> Immediate -> [Word8]
         packI op imm = [op, fromI imm]
 
-        fromI :: Immediate -> Word8
-        fromI (IntImmediate n) = fromIntegral n
-        fromI (LabelImmediate _) = 0x00
+        fromI :: Num a => Immediate -> a
+        fromI imm =
+          case imm of
+            (IntImmediate Full n)  -> fromIntegral n
+            (IntImmediate Low n)   -> fromIntegral n
+            (IntImmediate High n)  -> fromIntegral (n `shiftR` 8)
+            (LabelImmediate _ _)   -> 0x00
 
         fromR :: Register -> Word8
         fromR r = fromIntegral (fromEnum r)
