@@ -3,6 +3,8 @@ A basic object file containing linker sections with code, symbols, and relocatio
 
 Author: Jonathan Uhler
 -}
+module ObjectFile () where
+{-
 module ObjectFile (BinaryObject,
                    Section(..),
                    Code,
@@ -276,3 +278,4 @@ packBinaryObject sections
   ++ packDoubleWord (fromIntegral (length sections))
   ++ packedSections
   where packedSections = concatMap packSection sections
+-}

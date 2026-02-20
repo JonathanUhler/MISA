@@ -1,5 +1,9 @@
 module Main (main) where
 
+main :: IO ()
+main = putStrLn "main"
+{-
+
 
 import Encoder
 import Lexer
@@ -31,3 +35,4 @@ main = do
       let object = encoderRun program
       let bytes = packBinaryObject object
       B.writeFile outputPath (B.pack bytes)
+-}

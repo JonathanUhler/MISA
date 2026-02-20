@@ -3,6 +3,8 @@ A simple encoder that converts a program (a list of statements) into a basic obj
 
 Author: Jonathan Uhler
 -}
+module Encoder () where
+{-
 module Encoder (encoderRun) where
 
 
@@ -192,3 +194,4 @@ encoderRun :: Program -> BinaryObject
 encoderRun [] = []
 encoderRun statements =
   map encoderCreateSection (encoderSplitSections (encoderResolvePseudoInstructions statements))
+-}

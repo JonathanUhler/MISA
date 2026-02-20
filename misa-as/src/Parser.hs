@@ -1,196 +1,155 @@
-{- |
-A simple parser that processes a list of tokens into a program containing a list of statements.
-
-Author: Jonathan Uhler
--}
-module Parser (parserRun) where
+module Parser () where
 
 
-import Grammar
-import Lexer
-
-import Control.Applicative ((<|>))
+import Data.Char
+import qualified Data.Set as Set
+import Data.Void
 import Data.Word (Word8)
+import Grammar
+import Text.Megaparsec
+import Text.Megaparsec.Char
+import qualified Text.Megaparsec.Char.Lexer as L
 
 
-{- |
-Returns whether the provided integer can fit in an unsigned word of the provided width.
--}
-isAWord :: Int -> Int -> Bool
-isAWord n wordSize = 0 <= n && n <= 2 ^ wordSize - 1
+type Parser = Parsec Void String
 
 
-{- |
-Tries to parse an assembly instruction from the head of the provided list of tokens.
+reservedOps :: [(String, Op)]
+reservedOps = [(map toLower (show o), o) | o <- [minBound..maxBound :: Op]]
 
-If parsing succeeds, a tuple containing the instruction and the remaining tokens with the consumed
-tokens removed is returned. Otherwise `Nothing` is returned.
--}
-parserGetInstruction :: [Token] -> Maybe (Statement, [Token])
-parserGetInstruction tokens =
-  getRRR tokens <|>
-  getRRI tokens <|>
-  getRR tokens <|>
-  getRI tokens <|>
-  getR tokens <|>
-  getI tokens <|>
-  getOp tokens
+reservedGpRegs :: [(String, GpReg)]
+reservedGpRegs = [(map toLower (show r), r) | r <- [minBound..maxBound :: GpReg]]
 
-  where
-    getRRR (OpcodeToken op : RegisterToken rd : RegisterToken rs1 : RegisterToken rs2 : rest) =
-      case op of
-        -- Base instructions
-        ADD -> Just (InstructionStatement (AddInstruction rd rs1 rs2), rest)
-        ADC -> Just (InstructionStatement (AdcInstruction rd rs1 rs2), rest)
-        SUB -> Just (InstructionStatement (SubInstruction rd rs1 rs2), rest)
-        AND -> Just (InstructionStatement (AndInstruction rd rs1 rs2), rest)
-        OR  -> Just (InstructionStatement (OrInstruction rd rs1 rs2), rest)
-        XOR -> Just (InstructionStatement (XorInstruction rd rs1 rs2), rest)
-        _   -> Nothing
-    getRRR _ = Nothing
+reservedWideRegs :: [(String, WideReg)]
+reservedWideRegs = [(map toLower (show w), w) | w <- [minBound..maxBound :: WideReg]]
 
-    getRRI (OpcodeToken op : RegisterToken rs1 : RegisterToken rs2 : immToken : rest) =
-      case getImmediate immToken of
-        Just imm -> case op of
-          -- Pseudo instructions
-          LDI -> Just (InstructionStatement (LdiInstruction rs1 rs2 imm), rest)
-          _   -> Nothing
-        Nothing -> Nothing
-    getRRI _ = Nothing
+reservedCsrRegs :: [(String, CsrReg)]
+reservedCsrRegs = [(map toLower (show c), c) | c <- [minBound..maxBound :: CsrReg]]
 
-    getRR (OpcodeToken op : RegisterToken rs1 : RegisterToken rs2 : rest) =
-      case op of
-        -- Base instructions
-        LA  -> Just (InstructionStatement (LaInstruction rs1 rs2), rest)
-        SA  -> Just (InstructionStatement (SaInstruction rs1 rs2), rest)
-        -- Pseudo instructionsw
-        NOT -> Just (InstructionStatement (NotInstruction rs1 rs2), rest)
-        MOV -> Just (InstructionStatement (MovInstruction rs1 rs2), rest)
-        _   -> Nothing
-    getRR _ = Nothing
+reservedCmpFlags :: [(String, CmpFlag)]
+reservedCmpFlags = [(map toLower (show f), f) | f <- [minBound..maxBound :: CmpFlag]]
 
-    getRI (OpcodeToken op : RegisterToken rd : immToken : rest) =
-      case getImmediate immToken of
-        Just imm -> case op of
-          -- Base instructions
-          LW  -> Just (InstructionStatement (LwInstruction rd imm), rest)
-          SW  -> Just (InstructionStatement (SwInstruction rd imm), rest)
-          LI  -> Just (InstructionStatement (LiInstruction rd imm), rest)
-          JLZ -> Just (InstructionStatement (JlzInstruction rd imm), rest)
-          JZ  -> Just (InstructionStatement (JzInstruction rd imm), rest)
-          _   -> Nothing
-        Nothing -> Nothing
-    getRI _ = Nothing
+reservedDirs :: [String]
+reservedDirs = ["word", "array", "section"]
 
-    getR (OpcodeToken op : RegisterToken rs1 : rest) =
-      case op of
-        PUSH -> Just (InstructionStatement (PushInstruction rs1), rest)
-        POP  -> Just (InstructionStatement (PopInstruction rs1), rest)
-        _    -> Nothing
-    getR _ = Nothing
-
-    getI (OpcodeToken op : immToken : rest) =
-      case getImmediate immToken of
-        Just imm -> case op of
-          -- Base instructions
-          HALT -> Just (InstructionStatement (HaltInstruction imm), rest)
-          -- Pseudo instructions
-          CALL -> Just (InstructionStatement (CallInstruction imm), rest)
-          _    -> Nothing
-        Nothing -> Nothing
-    getI _ = Nothing
-
-    getOp (OpcodeToken op : rest) =
-      case op of
-        -- Pseudo instructions
-        ENTRY -> Just (InstructionStatement EntryInstruction, rest)
-        RET   -> Just (InstructionStatement RetInstruction, rest)
-        _     -> Nothing
-    getOp _ = Nothing
-
-    getImmediate :: Token -> Maybe Immediate
-    getImmediate immToken = case immToken of
-      NumberToken n         -> Just (IntImmediate Full n)
-      IdentifierToken label -> Just (LabelImmediate Full label)
-      _                     -> Nothing
+reservedIdentifiers :: Set.Set String
+reservedIdentifiers = Set.fromList (concat [map fst reservedOps,
+                                            map fst reservedGpRegs,
+                                            map fst reservedCsrRegs,
+                                            map fst reservedCmpFlags,
+                                            map fst reservedWideRegs,
+                                            reservedDirs])
 
 
-{- |
-Tries to parse a label definition from the head of the provided list of tokens.
-
-If parsing succeeds, a tuple containing the label and the remaining tokens with the consumed
-tokens removed is returned. Otherwise `Nothing` is returned.
--}
-parserGetLabel :: [Token] -> Maybe (Statement, [Token])
-parserGetLabel (IdentifierToken label : ColonToken : tokens) = Just (LabelStatement label, tokens)
-parserGetLabel _                                             = Nothing
+skip :: Parser ()
+skip = L.space space1 (L.skipLineComment "//") (L.skipBlockComment "/*" "*/")
 
 
-{- |
-Builds an array of words for a .array directive by consuming as many 8-bit `NumberToken`s from
-the provided list of tokens as possible.
-
-Note that this function can return an array of zero words. If the caller does not support
-zero-length arrays, it is their responsibility to match and filter for [].
-
-Returns a tuple containing the .array directive contents/words and the remaining tokens with all
-consumed `NumberToken`s removed.
--}
-buildArrayDirective :: [Token] -> ([Word8], [Token])
-buildArrayDirective (NumberToken x : tokens) | isAWord x 8
-  = (fromIntegral x : xs, rest)
-  where (xs, rest) = buildArrayDirective tokens
-buildArrayDirective tokens = ([], tokens)
+lexeme :: Parser a -> Parser a
+lexeme = L.lexeme skip
 
 
-{- |
-Tries to parse a directive from the head of the provided list of tokens.
-
-If parsing succeeds, a tuple containing the directive and its payload (if applicable) as well as
-the remaining tokens with the consumed tokens removed is returned. Otherwise `Nothing` is returned.
--}
-parserGetDirective :: [Token] -> Maybe (Statement, [Token])
-parserGetDirective (PeriodToken : IdentifierToken "word" : NumberToken x : tokens) | isAWord x 8
-  = Just (DirectiveStatement (WordDirective (fromIntegral x)), tokens)
-parserGetDirective (PeriodToken : IdentifierToken "array" : tokens)
-  | array /= [] = Just (DirectiveStatement (ArrayDirective array), rest)
-  | otherwise   = Nothing
-  where (array, rest) = buildArrayDirective tokens
-parserGetDirective (PeriodToken : IdentifierToken "section" : IdentifierToken section : tokens)
-  = Just (DirectiveStatement (SectionDirective section), tokens)
-parserGetDirective _ = Nothing
+parseString :: String -> Parser String
+parseString s = lexeme (string' s)
 
 
-{- |
-Tries to parse any type of statement from the head of the provided list of tokens.
-
-The first type of statement that matches the list of tokens will be returned, along with the
-remainder of the token list as a tuple. If no statement matches the tokens, `Nothing` is returned.
--}
-parserGetNextStatement :: [Token] -> Maybe (Statement, [Token])
-parserGetNextStatement tokens
-  =   parserGetInstruction tokens
-  <|> parserGetLabel tokens
-  <|> parserGetDirective tokens
+parseInteger :: Parser Int
+parseInteger = lexeme (try parseHex <|> try parseBin <|> try parseOct <|> parseDec)
+  where parseHex = parseString "0x" *> L.hexadecimal
+        parseBin = parseString "0b" *> L.binary
+        parseOct = parseString "0o" *> L.octal
+        parseDec = L.decimal
 
 
-{- |
-Runs semantic analysis on the provided list of tokens representing an assembly program.
+parseWord :: Parser Word8
+parseWord = do
+  int <- parseInteger <?> "integer literal"
+  if int < fromIntegral (minBound :: Word8) || int > fromIntegral (maxBound :: Word8) then
+    fail ("integer literal " ++ show int ++ " is not a representable as a word")
+  else
+    return (fromIntegral int)
 
-The parser returns a tuple containing the program (list of statements) parsed from the tokens
-in the order they appear, and a list of any unparsed tokens.
 
-When a semantic error occurs, the parse will immediately stop and return the partially parsed
-input and remaining tokens. The semantic error occured at the first token in the unparsed list.
+parseIdentifier :: Parser String
+parseIdentifier = lexeme
+  (
+    do
+      first <- letterChar <|> char '_'
+      rest  <- many (alphaNumChar <|> char '_')
+      return (first : rest)
+  )
 
-The caller should check that the returned unparsed list of tokens is empty, which indicates that
-the entire input was parsed successfully. If the list of returned tokens is non-empty, a semantic
-error occured.
--}
-parserRun :: [Token] -> (Program, [Token])
-parserRun [] = ([], [])
-parserRun tokens =
-  case parserGetNextStatement tokens of
-    Just (statement, rest) -> (statement : statements, unparsed)
-      where (statements, unparsed) = parserRun rest
-    Nothing                -> ([], tokens)
+
+parseUnreservedIdentifier :: Parser String
+parseUnreservedIdentifier = do
+  ident <- parseIdentifier <?> "identifier"
+  if Set.member (map toLower ident) reservedIdentifiers then
+    fail ("reserved identifier '" ++ ident ++ "' cannot be used in this context")
+  else
+    return ident
+
+
+parseLabel :: Parser Label
+parseLabel = parseUnreservedIdentifier <* char ':'
+
+
+parseDir :: Parser Dir
+parseDir = do
+  _   <- char '.'
+  choice [WordDir    <$> (parseString "word"    *> parseWord),
+          ArrayDir   <$> (parseString "array"   *> some parseWord),
+          SectionDir <$> (parseString "section" *> parseUnreservedIdentifier)]
+
+
+parseLookup :: [(String, a)] -> String -> Parser a
+parseLookup env symbol = do
+  ident <- parseIdentifier <?> symbol
+  case lookup (map toLower ident) env of
+    Just x  -> return x
+    Nothing -> fail $ "unknown " ++ symbol ++ " '" ++ ident ++ "'"
+
+parseGpReg :: Parser GpReg
+parseGpReg = parseLookup reservedGpRegs "general purpose register"
+
+parseCsrReg :: Parser CsrReg
+parseCsrReg = parseLookup reservedCsrRegs "special register"
+
+parseCmpFlag :: Parser CmpFlag
+parseCmpFlag = parseLookup reservedCmpFlags "comparison flag"
+
+
+parseLowImm :: Parser Imm
+parseLowImm =
+  choice [IntImm   Low . fromIntegral <$> parseWord <?> "integer literal",
+          LabelImm Low                <$> parseUnreservedIdentifier <?> "label name"]
+
+
+parseInst :: Parser Inst
+parseInst =
+  choice [AddInst  <$> (parseString "add"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+          AdcInst  <$> (parseString "adc"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+          SubInst  <$> (parseString "sub"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+          SbbInst  <$> (parseString "sbb"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+          AndInst  <$> (parseString "and"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+          OrInst   <$> (parseString "or"   *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+          XorInst  <$> (parseString "xor"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+          RrcInst  <$> (parseString "rrc"  *> parseGpReg)   <*> parseGpReg,
+          LwInst   <$> (parseString "lw"   *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+          SwInst   <$> (parseString "sw"   *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+          RsrInst  <$> (parseString "rsr"  *> parseGpReg)   <*> parseGpReg <*> parseCsrReg,
+          WsrInst  <$> (parseString "wsr"  *> parseGpReg)   <*> parseGpReg <*> parseCsrReg,
+          SetInst  <$> (parseString "set"  *> parseGpReg)   <*> parseLowImm,
+          JalInst  <$> (parseString "jal"  *> parseCmpFlag) <*> parseGpReg <*> parseGpReg,
+          JmpInst  <$> (parseString "jmp"  *> parseCmpFlag) <*> parseGpReg <*> parseGpReg,
+          HaltInst <$> (parseString "halt" *> parseGpReg)]
+
+
+parseStatement :: Parser Statement
+parseStatement =
+  choice [InstStatement  <$> parseInst,
+          DirStatement   <$> parseDir,
+          LabelStatement <$> parseLabel]
+
+
+parseProgram :: Parser Program
+parseProgram = (some (lexeme parseStatement)) <* eof
