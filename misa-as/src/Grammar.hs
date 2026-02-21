@@ -13,7 +13,6 @@ module Grammar (Program,
                 GpReg(..),
                 WideReg(..),
                 CsrReg(..),
-                AluFlag(..),
                 CmpFlag(..),
                 Imm(..),
                 ImmPart(..),
@@ -55,18 +54,18 @@ data Inst
   | RsrInst  CsrReg  GpReg GpReg
   | WsrInst  CsrReg  GpReg GpReg
   | SetInst  GpReg   Imm
-  | JalInst  AluFlag GpReg GpReg
-  | JmpInst  AluFlag GpReg GpReg
+  | JalInst  CmpFlag GpReg GpReg
+  | JmpInst  CmpFlag GpReg GpReg
   | HaltInst GpReg
   -- Pseudo instructions
   | NopInst
   | NotInst  GpReg   GpReg
+  | MovInst  GpReg   GpReg
+  | CmpInst GpReg    GpReg
   | SetdInst GpReg   GpReg Imm
-  | CmpInst  CmpFlag GpReg GpReg
-  | TrueInst
   | CallInst GpReg   GpReg
   | RetInst
-  | ClrInst AluFlag
+  | ClrInst
   deriving (Show)
 
 
@@ -75,7 +74,7 @@ data Op
   -- Base instructions
   = ADD | ADC | SUB | SBB | AND | OR | XOR | RRC | LW | SW | RSR | WSR | SET | JAL | JMP | HALT
   -- Pseudo instructions
-  | NOP | NOT | SETD | CMP | TRUE | CALL | RET | CLR
+  | NOP | NOT | MOV | CMP | SETD | CALL | RET | CLR
   deriving (Show, Enum, Bounded)
 
 
@@ -93,11 +92,7 @@ data CsrReg = SADDR | RADDR | FLAGS
   deriving (Show, Enum, Bounded)
 
 
-data AluFlag = Z | C | N | V
-  deriving (Show, Enum, Bounded)
-
-
-data CmpFlag = EQUAL | NOT_EQUAL | GREATER | LESS | GREATER_EQUAL | LESS_EQUAL
+data CmpFlag = ALWAYS | EQUAL | NOT_EQUAL | GREATER | LESS | GREATER_EQUAL | LESS_EQUAL
   deriving (Show, Enum, Bounded)
 
 

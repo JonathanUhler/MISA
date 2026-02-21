@@ -3,17 +3,15 @@ A basic object file containing linker sections with code, symbols, and relocatio
 
 Author: Jonathan Uhler
 -}
-module ObjectFile () where
-{-
 module ObjectFile (BinaryObject,
-                   Section(..),
+                   Sec(..),
                    Code,
-                   CodeElement(..),
-                   SymbolTable,
-                   Symbol(..),
-                   RelocationTable,
-                   Relocation(..),
-                   RelocationType(..),
+                   CodeElem(..),
+                   SymTable,
+                   Sym(..),
+                   RelocTable,
+                   Reloc(..),
+                   RelocType(..),
                    packBinaryObject) where
 
 
@@ -27,7 +25,7 @@ import Data.Word (Word8, Word16)
 
 
 -- | The type of an object file, which is a list of zero or more sections.
-type BinaryObject = [Section]
+type BinaryObject = [Sec]
 
 
 {- |
@@ -35,34 +33,34 @@ The description of a linker section, which is a named tuple of code (binary data
 object file/final binary), symbols defined within the section and their section-relative addresses,
 and relocations used in the section with section-relative addresses to the "holes" in the code.
 -}
-data Section = Section Label Code SymbolTable RelocationTable
-  deriving (Show, Eq)
+data Sec = Sec Label Code SymTable RelocTable
+  deriving (Show)
 
 
 -- | The type of a section's code, which is a list of instructions or binary literals.
-type Code = [CodeElement]
+type Code = [CodeElem]
 
 
 -- | The type of a single unit in a section's code.
-data CodeElement
+data CodeElem
   -- | An assembly instruction in the code of a section.
-  = InstructionCode Instruction
+  = InstCode Inst
   -- | Literal binary data in the code of a section (e.g. from .array/.word directives).
   | LiteralCode [Word8]
-  deriving (Show, Eq)
+  deriving (Show)
 
 
 -- | The type of a symbol table.
-type SymbolTable = [Symbol]
+type SymTable = [Sym]
 
 
 -- | The type of a symbol in a section, which is a labeled section-relative address.
-data Symbol = Symbol Label Word16
-  deriving (Show, Eq)
+data Sym = Sym Label Word16
+  deriving (Show)
 
 
 -- | The type of a relocation table.
-type RelocationTable = [Relocation]
+type RelocTable = [Reloc]
 
 
 {- |
@@ -70,17 +68,17 @@ The type of a relocation in a section, which points to a section-relative addres
 missing symbol existed in the assembly code. The relocation includes the name of the missing symbol
 and which part of the symbol (e.g. high or low word) should be used to fill the hole.
 -}
-data Relocation = Relocation RelocationType Word16 Label
-  deriving (Show, Eq)
+data Reloc = Reloc RelocType Word16 Label
+  deriving (Show)
 
 
 -- | How to fill a relocation.
-data RelocationType
+data RelocType
   -- | Use the lower half of the 16-bit word referred to by the relocation symbol to fill the hole.
-  = LowRelocation
+  = LowReloc
   -- | Use the upper half of the 16-bit word referred to by the relocation symbol to fill the hole.
-  | HighRelocation
-  deriving (Show, Enum, Eq)
+  | HighReloc
+  deriving (Show, Enum)
 
 
 -- | A magic 8-byte string that appears at the start of every object file in little-endian order.
@@ -117,47 +115,39 @@ The returned list is one or more instructions (2 bytes each in the ISA) in littl
 All base instructions will be 2-byte lists, and some pseudo-instructions may expand to more than
 one base instruction.
 -}
-packInstruction :: Instruction -> [Word8]
-packInstruction instruction = case instruction of
-  -- Base instructions
-  AddInstruction rd rs1 rs2  -> packRRR 0x0 rd rs1 rs2
-  AdcInstruction rd rs1 rs2  -> packRRR 0x1 rd rs1 rs2
-  SubInstruction rd rs1 rs2  -> packRRR 0x2 rd rs1 rs2
-  AndInstruction rd rs1 rs2  -> packRRR 0x3 rd rs1 rs2
-  OrInstruction rd rs1 rs2   -> packRRR 0x4 rd rs1 rs2
-  XorInstruction rd rs1 rs2  -> packRRR 0x5 rd rs1 rs2
-  LwInstruction rd imm       -> packRI 0x8 rd imm
-  SwInstruction rd imm       -> packRI 0x9 rd imm
-  LaInstruction rs1 rs2      -> packRR 0xA rs1 rs2
-  SaInstruction rs1 rs2      -> packRR 0xB rs1 rs2
-  LiInstruction rd imm       -> packRI 0xC rd imm
-  JlzInstruction rd imm      -> packRI 0xD rd imm
-  JzInstruction rd imm       -> packRI 0xE rd imm
-  HaltInstruction imm        -> packI 0xF imm
-  _                          -> error ("Cannot encode pseudo instruction" ++ show instruction)
-
-  where packRRR :: Word8 -> Register -> Register -> Register -> [Word8]
-        packRRR op rd rs1 rs2 = [op .|. shiftL (fromR rd) 4, fromR rs1 .|. shiftL (fromR rs2) 4]
-
-        packRI :: Word8 -> Register -> Immediate -> [Word8]
-        packRI op rd imm = [op .|. shiftL (fromR rd) 4, fromI imm]
-
-        packRR :: Word8 -> Register -> Register-> [Word8]
-        packRR op rs1 rs2 = [op, fromR rs1 .|. shiftL (fromR rs2) 4]
-
-        packI :: Word8 -> Immediate -> [Word8]
-        packI op imm = [op, fromI imm]
-
-        fromI :: Num a => Immediate -> a
-        fromI imm =
-          case imm of
-            (IntImmediate Full n)  -> fromIntegral n
-            (IntImmediate Low n)   -> fromIntegral n
-            (IntImmediate High n)  -> fromIntegral (n `shiftR` 8)
-            (LabelImmediate _ _)   -> 0x00
-
-        fromR :: Register -> Word8
-        fromR r = fromIntegral (fromEnum r)
+packInst :: Inst -> [Word8]
+packInst inst =
+  case inst of
+    HaltInst rs1          -> packFormatR   0x0 rs1
+    AddInst  rd   rs1 rs2 -> packFormatRRR 0x1 rd   rs1 rs2
+    AdcInst  rd   rs1 rs2 -> packFormatRRR 0x2 rd   rs1 rs2
+    SubInst  rd   rs1 rs2 -> packFormatRRR 0x3 rd   rs1 rs2
+    SbbInst  rd   rs1 rs2 -> packFormatRRR 0x4 rd   rs1 rs2
+    AndInst  rd   rs1 rs2 -> packFormatRRR 0x5 rd   rs1 rs2
+    OrInst   rd   rs1 rs2 -> packFormatRRR 0x6 rd   rs1 rs2
+    XorInst  rd   rs1 rs2 -> packFormatRRR 0x7 rd   rs1 rs2
+    RrcInst  rd   rs1     -> packFormatRR  0x8 rd   rs1
+    SetInst  rd   imm     -> packFormatRI  0x9 rd   imm
+    LwInst   rd   rs1 rs2 -> packFormatRRR 0xA rd   rs1 rs2
+    SwInst   rd   rs1 rs2 -> packFormatRRR 0xB rd   rs1 rs2
+    RsrInst  csr  rs1 rs2 -> packFormatCRR 0xC csr  rs1 rs2
+    WsrInst  csr  rs1 rs2 -> packFormatCRR 0xD csr  rs1 rs2
+    JalInst  flag rs1 rs2 -> packFormatFRR 0xE flag rs1 rs2
+    JmpInst  flag rs1 rs2 -> packFormatFRR 0xF flag rs1 rs2
+    _                     -> error ("cannot pack pseudo-instruction " ++ show inst)
+  where
+    packFormatR   op r1       = [op .|. shiftL (fromReg r1) 4, 0x00]
+    packFormatRR  op r1 r2    = [op .|. shiftL (fromReg r1) 4, fromReg r2]
+    packFormatRRR op r1 r2 r3 = [op .|. shiftL (fromReg r1) 4, fromReg r2 .|. shiftL (fromReg r3) 4]
+    packFormatRI  op r  i     = [op .|. shiftL (fromReg r) 4,  fromImm i]
+    packFormatCRR op c  r1 r2 = [op .|. shiftL (fromReg c) 4,  fromReg r1 .|. shiftL (fromReg r2) 4]
+    packFormatFRR op f  r1 r2 = [op .|. shiftL (fromReg f) 4,  fromReg r1 .|. shiftL (fromReg r2) 4]
+    fromReg r = fromIntegral (fromEnum r)
+    fromImm i = case i of
+      (IntImm Full n) -> fromIntegral n
+      (IntImm Low n)  -> fromIntegral n
+      (IntImm High n) -> fromIntegral (shiftR n 8)
+      (LabelImm _ _)  -> 0x00
 
 
 {- |
@@ -173,18 +163,18 @@ are instructions vs. literal binary data.
 packCode :: Code -> [Word8]
 packCode code
   = packDoubleWord (fromIntegral (length packedCode)) ++ packedCode
-  where packedCode = concatMap packCodeElement code
+  where packedCode = concatMap packCodeElem code
 
 
 {- |
 Packs a single code element into binary.
 
-If the code element is an instruction, `packInstruction` is used, otherwise the literal binary
+If the code element is an instruction, `packInst` is used, otherwise the literal binary
 byte array is returned.
 -}
-packCodeElement :: CodeElement -> [Word8]
-packCodeElement (InstructionCode instruction) = packInstruction instruction
-packCodeElement (LiteralCode bytes) = bytes
+packCodeElem :: CodeElem -> [Word8]
+packCodeElem (InstCode inst) = packInst inst
+packCodeElem (LiteralCode bytes)    = bytes
 
 
 {- |
@@ -196,13 +186,13 @@ symbols in order.
 
 Note carefully that the length field is the number of packed symbols, not the total number of
 bytes of all packed symbols. Thus to skip past the packed symbol table, each symbol's size
-(see `packSymbol`) must be read and skipped in O(n) time.
+(see `packSym`) must be read and skipped in O(n) time.
 -}
-packSymbols :: SymbolTable -> [Word8]
-packSymbols [] = packDoubleWord 0
-packSymbols symbols
-  = packDoubleWord (fromIntegral (length symbols)) ++ packedSymbols
-  where packedSymbols = concatMap packSymbol symbols
+packSyms :: SymTable -> [Word8]
+packSyms [] = packDoubleWord 0
+packSyms symbols
+  = packDoubleWord (fromIntegral (length symbols)) ++ packedSyms
+  where packedSyms = concatMap packSym symbols
 
 
 {- |
@@ -211,8 +201,8 @@ Packs a single symbol into binary.
 The returned list begins with the address of the symbol as a 2-byte little-endian doubleword,
 followed by the packed name of the symbol (which starts with the size of the string).
 -}
-packSymbol :: Symbol -> [Word8]
-packSymbol (Symbol name address)
+packSym :: Sym -> [Word8]
+packSym (Sym name address)
   = packDoubleWord address ++ packString name
 
 
@@ -225,11 +215,11 @@ relocations in the following binary, followed by all the packed relocations.
 Note carefully that the length field is the number of relocations, not the number of bytes in
 the packed relocations.
 -}
-packRelocations :: RelocationTable -> [Word8]
-packRelocations [] = packDoubleWord 0
-packRelocations relocations
-  = packDoubleWord (fromIntegral (length relocations)) ++ packedRelocations
-  where packedRelocations = concatMap packRelocation relocations
+packRelocs :: RelocTable -> [Word8]
+packRelocs [] = packDoubleWord 0
+packRelocs relocations
+  = packDoubleWord (fromIntegral (length relocations)) ++ packedRelocs
+  where packedRelocs = concatMap packReloc relocations
 
 
 {- |
@@ -239,8 +229,8 @@ The returned list begins with the address in the code of the byte requiring relo
 as a 2-byte doubleword, followed by the packed name (which begins with the length of the name
 string).
 -}
-packRelocation :: Relocation -> [Word8]
-packRelocation (Relocation kind address name)
+packReloc :: Reloc -> [Word8]
+packReloc (Reloc kind address name)
   =  [fromIntegral (fromEnum kind)]
   ++ packDoubleWord address
   ++ packString name
@@ -252,12 +242,12 @@ Packs a single section into binary.
 The returned list is the packed sectoin name, packed code, packed symbols, and packed relocation.
 See other functions for more information on the format.
 -}
-packSection :: Section -> [Word8]
-packSection (Section name code symbols relocations)
+packSec :: Sec -> [Word8]
+packSec (Sec name code symbols relocations)
   =  packString name
   ++ packCode code
-  ++ packSymbols symbols
-  ++ packRelocations relocations
+  ++ packSyms symbols
+  ++ packRelocs relocations
   
 
 {- |
@@ -276,6 +266,5 @@ packBinaryObject [] = packDoubleWord 0
 packBinaryObject sections
   =  B.unpack (E.encodeUtf8 (T.pack magicHeader))
   ++ packDoubleWord (fromIntegral (length sections))
-  ++ packedSections
-  where packedSections = concatMap packSection sections
--}
+  ++ packedSecs
+  where packedSecs = concatMap packSec sections

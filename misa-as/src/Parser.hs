@@ -27,9 +27,6 @@ reservedWideRegs = [(map toLower (show w), w) | w <- [minBound..maxBound :: Wide
 reservedCsrRegs :: [(String, CsrReg)]
 reservedCsrRegs = [(map toLower (show c), c) | c <- [minBound..maxBound :: CsrReg]]
 
-reservedAluFlags :: [(String, AluFlag)]
-reservedAluFlags = [(map toLower (show f), f) | f <- [minBound..maxBound :: AluFlag]]
-
 reservedCmpFlags :: [(String, CmpFlag)]
 reservedCmpFlags = [(map toLower (show f), f) | f <- [minBound..maxBound :: CmpFlag]]
 
@@ -41,7 +38,6 @@ reservedIdentifiers = Set.fromList (concat [map fst reservedOps,
                                             map fst reservedGpRegs,
                                             map fst reservedWideRegs,
                                             map fst reservedCsrRegs,
-                                            map fst reservedAluFlags,
                                             map fst reservedCmpFlags,
                                             reservedDirs])
 
@@ -97,7 +93,7 @@ parseIdentifier = lexeme
 parseThisIdent :: String -> Parser String
 parseThisIdent expected = try $ do
   actual <- parseIdentifier
-  if actual == expected then
+  if map toLower actual == map toLower expected then
     return expected
   else
     fail ("unexpected identifier")
@@ -152,9 +148,6 @@ parseRegPair = choice [try parseWideReg, (,) <$> parseGpReg <*> parseGpReg]
 parseCsrReg :: Parser CsrReg
 parseCsrReg = parseLookup reservedCsrRegs "special register"
 
-parseAluFlag :: Parser AluFlag
-parseAluFlag = parseLookup reservedAluFlags "alu flag"
-
 parseCmpFlag :: Parser CmpFlag
 parseCmpFlag = parseLookup reservedCmpFlags "comparison flag"
 
@@ -188,18 +181,18 @@ parseInst = choice
     (\c (r1, r2) -> RsrInst c r1 r2)  <$> (parseThisIdent "rsr"  *> parseCsrReg)  <*> parseRegPair,
     (\c (r1, r2) -> WsrInst c r1 r2)  <$> (parseThisIdent "wsr"  *> parseCsrReg)  <*> parseRegPair,
     SetInst  <$> (parseThisIdent "set"  *> parseGpReg)   <*> parseLowImm,
-    (\f (r1, r2) -> JalInst f r1 r2)  <$> (parseThisIdent "jal"  *> parseAluFlag) <*> parseRegPair,
-    (\f (r1, r2) -> JmpInst f r1 r2)  <$> (parseThisIdent "jmp"  *> parseAluFlag) <*> parseRegPair,
+    (\f (r1, r2) -> JalInst f r1 r2)  <$> (parseThisIdent "jal"  *> parseCmpFlag) <*> parseRegPair,
+    (\f (r1, r2) -> JmpInst f r1 r2)  <$> (parseThisIdent "jmp"  *> parseCmpFlag) <*> parseRegPair,
     HaltInst <$> (parseThisIdent "halt" *> parseGpReg),
     -- Pseudo instructions
     NopInst  <$   parseThisIdent "nop",
-    NotInst  <$> (parseThisIdent "not" *> parseGpReg)   <*> parseGpReg,
+    NotInst  <$> (parseThisIdent "not" *> parseGpReg) <*> parseGpReg,
+    MovInst  <$> (parseThisIdent "mov" *> parseGpReg) <*> parseGpReg,
+    CmpInst  <$> (parseThisIdent "cmp" *> parseGpReg) <*> parseGpReg,
     (\(r1, r2) i -> SetdInst r1 r2 i) <$> (parseThisIdent "setd" *> parseRegPair) <*> parseFullImm,
-    CmpInst  <$> (parseThisIdent "cmp" *> parseCmpFlag) <*> parseGpReg <*> parseGpReg,
-    TrueInst <$   parseThisIdent "true",
     (\(r1, r2) -> CallInst r1 r2)     <$> (parseThisIdent "call" *> parseRegPair),
     RetInst  <$   parseThisIdent "ret",
-    ClrInst  <$> (parseThisIdent "clr" *> parseAluFlag)
+    ClrInst  <$   parseThisIdent "clr"
   ] <?> "instruction"
 
 
