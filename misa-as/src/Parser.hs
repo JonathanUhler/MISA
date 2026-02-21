@@ -94,6 +94,15 @@ parseIdentifier = lexeme
   )
 
 
+parseThisIdent :: String -> Parser String
+parseThisIdent expected = try $ do
+  actual <- parseIdentifier
+  if actual == expected then
+    return expected
+  else
+    fail ("unexpected identifier")
+
+
 parseUnreservedIdentifier :: Parser String
 parseUnreservedIdentifier = do
   ident <- parseIdentifier <?> "identifier"
@@ -166,31 +175,31 @@ parseInst :: Parser Inst
 parseInst = choice
   [
     -- Base instructions
-    AddInst  <$> (parseString "add"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
-    AdcInst  <$> (parseString "adc"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
-    SubInst  <$> (parseString "sub"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
-    SbbInst  <$> (parseString "sbb"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
-    AndInst  <$> (parseString "and"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
-    OrInst   <$> (parseString "or"   *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
-    XorInst  <$> (parseString "xor"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
-    RrcInst  <$> (parseString "rrc"  *> parseGpReg)   <*> parseGpReg,
-    (\rd (r1, r2) -> LwInst rd r1 r2) <$> (parseString "lw"   *> parseGpReg)   <*> parseRegPair,
-    (\rd (r1, r2) -> SwInst rd r1 r2) <$> (parseString "sw"   *> parseGpReg)   <*> parseRegPair,
-    (\c (r1, r2) -> RsrInst c r1 r2)  <$> (parseString "rsr"  *> parseCsrReg)  <*> parseRegPair,
-    (\c (r1, r2) -> WsrInst c r1 r2)  <$> (parseString "wsr"  *> parseCsrReg)  <*> parseRegPair,
-    SetInst  <$> (parseString "set"  *> parseGpReg)   <*> parseLowImm,
-    (\f (r1, r2) -> JalInst f r1 r2)  <$> (parseString "jal"  *> parseAluFlag) <*> parseRegPair,
-    (\f (r1, r2) -> JmpInst f r1 r2)  <$> (parseString "jmp"  *> parseAluFlag) <*> parseRegPair,
-    HaltInst <$> (parseString "halt" *> parseGpReg),
+    AddInst  <$> (parseThisIdent "add"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+    AdcInst  <$> (parseThisIdent "adc"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+    SubInst  <$> (parseThisIdent "sub"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+    SbbInst  <$> (parseThisIdent "sbb"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+    AndInst  <$> (parseThisIdent "and"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+    OrInst   <$> (parseThisIdent "or"   *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+    XorInst  <$> (parseThisIdent "xor"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+    RrcInst  <$> (parseThisIdent "rrc"  *> parseGpReg)   <*> parseGpReg,
+    (\rd (r1, r2) -> LwInst rd r1 r2) <$> (parseThisIdent "lw"   *> parseGpReg)   <*> parseRegPair,
+    (\rd (r1, r2) -> SwInst rd r1 r2) <$> (parseThisIdent "sw"   *> parseGpReg)   <*> parseRegPair,
+    (\c (r1, r2) -> RsrInst c r1 r2)  <$> (parseThisIdent "rsr"  *> parseCsrReg)  <*> parseRegPair,
+    (\c (r1, r2) -> WsrInst c r1 r2)  <$> (parseThisIdent "wsr"  *> parseCsrReg)  <*> parseRegPair,
+    SetInst  <$> (parseThisIdent "set"  *> parseGpReg)   <*> parseLowImm,
+    (\f (r1, r2) -> JalInst f r1 r2)  <$> (parseThisIdent "jal"  *> parseAluFlag) <*> parseRegPair,
+    (\f (r1, r2) -> JmpInst f r1 r2)  <$> (parseThisIdent "jmp"  *> parseAluFlag) <*> parseRegPair,
+    HaltInst <$> (parseThisIdent "halt" *> parseGpReg),
     -- Pseudo instructions
-    NopInst  <$   parseString "nop",
-    NotInst  <$> (parseString "not" *> parseGpReg)   <*> parseGpReg,
-    (\(r1, r2) i -> SetdInst r1 r2 i) <$> (parseString "setd" *> parseRegPair) <*> parseFullImm,
-    CmpInst  <$> (parseString "cmp" *> parseCmpFlag) <*> parseGpReg <*> parseGpReg,
-    TrueInst <$   parseString "true",
-    (\(r1, r2) -> CallInst r1 r2)     <$> (parseString "call" *> parseRegPair),
-    RetInst  <$   parseString "ret",
-    ClrInst  <$> (parseString "clr" *> parseAluFlag)
+    NopInst  <$   parseThisIdent "nop",
+    NotInst  <$> (parseThisIdent "not" *> parseGpReg)   <*> parseGpReg,
+    (\(r1, r2) i -> SetdInst r1 r2 i) <$> (parseThisIdent "setd" *> parseRegPair) <*> parseFullImm,
+    CmpInst  <$> (parseThisIdent "cmp" *> parseCmpFlag) <*> parseGpReg <*> parseGpReg,
+    TrueInst <$   parseThisIdent "true",
+    (\(r1, r2) -> CallInst r1 r2)     <$> (parseThisIdent "call" *> parseRegPair),
+    RetInst  <$   parseThisIdent "ret",
+    ClrInst  <$> (parseThisIdent "clr" *> parseAluFlag)
   ] <?> "instruction"
 
 
