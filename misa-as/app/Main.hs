@@ -1,18 +1,13 @@
 module Main (main) where
 
-main :: IO ()
-main = putStrLn "main"
-{-
 
-
-import Encoder
-import Lexer
-import ObjectFile
+--import Encoder
+--import ObjectFile
 import Parser
 
-import System.Environment (getArgs)
-import System.Exit (die)
 import qualified Data.ByteString as B
+import System.Environment (getArgs)
+import Text.Megaparsec
 
 
 main :: IO ()
@@ -21,18 +16,9 @@ main = do
   case args of
     [inputPath, outputPath] -> do
       content <- readFile inputPath
-
-      let (tokens, unlexed) = lexerRun content
-      if unlexed /= ""
-        then die ("Lexical Error: Unexpected input at: " ++ take 10 unlexed ++ "...")
-        else return ()
-
-      let (program, unparsed) = parserRun tokens
-      if unparsed /= []
-        then die ("Semantic Error: Unexpected input at: " ++ show (take 10 unparsed) ++ "... got " ++ show program)
-        else return ()
-
-      let object = encoderRun program
-      let bytes = packBinaryObject object
-      B.writeFile outputPath (B.pack bytes)
--}
+      case runParser parseProgram inputPath content of
+        Left  err     -> putStrLn (errorBundlePretty err)
+        Right program -> print program
+    _                       -> putStrLn "usage: misa-as <inputPath> <outputPath>"
+--      bytes   <- packBinaryObject object
+--      B.writeFile outputPath (B.pack bytes)

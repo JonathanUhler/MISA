@@ -1,11 +1,12 @@
-module Parser () where
+module Parser (parseProgram) where
 
+
+import Grammar
 
 import Data.Char
 import qualified Data.Set as Set
 import Data.Void
-import Data.Word (Word8)
-import Grammar
+import Data.Word (Word8, Word16)
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
@@ -26,6 +27,9 @@ reservedWideRegs = [(map toLower (show w), w) | w <- [minBound..maxBound :: Wide
 reservedCsrRegs :: [(String, CsrReg)]
 reservedCsrRegs = [(map toLower (show c), c) | c <- [minBound..maxBound :: CsrReg]]
 
+reservedAluFlags :: [(String, AluFlag)]
+reservedAluFlags = [(map toLower (show f), f) | f <- [minBound..maxBound :: AluFlag]]
+
 reservedCmpFlags :: [(String, CmpFlag)]
 reservedCmpFlags = [(map toLower (show f), f) | f <- [minBound..maxBound :: CmpFlag]]
 
@@ -35,9 +39,10 @@ reservedDirs = ["word", "array", "section"]
 reservedIdentifiers :: Set.Set String
 reservedIdentifiers = Set.fromList (concat [map fst reservedOps,
                                             map fst reservedGpRegs,
-                                            map fst reservedCsrRegs,
-                                            map fst reservedCmpFlags,
                                             map fst reservedWideRegs,
+                                            map fst reservedCsrRegs,
+                                            map fst reservedAluFlags,
+                                            map fst reservedCmpFlags,
                                             reservedDirs])
 
 
@@ -70,6 +75,15 @@ parseWord = do
     return (fromIntegral int)
 
 
+parseDoubleWord :: Parser Word16
+parseDoubleWord = do
+  int <- parseInteger <?> "integer literal"
+  if int < fromIntegral (minBound :: Word16) || int > fromIntegral (maxBound :: Word16) then
+    fail ("integer literal " ++ show int ++ " is not a representable as a double-word")
+  else
+    return (fromIntegral int)
+
+
 parseIdentifier :: Parser String
 parseIdentifier = lexeme
   (
@@ -90,12 +104,12 @@ parseUnreservedIdentifier = do
 
 
 parseLabel :: Parser Label
-parseLabel = parseUnreservedIdentifier <* char ':'
+parseLabel = (parseUnreservedIdentifier <?> "label") <* char ':'
 
 
 parseDir :: Parser Dir
 parseDir = do
-  _   <- char '.'
+  _   <- char '.' <?> "directive"
   choice [WordDir    <$> (parseString "word"    *> parseWord),
           ArrayDir   <$> (parseString "array"   *> some parseWord),
           SectionDir <$> (parseString "section" *> parseUnreservedIdentifier)]
@@ -111,8 +125,26 @@ parseLookup env symbol = do
 parseGpReg :: Parser GpReg
 parseGpReg = parseLookup reservedGpRegs "general purpose register"
 
+parseWideReg :: Parser (GpReg, GpReg)
+parseWideReg = do
+  wide <- parseLookup reservedWideRegs "register pair"
+  case wide of
+    RAB -> return (RA, RB)
+    RCD -> return (RC, RD)
+    REF -> return (RE, RF)
+    RGH -> return (RG, RH)
+    RUV -> return (RU, RV)
+    RWX -> return (RW, RX)
+    RYZ -> return (RY, RZ)
+
+parseRegPair :: Parser (GpReg, GpReg)
+parseRegPair = choice [try parseWideReg, (,) <$> parseGpReg <*> parseGpReg]
+
 parseCsrReg :: Parser CsrReg
 parseCsrReg = parseLookup reservedCsrRegs "special register"
+
+parseAluFlag :: Parser AluFlag
+parseAluFlag = parseLookup reservedAluFlags "alu flag"
 
 parseCmpFlag :: Parser CmpFlag
 parseCmpFlag = parseLookup reservedCmpFlags "comparison flag"
@@ -124,24 +156,42 @@ parseLowImm =
           LabelImm Low                <$> parseUnreservedIdentifier <?> "label name"]
 
 
+parseFullImm :: Parser Imm
+parseFullImm =
+  choice [IntImm   Full . fromIntegral <$> parseDoubleWord <?> "integer literal",
+          LabelImm Full                <$> parseUnreservedIdentifier <?> "label name"]
+
+
 parseInst :: Parser Inst
-parseInst =
-  choice [AddInst  <$> (parseString "add"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
-          AdcInst  <$> (parseString "adc"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
-          SubInst  <$> (parseString "sub"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
-          SbbInst  <$> (parseString "sbb"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
-          AndInst  <$> (parseString "and"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
-          OrInst   <$> (parseString "or"   *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
-          XorInst  <$> (parseString "xor"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
-          RrcInst  <$> (parseString "rrc"  *> parseGpReg)   <*> parseGpReg,
-          LwInst   <$> (parseString "lw"   *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
-          SwInst   <$> (parseString "sw"   *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
-          RsrInst  <$> (parseString "rsr"  *> parseGpReg)   <*> parseGpReg <*> parseCsrReg,
-          WsrInst  <$> (parseString "wsr"  *> parseGpReg)   <*> parseGpReg <*> parseCsrReg,
-          SetInst  <$> (parseString "set"  *> parseGpReg)   <*> parseLowImm,
-          JalInst  <$> (parseString "jal"  *> parseCmpFlag) <*> parseGpReg <*> parseGpReg,
-          JmpInst  <$> (parseString "jmp"  *> parseCmpFlag) <*> parseGpReg <*> parseGpReg,
-          HaltInst <$> (parseString "halt" *> parseGpReg)]
+parseInst = choice
+  [
+    -- Base instructions
+    AddInst  <$> (parseString "add"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+    AdcInst  <$> (parseString "adc"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+    SubInst  <$> (parseString "sub"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+    SbbInst  <$> (parseString "sbb"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+    AndInst  <$> (parseString "and"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+    OrInst   <$> (parseString "or"   *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+    XorInst  <$> (parseString "xor"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
+    RrcInst  <$> (parseString "rrc"  *> parseGpReg)   <*> parseGpReg,
+    (\rd (r1, r2) -> LwInst rd r1 r2) <$> (parseString "lw"   *> parseGpReg)   <*> parseRegPair,
+    (\rd (r1, r2) -> SwInst rd r1 r2) <$> (parseString "sw"   *> parseGpReg)   <*> parseRegPair,
+    (\c (r1, r2) -> RsrInst c r1 r2)  <$> (parseString "rsr"  *> parseCsrReg)  <*> parseRegPair,
+    (\c (r1, r2) -> WsrInst c r1 r2)  <$> (parseString "wsr"  *> parseCsrReg)  <*> parseRegPair,
+    SetInst  <$> (parseString "set"  *> parseGpReg)   <*> parseLowImm,
+    (\f (r1, r2) -> JalInst f r1 r2)  <$> (parseString "jal"  *> parseAluFlag) <*> parseRegPair,
+    (\f (r1, r2) -> JmpInst f r1 r2)  <$> (parseString "jmp"  *> parseAluFlag) <*> parseRegPair,
+    HaltInst <$> (parseString "halt" *> parseGpReg),
+    -- Pseudo instructions
+    NopInst  <$   parseString "nop",
+    NotInst  <$> (parseString "not" *> parseGpReg)   <*> parseGpReg,
+    (\(r1, r2) i -> SetdInst r1 r2 i) <$> (parseString "setd" *> parseRegPair) <*> parseFullImm,
+    CmpInst  <$> (parseString "cmp" *> parseCmpFlag) <*> parseGpReg <*> parseGpReg,
+    TrueInst <$   parseString "true",
+    (\(r1, r2) -> CallInst r1 r2)     <$> (parseString "call" *> parseRegPair),
+    RetInst  <$   parseString "ret",
+    ClrInst  <$> (parseString "clr" *> parseAluFlag)
+  ] <?> "instruction"
 
 
 parseStatement :: Parser Statement
@@ -152,4 +202,4 @@ parseStatement =
 
 
 parseProgram :: Parser Program
-parseProgram = (some (lexeme parseStatement)) <* eof
+parseProgram = (some (skip *> parseStatement)) <* eof

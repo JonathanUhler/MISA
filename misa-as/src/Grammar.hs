@@ -13,6 +13,7 @@ module Grammar (Program,
                 GpReg(..),
                 WideReg(..),
                 CsrReg(..),
+                AluFlag(..),
                 CmpFlag(..),
                 Imm(..),
                 ImmPart(..),
@@ -41,22 +42,31 @@ data Statement
 -- | The type of an instruction in the assembly language.
 data Inst
   -- Base instructions
-  = AddInst  GpReg GpReg GpReg
-  | AdcInst  GpReg GpReg GpReg
-  | SubInst  GpReg GpReg GpReg
-  | SbbInst  GpReg GpReg GpReg
-  | AndInst  GpReg GpReg GpReg
-  | OrInst   GpReg GpReg GpReg
-  | XorInst  GpReg GpReg GpReg
-  | RrcInst  GpReg GpReg
-  | LwInst   GpReg GpReg GpReg
-  | SwInst   GpReg GpReg GpReg
-  | RsrInst  GpReg GpReg CsrReg
-  | WsrInst  GpReg GpReg CsrReg
-  | SetInst  GpReg Imm
-  | JalInst  CmpFlag GpReg GpReg
-  | JmpInst  CmpFlag GpReg GpReg
+  = AddInst  GpReg   GpReg GpReg
+  | AdcInst  GpReg   GpReg GpReg
+  | SubInst  GpReg   GpReg GpReg
+  | SbbInst  GpReg   GpReg GpReg
+  | AndInst  GpReg   GpReg GpReg
+  | OrInst   GpReg   GpReg GpReg
+  | XorInst  GpReg   GpReg GpReg
+  | RrcInst  GpReg   GpReg
+  | LwInst   GpReg   GpReg GpReg
+  | SwInst   GpReg   GpReg GpReg
+  | RsrInst  CsrReg  GpReg GpReg
+  | WsrInst  CsrReg  GpReg GpReg
+  | SetInst  GpReg   Imm
+  | JalInst  AluFlag GpReg GpReg
+  | JmpInst  AluFlag GpReg GpReg
   | HaltInst GpReg
+  -- Pseudo instructions
+  | NopInst
+  | NotInst  GpReg   GpReg
+  | SetdInst GpReg   GpReg Imm
+  | CmpInst  CmpFlag GpReg GpReg
+  | TrueInst
+  | CallInst GpReg   GpReg
+  | RetInst
+  | ClrInst AluFlag
   deriving (Show)
 
 
@@ -64,6 +74,8 @@ data Inst
 data Op
   -- Base instructions
   = ADD | ADC | SUB | SBB | AND | OR | XOR | RRC | LW | SW | RSR | WSR | SET | JAL | JMP | HALT
+  -- Pseudo instructions
+  | NOP | NOT | SETD | CMP | TRUE | CALL | RET | CLR
   deriving (Show, Enum, Bounded)
 
 
@@ -77,11 +89,15 @@ data WideReg = RAB | RCD | REF | RGH | RUV | RWX | RYZ
   deriving (Show, Enum, Bounded)
 
 
-data CsrReg = SADDR | RADDR
+data CsrReg = SADDR | RADDR | FLAGS
   deriving (Show, Enum, Bounded)
 
 
-data CmpFlag = EQ | NE | GT | LT | GE | LE
+data AluFlag = Z | C | N | V
+  deriving (Show, Enum, Bounded)
+
+
+data CmpFlag = EQUAL | NOT_EQUAL | GREATER | LESS | GREATER_EQUAL | LESS_EQUAL
   deriving (Show, Enum, Bounded)
 
 
