@@ -8,7 +8,7 @@ import Text.Printf (printf)
 
 formatSyms :: SymTable -> String
 formatSyms []           = ""
-formatSyms (sym : syms) = formatSym sym ++ formatSyms syms
+formatSyms (sym : syms) = formatSym sym ++ "\n" ++ formatSyms syms
 
 
 formatSym :: Sym -> String
@@ -17,7 +17,7 @@ formatSym (Sym name addr) = "<- " ++ (printf "%04X" addr) ++ " " ++ name
 
 formatRelocs :: RelocTable -> String
 formatRelocs []               = ""
-formatRelocs (reloc : relocs) = formatReloc reloc ++ formatRelocs relocs
+formatRelocs (reloc : relocs) = formatReloc reloc ++ "\n" ++ formatRelocs relocs
 
 
 formatReloc :: Reloc -> String

@@ -304,7 +304,10 @@ unpackSyms = do
 
 
 unpackSym :: Parser Sym
-unpackSym = Sym <$> unpackString <*> unpackDoubleWord
+unpackSym = do
+  addr <- unpackDoubleWord
+  name <- unpackString
+  return (Sym name addr)
 
 
 unpackRelocs :: Parser RelocTable
