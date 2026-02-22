@@ -12,16 +12,25 @@ module ObjectFile (BinaryObject,
                    RelocTable,
                    Reloc(..),
                    RelocType(..),
-                   packBinaryObject) where
+                   packBinaryObject,
+                   unpackBinaryObject) where
 
 
 import Grammar
 
 import Data.Bits ((.&.), (.|.), shiftR, shiftL)
 import qualified Data.ByteString as B
+import Data.Char
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
+import Data.Void
 import Data.Word (Word8, Word16)
+import Text.Megaparsec
+import Text.Megaparsec.Byte
+import Text.Megaparsec.Byte.Binary
+
+
+type Parser = Parsec Void B.ByteString
 
 
 -- | The type of an object file, which is a list of zero or more sections.
@@ -94,9 +103,9 @@ bytes in the following string. The list then contains all the bytes of the strin
 encoding and little-endian order (first character of the string at lowest address).
 -}
 packString :: String -> [Word8]
-packString string
+packString str
   = packDoubleWord (fromIntegral (length packedString)) ++ packedString
-  where packedString = B.unpack (E.encodeUtf8 (T.pack string))
+  where packedString = B.unpack (E.encodeUtf8 (T.pack str))
 
 
 {- |
@@ -190,9 +199,9 @@ bytes of all packed symbols. Thus to skip past the packed symbol table, each sym
 -}
 packSyms :: SymTable -> [Word8]
 packSyms [] = packDoubleWord 0
-packSyms symbols
-  = packDoubleWord (fromIntegral (length symbols)) ++ packedSyms
-  where packedSyms = concatMap packSym symbols
+packSyms syms
+  = packDoubleWord (fromIntegral (length syms)) ++ packedSyms
+  where packedSyms = concatMap packSym syms
 
 
 {- |
@@ -217,9 +226,9 @@ the packed relocations.
 -}
 packRelocs :: RelocTable -> [Word8]
 packRelocs [] = packDoubleWord 0
-packRelocs relocations
-  = packDoubleWord (fromIntegral (length relocations)) ++ packedRelocs
-  where packedRelocs = concatMap packReloc relocations
+packRelocs relocs
+  = packDoubleWord (fromIntegral (length relocs)) ++ packedRelocs
+  where packedRelocs = concatMap packReloc relocs
 
 
 {- |
@@ -243,11 +252,11 @@ The returned list is the packed sectoin name, packed code, packed symbols, and p
 See other functions for more information on the format.
 -}
 packSec :: Sec -> [Word8]
-packSec (Sec name code symbols relocations)
+packSec (Sec name code syms relocs)
   =  packString name
   ++ packCode code
-  ++ packSyms symbols
-  ++ packRelocs relocations
+  ++ packSyms syms
+  ++ packRelocs relocs
   
 
 {- |
@@ -263,8 +272,63 @@ the size of a section's code, number of symbols, size of each symbol, number of 
 -}
 packBinaryObject :: BinaryObject -> [Word8]
 packBinaryObject [] = packDoubleWord 0
-packBinaryObject sections
+packBinaryObject secs
   =  B.unpack (E.encodeUtf8 (T.pack magicHeader))
-  ++ packDoubleWord (fromIntegral (length sections))
+  ++ packDoubleWord (fromIntegral (length secs))
   ++ packedSecs
-  where packedSecs = concatMap packSec sections
+  where packedSecs = concatMap packSec secs
+
+
+unpackString :: Parser String
+unpackString = do
+  len   <- unpackDoubleWord
+  bytes <- count (fromIntegral len) asciiChar
+  return (map (chr . fromIntegral) bytes)
+
+
+unpackDoubleWord :: Parser Word16
+unpackDoubleWord = word16le
+
+
+unpackCode :: Parser Code
+unpackCode = do
+  len   <- unpackDoubleWord
+  bytes <- count (fromIntegral len) word8
+  return [LiteralCode bytes]
+
+
+unpackSyms :: Parser SymTable
+unpackSyms = do
+  num <- unpackDoubleWord
+  count (fromIntegral num) unpackSym
+
+
+unpackSym :: Parser Sym
+unpackSym = Sym <$> unpackString <*> unpackDoubleWord
+
+
+unpackRelocs :: Parser RelocTable
+unpackRelocs = do
+  num <- unpackDoubleWord
+  count (fromIntegral num) unpackReloc
+
+
+unpackReloc :: Parser Reloc
+unpackReloc = Reloc <$> (toEnum . fromIntegral <$> word8) <*> unpackDoubleWord <*> unpackString
+
+
+unpackSec :: Parser Sec
+unpackSec = do
+  name   <- unpackString
+  code   <- unpackCode
+  syms   <- unpackSyms
+  relocs <- unpackRelocs
+  return (Sec name code syms relocs)
+
+
+unpackBinaryObject :: Parser BinaryObject
+unpackBinaryObject = do
+  _       <- string (E.encodeUtf8 (T.pack magicHeader))
+  numSecs <- unpackDoubleWord
+  secs    <- count (fromIntegral numSecs) unpackSec
+  return secs

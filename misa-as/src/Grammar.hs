@@ -61,7 +61,7 @@ data Inst
   | NopInst
   | NotInst  GpReg   GpReg
   | MovInst  GpReg   GpReg
-  | CmpInst GpReg    GpReg
+  | CmpInst  GpReg   GpReg
   | SetdInst GpReg   GpReg Imm
   | CallInst GpReg   GpReg
   | RetInst
