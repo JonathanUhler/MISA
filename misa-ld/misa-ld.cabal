@@ -24,6 +24,11 @@ source-repository head
   location: https://github.com/githubuser/misa-ld
 
 library
+  exposed-modules:
+      Linker
+      MemoryMap
+      Placer
+      Relocator
   other-modules:
       Paths_misa_ld
   autogen-modules:
@@ -33,6 +38,9 @@ library
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
+    , containers
+    , megaparsec
+    , misa-as
   default-language: Haskell2010
 
 executable misa-ld-exe
@@ -46,6 +54,9 @@ executable misa-ld-exe
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
+    , containers
+    , megaparsec
+    , misa-as
     , misa-ld
   default-language: Haskell2010
 
@@ -61,5 +72,8 @@ test-suite misa-ld-test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
+    , containers
+    , megaparsec
+    , misa-as
     , misa-ld
   default-language: Haskell2010

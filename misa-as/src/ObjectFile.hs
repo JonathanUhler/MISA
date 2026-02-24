@@ -13,7 +13,8 @@ module ObjectFile (BinaryObject,
                    Reloc(..),
                    RelocType(..),
                    packBinaryObject,
-                   unpackBinaryObject) where
+                   unpackBinaryObject,
+                   getSecSize) where
 
 
 import Grammar
@@ -87,7 +88,7 @@ data RelocType
   = LowReloc
   -- | Use the upper half of the 16-bit word referred to by the relocation symbol to fill the hole.
   | HighReloc
-  deriving (Show, Enum)
+  deriving (Show, Enum, Eq)
 
 
 -- | A magic 8-byte string that appears at the start of every object file in little-endian order.
@@ -150,9 +151,10 @@ packInst inst =
     packFormatRRR op r1 r2 r3 = [op .|. shiftL (fromReg r1) 4, fromReg r2 .|. shiftL (fromReg r3) 4]
     packFormatRI  op r  i     = [op .|. shiftL (fromReg r) 4,  fromImm i]
     packFormatCRR op c  r1 r2 = [op .|. shiftL (fromReg c) 4,  fromReg r1 .|. shiftL (fromReg r2) 4]
-    packFormatFRR op f  r1 r2 = [op .|. shiftL (fromReg f) 4,  fromReg r1 .|. shiftL (fromReg r2) 4]
-    fromReg r = fromIntegral (fromEnum r)
-    fromImm i = case i of
+    packFormatFRR op f  r1 r2 = [op .|. shiftL (fromFlag f) 4, fromReg r1 .|. shiftL (fromReg r2) 4]
+    fromReg r  = fromIntegral (fromEnum r)
+    fromFlag f = 1 `shiftL` (fromReg f)
+    fromImm i  = case i of
       (IntImm Full n) -> fromIntegral n
       (IntImm Low n)  -> fromIntegral n
       (IntImm High n) -> fromIntegral (shiftR n 8)
@@ -335,3 +337,10 @@ unpackBinaryObject = do
   numSecs <- unpackDoubleWord
   secs    <- count (fromIntegral numSecs) unpackSec
   return secs
+
+
+getSecSize :: Sec -> Word16
+getSecSize (Sec _ code _ _) = fromIntegral (getCodeSize code)
+  where getCodeSize []                          = 0
+        getCodeSize (InstCode _ : elems)        = 2 + getCodeSize elems
+        getCodeSize (LiteralCode array : elems) = length array + getCodeSize elems
