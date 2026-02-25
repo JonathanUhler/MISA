@@ -1,7 +1,9 @@
         .section text
 _start:
-        LDI SPHI SPLO 0xABCD
-        LDI RAHI RALO main      
-        SA RAHI RALO
-        JLZ ZERO 0
-        HALT 0
+        SETD RYZ 0xABCD
+        WSR SADDR RYZ
+
+        SETD RYZ main
+        JAL ALWAYS RYZ
+
+        HALT RT

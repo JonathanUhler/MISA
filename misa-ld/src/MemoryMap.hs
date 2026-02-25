@@ -48,7 +48,7 @@ parseMemRegion = do
   _     <- lexeme (char '-')
   end   <- lexeme (string' "0x" *> L.hexadecimal)
   _     <- lexeme (char ':')
-  secs  <- some parseIdentifier <?> "section name"
+  secs  <- many parseIdentifier <?> "section names"
   _     <- lexeme (char ';')
   return (MemRegion start end secs)
 
