@@ -1,0 +1,148 @@
+# Instruction Set Architecture
+
+This chapter describes the MISA instruction set architecture, include the base instruction set,
+optional assembler extensions, special registers and hardware data structures, and other
+implementation-agnostic features.
+
+The MISA architecture is an 8-bit architecture with up to a 16-bit address bus to interface with
+externally connected memory. Instructions are fixed-with 16-bit doublewords in little-endian byte
+order.
+
+## Registers
+
+Two types of registers are visible to the programmer in various contexts.
+
+### General Purpose Registers
+
+The general-purpose register file contains sixteen, 8-bit registers for generate computation and
+data storage, defined by the following ABI:
+
+| ABI Name | Wide ABI Name | Encoding |
+|----------|---------------|----------|
+| `R0`     | N/A           | 0000     |
+| `RA`     | `RAB`         | 0001     |
+| `RB`     |               | 0010     |
+| `RC`     | `RCD`         | 0011     |
+| `RD`     |               | 0100     |
+| `RE`     | `REF`         | 0101     |
+| `RF`     |               | 0110     |
+| `RG`     | `RGH`         | 0111     |
+| `RH`     |               | 1000     |
+| `RU`     | `RUV`         | 1001     |
+| `RV`     |               | 1010     |
+| `RW`     | `RWX`         | 1011     |
+| `RX`     |               | 1100     |
+| `RY`     | `RYZ`         | 1101     |
+| `RZ`     |               | 1110     |
+| `RT`     | N/A           | 1111     |
+
+The `R0` register must be hard-wired to ignore writes and always return the value `0b00000000` on
+reads. Wide registers are formed by two general-purpose registers, which must be equivalent to
+using the two 8-bit register names in order. For instance, `RAB` is semantically equivalent to
+`RA, RB` in that order.
+
+General purpose registers can be taken as the operands to most instructions which operate on
+registers.
+
+### Control and Status Registers
+
+Also required are a few special registers, which cannot be used as instruction operands, but can
+be read and written from general purpose registers with the `RSR` and `WSR` instructions. Special
+registers are generally wider 16-bit registers that are required for the operation of certain
+instructions.
+
+#### `SADDR`
+
+The stack address or stack pointer. `SADDR` must be at least an 8-bit register and no more than a
+16-bit register supporting values from `0x00` to `0xFF`.
+
+The instruction set architecture recommends an 8-bit `SADDR` register which defines a hardware
+stack at the second 256-byte page from `0x0100` to `0x01FF`. Implementations may also optionally
+define a 16-bit `SADDR` register which can freely access a stack at any location in the mappable
+address space, or any width in-between.
+
+```{python}
+#| echo: false
+#| label: fig-saddr
+#| fig-cap: "SADDR special register"
+import wavedrom
+from IPython.display import SVG
+saddr = {
+    "reg": [
+        {"name": "SADDR LO (required)", "bits": 8},
+        {"name": "SADDR HI (optional)", "bits": 8}
+    ],
+    "config": {"bits": 16}
+}
+svg_obj = wavedrom.render(str(saddr))
+SVG(svg_obj.tostring())
+```
+
+#### `RADDR`
+
+The return address is also a dedicated special register given the limited number of general
+purpose registers available. `RADDR` is required to be wide enough to store an absolute address
+for the connected memory, which generally means 16-bit.
+
+The return address special register is not used by specific base instructions, but provides a
+dedicated 16-bit-wide register for subroutine calling. The linking `JAL` instruction sets the
+`RADDR` register with the address of the instruction after the `JAL`. Returning to the location
+in `RADDR` requiring a `RSR` and `JMP`.
+
+```{python}
+#| echo: false
+#| label: fig-raddr
+#| fig-cap: "RADDR special register"
+import wavedrom
+from IPython.display import SVG
+raddr = {
+    "reg": [
+        {"name": "RADDR", "bits": 16},
+    ],
+    "config": {"bits": 16}
+}
+svg_obj = wavedrom.render(str(raddr))
+SVG(svg_obj.tostring())
+```
+
+#### `FLAGS`
+
+Conditional branching in the MISA architecture is based on ALU flag values for comparing integers.
+Both branching instructions, `JAL` and `JMP`, use these flags to make decisions on whether a branch
+will be taken.
+
+The `FLAGS` special register is a flags register (one bit per flag) which must be at least 4 bits
+and support the following:
+
+| Flag | Bit | Commentary                                                           |
+|------|-----|----------------------------------------------------------------------|
+| `Z`  | 0   | Whether the last ALU operation's output was zero.                    |
+| `C`  | 1   | The adder carry out bit of the last ALU operation.                   |
+| `N`  | 2   | Whether the last ALU operation's output was negative (MSB = 1).      |
+| `V`  | 3   | Whether the last ALU operation's output overflowed (sign inversion). |
+
+```{python}
+#| echo: false
+#| label: fig-flags
+#| fig-cap: "FLAGS special register"
+import wavedrom
+from IPython.display import SVG
+flags = {
+    "reg": [
+        {"name": "Z", "bits": 1},
+        {"name": "C", "bits": 1},
+        {"name": "N", "bits": 1},
+        {"name": "V", "bits": 1},
+        {"name": "Reserved (optional)", "bits": 12}
+    ],
+    "config": {"bits": 16}
+}
+svg_obj = wavedrom.render(str(flags))
+SVG(svg_obj.tostring())
+```
+
+## Memory
+
+## Base Instructions
+
+## Pseudo Instructions

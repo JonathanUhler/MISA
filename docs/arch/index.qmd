@@ -1,0 +1,30 @@
+# Preface {.unnumbered}
+
+Minimal Instruction Set Architecture (MISA) is a limited instruction set and computer architecture
+designed for educational purposes. The ultimate design goal is to apply a large set of the knowledge
+from the average computer science undergraduate degree into one project that includes:
+
+- Computer architecture
+- Computer system design
+- Logic design and computer engineering
+- Data structures and algorithms
+- Programming language theory
+- Computability theory
+- Maybe some basics on operating systems
+- And various mathematical concepts
+
+The core component of MISA is the namesake minimal instruction set architecture itself. While
+unlikely, a goal for the project is to tape out a very simple (i.e. single-cycle) processor that
+uses the MISA architecture. Given that, the ISA is intended to be as limited as possible, hopefully
+in a way that optimizes for the chip area constraints enforced by hobbist tapeout programs. The
+ISA from a programmer's view is fully defined in Chapter 1 of this document.
+
+The MISA project also includes a toolchain for creating programs to run on the MISA architecture.
+This includes an assembler, linker, and some object dumping/analysis tools. Some notes on the
+software design of these tools, in addition to their usage, are available in Chapter 2.
+
+A software simulator is also available for the proposed chip design. The intent of the simulator
+is to 1) provide a full reference implementation for the fuctionality of the MISA instructions, and
+2) provide a cycle-accurate (as far as possible) simulation of the intended silicon design. The
+MISA microprocessor architecture, and notes about the simulator's implementation specifically, are
+in Chapter 3.

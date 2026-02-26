@@ -1,0 +1,22 @@
+project:
+  type: book
+
+book:
+  title: "MISA Computer Architecture"
+  author: "Jonathan Uhler"
+  date: "2026-02-25"
+  chapters:
+    - index.qmd
+    - isa.qmd
+    - summary.qmd
+
+format:
+  html:
+    theme:
+      - cosmo
+      - brand
+  pdf:
+    documentclass: scrreprt
+
+
+
