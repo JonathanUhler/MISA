@@ -63,19 +63,15 @@ address space, or any width in-between.
 
 ```{python}
 #| echo: false
-#| label: fig-saddr
-#| fig-cap: "SADDR special register"
 import wavedrom
 from IPython.display import SVG
-saddr = {
+SVG(wavedrom.render(str({
     "reg": [
         {"name": "SADDR LO (required)", "bits": 8},
         {"name": "SADDR HI (optional)", "bits": 8}
     ],
     "config": {"bits": 16}
-}
-svg_obj = wavedrom.render(str(saddr))
-SVG(svg_obj.tostring())
+})).tostring())
 ```
 
 #### `RADDR`
@@ -91,18 +87,14 @@ in `RADDR` requiring a `RSR` and `JMP`.
 
 ```{python}
 #| echo: false
-#| label: fig-raddr
-#| fig-cap: "RADDR special register"
 import wavedrom
 from IPython.display import SVG
-raddr = {
+SVG(wavedrom.render(str({
     "reg": [
         {"name": "RADDR", "bits": 16},
     ],
     "config": {"bits": 16}
-}
-svg_obj = wavedrom.render(str(raddr))
-SVG(svg_obj.tostring())
+})).tostring())
 ```
 
 #### `FLAGS`
@@ -110,6 +102,12 @@ SVG(svg_obj.tostring())
 Conditional branching in the MISA architecture is based on ALU flag values for comparing integers.
 Both branching instructions, `JAL` and `JMP`, use these flags to make decisions on whether a branch
 will be taken.
+
+`FLAGS` is set based on the result of each ALU operation. For instructions which do not use the ALU,
+it is implementation-defined whether or not `FLAGS` will be updated, although programmers should
+never assume that `FLAGS` will persist across multiple instructions. A conditional branch that
+relies on `FLAGS` must be performed immediately after the conditional comparison or a `WSR` to
+`FLAGS`.
 
 The `FLAGS` special register is a flags register (one bit per flag) which must be at least 4 bits
 and support the following:
@@ -123,11 +121,9 @@ and support the following:
 
 ```{python}
 #| echo: false
-#| label: fig-flags
-#| fig-cap: "FLAGS special register"
 import wavedrom
 from IPython.display import SVG
-flags = {
+SVG(wavedrom.render(str({
     "reg": [
         {"name": "Z", "bits": 1},
         {"name": "C", "bits": 1},
@@ -136,13 +132,407 @@ flags = {
         {"name": "Reserved (optional)", "bits": 12}
     ],
     "config": {"bits": 16}
-}
-svg_obj = wavedrom.render(str(flags))
-SVG(svg_obj.tostring())
+})).tostring())
 ```
+
+The `FLAGS` register can be accessed indirectly with the conditional jump instructions using
+special assembler symbols:
+
+| Symbol          | Operation        | Encoding |
+|-----------------|------------------|----------|
+| `ALWAYS`        | `1`              | 0000     |
+| `EQUAL`         | `Z`              | 0001     |
+| `NOT_EQUAL`     | `~Z`             | 1000     |
+| `GREATER`       | `~((N ^ V) | Z)` | 0010     |
+| `LESS`          | `N ^ V`          | 0100     |
+| `GREATER_EQUAL` | `~(N ^ V)`       | 0011     |
+| `LESS_EQUAL`    | `(N ^ V) | Z`    | 0101     |
+
+These comparison flags, when passed as a conditional branch instruction operand, must perform
+the specified boolean logic on the fields of the `FLAGS` register. If the result is `1`, the
+branch is taken, otherwise the branch is not taken.
 
 ## Memory
 
+The MISA architecture supports up to a 16-bit address bus for memory operations, and memory must
+be byte-addressable.
+
 ## Base Instructions
+
+Only 16 base instructions (with distinct opcodes and behavior) are supported by the MISA
+architecture. This is a hard limit, and the 8-bit MISA architecture does not allow for more than
+4 bits of opcode in each instruction word. This subsection defines all the base instructions
+and their behavior on the microprocessor's state.
+
+### `HALT`
+Usage: `HALT RS`
+
+Meaning: `exit(RS)`
+
+Description: Halt the processor and emit the contents of `RS` for debug.
+
+Encoding:
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        *[{"name": bit, "bits": 1} for bit in reversed("0000")],
+        {"name": "RS", "bits": 4},
+        {"name": "Unused", "bits": 8}
+    ],
+    "config": {"bits": 16}
+})).tostring())
+```
+
+### `ADD`
+Usage: `ADD RD RS1 RS2`
+
+Meaning: `RD = RS1 + RS2`
+
+Description: Add the content of `RS1` and `RS2` and store the result in `RD`.
+
+Encoding:
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        *[{"name": bit, "bits": 1} for bit in reversed("0001")],
+        {"name": "RD", "bits": 4},
+        {"name": "RS1", "bits": 4},
+        {"name": "RS2", "bits": 4}
+    ],
+    "config": {"bits": 16}
+})).tostring())
+```
+
+### `ADC`
+Usage: `ADC RD RS1 RS2`
+
+Meaning: `RD = RS1 + RS2 + C`
+
+Description: Add the contents of `RS1`, `RS2`, and the `C` field of the `FLAGS` register and
+store the result in `RD`.
+
+Encoding:
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        *[{"name": bit, "bits": 1} for bit in reversed("0010")],
+        {"name": "RD", "bits": 4},
+        {"name": "RS1", "bits": 4},
+        {"name": "RS2", "bits": 4}
+    ],
+    "config": {"bits": 16}
+})).tostring())
+```
+
+### `SUB`
+Usage: `SUB RD RS1 RS2`
+
+Meaning: `RD = RS1 - RS2`
+
+Description: Subtract the contents of `RS2` from `RS1` and store the result in `RD`.
+
+Encoding:
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        *[{"name": bit, "bits": 1} for bit in reversed("0011")],
+        {"name": "RD", "bits": 4},
+        {"name": "RS1", "bits": 4},
+        {"name": "RS2", "bits": 4}
+    ],
+    "config": {"bits": 16}
+})).tostring())
+```
+
+### `SBB`
+Usage: `SBB RD RS1 RS2`
+
+Meaning: `RD = RS1 - (RS2 + C)`
+
+Description: Subtract the contents of `RS2` and the `C` field of the `FLAGS` register, as one
+partial sum, from the contents of `RS1`, and store the result in `RD`.
+
+Encoding:
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        *[{"name": bit, "bits": 1} for bit in reversed("0100")],
+        {"name": "RD", "bits": 4},
+        {"name": "RS1", "bits": 4},
+        {"name": "RS2", "bits": 4}
+    ],
+    "config": {"bits": 16}
+})).tostring())
+```
+
+### `AND`
+Usage: `AND RD RS1 RS2`
+
+Meaning: `RD = RS1 & RS2`
+
+Description: Compute the bitwise AND of the contents of `RS1` and `RS2` and store the result
+in `RD`.
+
+Encoding:
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        *[{"name": bit, "bits": 1} for bit in reversed("0101")],
+        {"name": "RD", "bits": 4},
+        {"name": "RS1", "bits": 4},
+        {"name": "RS2", "bits": 4}
+    ],
+    "config": {"bits": 16}
+})).tostring())
+```
+
+### `OR`
+Usage: `OR RD RS1 RS2`
+
+Meaning: `RD = RS1 | RS2`
+
+Description: Compute the bitwise OR of the contents of `RS1` and `RS2` and store the result in `RD`.
+
+Encoding:
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        *[{"name": bit, "bits": 1} for bit in reversed("0110")],
+        {"name": "RD", "bits": 4},
+        {"name": "RS1", "bits": 4},
+        {"name": "RS2", "bits": 4}
+    ],
+    "config": {"bits": 16}
+})).tostring())
+```
+
+### `XOR`
+Usage: `XOR RD RS1 RS2`
+
+Meaning: `RD = RS1 ^ RS2`
+
+Description: Compute the bitwise exclusive OR of the contents of `RS1` and `RS2` and store the
+result in `RD`.
+
+Encoding:
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        *[{"name": bit, "bits": 1} for bit in reversed("0111")],
+        {"name": "RD", "bits": 4},
+        {"name": "RS1", "bits": 4},
+        {"name": "RS2", "bits": 4}
+    ],
+    "config": {"bits": 16}
+})).tostring())
+```
+
+### `RRC`
+Usage: `RRC RD RS`
+
+Meaning: `RD = (C << 7) | (RS >> 1) ; C = RS & 1`
+
+Description: Shift the 9-bit integer formed by `{C, RS}` right by one bit. Store the shifted
+result in `RD` and the LSB of `RS` into `C`.
+
+Encoding:
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        *[{"name": bit, "bits": 1} for bit in reversed("1000")],
+        {"name": "RD", "bits": 4},
+        {"name": "RS", "bits": 4},
+        {"name": "Unused", "bits": 4}
+    ],
+    "config": {"bits": 16}
+})).tostring())
+```
+
+### `SET`
+Usage: `SET RD IMM`
+
+Meaning: `RD = IMM`
+
+Description: Store the provided 8-bit immediate value into `RD`.
+
+Encoding:
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        *[{"name": bit, "bits": 1} for bit in reversed("1001")],
+        {"name": "RD", "bits": 4},
+        {"name": "IMM", "bits": 8}
+    ],
+    "config": {"bits": 16}
+})).tostring())
+```
+
+### `LW`
+Usage: ``
+
+Meaning: ``
+
+Description:
+
+Encoding:
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        *[{"name": bit, "bits": 1} for bit in reversed("")],
+        {"name": "RD", "bits": 4},
+        {"name": "RS1", "bits": 4},
+        {"name": "RS2", "bits": 4}
+    ],
+    "config": {"bits": 16}
+})).tostring())
+```
+
+### `SW`
+Usage: ``
+
+Meaning: ``
+
+Description:
+
+Encoding:
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        *[{"name": bit, "bits": 1} for bit in reversed("")],
+        {"name": "RD", "bits": 4},
+        {"name": "RS1", "bits": 4},
+        {"name": "RS2", "bits": 4}
+    ],
+    "config": {"bits": 16}
+})).tostring())
+```
+
+### `RSR`
+Usage: ``
+
+Meaning: ``
+
+Description:
+
+Encoding:
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        *[{"name": bit, "bits": 1} for bit in reversed("")],
+        {"name": "RD", "bits": 4},
+        {"name": "RS1", "bits": 4},
+        {"name": "RS2", "bits": 4}
+    ],
+    "config": {"bits": 16}
+})).tostring())
+```
+
+### `WSR`
+Usage: ``
+
+Meaning: ``
+
+Description:
+
+Encoding:
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        *[{"name": bit, "bits": 1} for bit in reversed("")],
+        {"name": "RD", "bits": 4},
+        {"name": "RS1", "bits": 4},
+        {"name": "RS2", "bits": 4}
+    ],
+    "config": {"bits": 16}
+})).tostring())
+```
+
+### `JAL`
+Usage: ``
+
+Meaning: ``
+
+Description:
+
+Encoding:
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        *[{"name": bit, "bits": 1} for bit in reversed("")],
+        {"name": "RD", "bits": 4},
+        {"name": "RS1", "bits": 4},
+        {"name": "RS2", "bits": 4}
+    ],
+    "config": {"bits": 16}
+})).tostring())
+```
+
+### `JMP`
+Usage: ``
+
+Meaning: ``
+
+Description:
+
+Encoding:
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        *[{"name": bit, "bits": 1} for bit in reversed("")],
+        {"name": "RD", "bits": 4},
+        {"name": "RS1", "bits": 4},
+        {"name": "RS2", "bits": 4}
+    ],
+    "config": {"bits": 16}
+})).tostring())
+```
 
 ## Pseudo Instructions
