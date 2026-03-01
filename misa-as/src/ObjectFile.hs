@@ -150,9 +150,13 @@ packInst inst =
     packFormatRR  op r1 r2    = [op .|. shiftL (fromReg r1) 4, fromReg r2]
     packFormatRRR op r1 r2 r3 = [op .|. shiftL (fromReg r1) 4, fromReg r2 .|. shiftL (fromReg r3) 4]
     packFormatRI  op r  i     = [op .|. shiftL (fromReg r) 4,  fromImm i]
-    packFormatCRR op c  r1 r2 = [op .|. shiftL (fromReg c) 4,  fromReg r1 .|. shiftL (fromReg r2) 4]
+    packFormatCRR op c  r1 r2 = [op .|. shiftL (fromCsr c) 4,  fromReg r1 .|. shiftL (fromReg r2) 4]
     packFormatFRR op f  r1 r2 = [op .|. shiftL (fromFlag f) 4, fromReg r1 .|. shiftL (fromReg r2) 4]
     fromReg r  = fromIntegral (fromEnum r)
+    fromCsr c  = case c of
+      SADDR -> 0x1
+      RADDR -> 0x2
+      FLAGS -> 0x3
     fromFlag f = case f of
       ALWAYS        -> 0x0
       EQUAL         -> 0x1

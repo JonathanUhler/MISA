@@ -51,6 +51,14 @@ be read and written from general purpose registers with the `RSR` and `WSR` inst
 registers are generally wider 16-bit registers that are required for the operation of certain
 instructions.
 
+When used as operands for instructions, the special registers are encoded as follows:
+
+| ABI Name | Encoding |
+|----------|----------|
+| `SADDR`  | 0001     |
+| `RADDR`  | 0010     |
+| `FLAGS`  | 0011     |
+
 #### `SADDR`
 
 The stack address or stack pointer. `SADDR` must be at least an 8-bit register and no more than a
