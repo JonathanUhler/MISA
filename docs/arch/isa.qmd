@@ -150,12 +150,53 @@ special assembler symbols:
 
 These comparison flags, when passed as a conditional branch instruction operand, must perform
 the specified boolean logic on the fields of the `FLAGS` register. If the result is `1`, the
-branch is taken, otherwise the branch is not taken.
+branch is taken, otherwise the branch is not taken. The assumption is that a comparison of
+registers `RS1` and `RS2` is performed by invoking `SUB R0 RS1 RS2`, which sets the ALU flags
+appropriately for deciding `RS1 ? RS2` where `?` is a comparison operator.
 
 ## Memory
 
 The MISA architecture supports up to a 16-bit address bus for memory operations, and memory must
-be byte-addressable.
+be byte-addressable. While the memory map for applications using the MISA architecture is generally
+free for the user to decide, this section will cover both a recommended map and specific regions
+which are required by all maps.
+
+### Required Memory Regions
+
+Addresses 0xFFFA - 0xFFFF are reserved for a three-element hardware vector array and must always
+contain the following function pointers (which are absolute 16-bit addresses):
+
+| Vector Address  | Commentary   |
+|-----------------|--------------|
+| 0xFFFA - 0xFFFB | (Reserved)   |
+| 0xFFFC - 0xFFFD | (Reserved)   |
+| 0xFFFE - 0xFFFF | Reset vector |
+
+When power is supplied, the microprocessor must load the program counter to be:
+`PC = Memory[0xFFFF] << 8 | Memory[0xFFFE]`.
+
+### Recommended Memory Map
+
+The linker script recommended by default is as follows:
+```
+SECTION 0x0000 - 0x00FF : direct ;       // Zero page, which may have fast access on some hardware
+SECTION 0x0100 - 0X01FF : ;              // Stack, SADDR initialized to 0x(01)FF and decrements
+SECTION 0x0200 - 0x7FFF : data bss ;     // RAM, may support software-implemented stack or heap
+SECTION 0x8000 - 0xBFFF : ;              // Memory-mapped IO and IO buffers
+SECTION 0xC000 - 0xFFF0 : text rodata ;  // Program ROM
+SECTION 0xFFFA - 0xFFFF : vectors ;      // Hardware vector addresses, described above
+```
+
+Which define the following sections by convention:
+
+| Section   | Commentary                                                                                                                                                                                         |
+|-----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `direct`  | Contents to place in the first 256-byte page. This page may support faster memory operations on certain hardware implementations, and thus may be a desirable target for frequently accessed data. |
+| `data`    | Initialized global data that is mutable.                                                                                                                                                           |
+| `bss`     | Declared but uninitialized global data that is mutable. Runtime/startup code should initialize `bss` symbols to zero.                                                                              |
+| `text`    | Executable and immutable program code.                                                                                                                                                             |
+| `rodata`  | Initialized global constants.                                                                                                                                                                      |
+| `vectors` | The three required hardware vector addresses.                                                                                                                                                      |
 
 ## Base Instructions
 
@@ -398,11 +439,11 @@ SVG(wavedrom.render(str({
 ```
 
 ### `LW`
-Usage: ``
+Usage: `LW RD RS1 RS2`
 
-Meaning: ``
+Meaning: `RD = Memory[RS1 << 8 | RS2]`
 
-Description:
+Description: Load the 8-bit word at the address formed by `{RS1, RS2}` into `RD`.
 
 Encoding:
 ```{python}
@@ -411,7 +452,7 @@ import wavedrom
 from IPython.display import SVG
 SVG(wavedrom.render(str({
     "reg": [
-        *[{"name": bit, "bits": 1} for bit in reversed("")],
+        *[{"name": bit, "bits": 1} for bit in reversed("1010")],
         {"name": "RD", "bits": 4},
         {"name": "RS1", "bits": 4},
         {"name": "RS2", "bits": 4}
@@ -421,11 +462,11 @@ SVG(wavedrom.render(str({
 ```
 
 ### `SW`
-Usage: ``
+Usage: `SW RD RS1 RS2`
 
-Meaning: ``
+Meaning: `Memory[RS1 << 8 | RS2] = RD`
 
-Description:
+Description: Store the 8-bit word in `RD` to the address formed by `{RS1, RS2}`.
 
 Encoding:
 ```{python}
@@ -434,7 +475,7 @@ import wavedrom
 from IPython.display import SVG
 SVG(wavedrom.render(str({
     "reg": [
-        *[{"name": bit, "bits": 1} for bit in reversed("")],
+        *[{"name": bit, "bits": 1} for bit in reversed("1011")],
         {"name": "RD", "bits": 4},
         {"name": "RS1", "bits": 4},
         {"name": "RS2", "bits": 4}
@@ -444,11 +485,12 @@ SVG(wavedrom.render(str({
 ```
 
 ### `RSR`
-Usage: ``
+Usage: `RSR CSR RS1 RS2`
 
-Meaning: ``
+Meaning: `RS1 = CSR >> 8 ; RS2 = CSR & 0xFF`
 
-Description:
+Description: Read the 16-bit control and status register `CSR` into the two 8-bit general purpose
+registers `{RS1, RS2}`
 
 Encoding:
 ```{python}
@@ -457,8 +499,8 @@ import wavedrom
 from IPython.display import SVG
 SVG(wavedrom.render(str({
     "reg": [
-        *[{"name": bit, "bits": 1} for bit in reversed("")],
-        {"name": "RD", "bits": 4},
+        *[{"name": bit, "bits": 1} for bit in reversed("1100")],
+        {"name": "CSR", "bits": 4},
         {"name": "RS1", "bits": 4},
         {"name": "RS2", "bits": 4}
     ],
@@ -467,11 +509,12 @@ SVG(wavedrom.render(str({
 ```
 
 ### `WSR`
-Usage: ``
+Usage: `WSR CSR RS1 RS2`
 
-Meaning: ``
+Meaning: `CSR = RS1 << 8 | RS2`
 
-Description:
+Description: Write the contents formed by `{RS1, RS2}` into the 16-bit control and status
+register `CSR`.
 
 Encoding:
 ```{python}
@@ -480,8 +523,8 @@ import wavedrom
 from IPython.display import SVG
 SVG(wavedrom.render(str({
     "reg": [
-        *[{"name": bit, "bits": 1} for bit in reversed("")],
-        {"name": "RD", "bits": 4},
+        *[{"name": bit, "bits": 1} for bit in reversed("1101")],
+        {"name": "CSR", "bits": 4},
         {"name": "RS1", "bits": 4},
         {"name": "RS2", "bits": 4}
     ],
@@ -490,11 +533,12 @@ SVG(wavedrom.render(str({
 ```
 
 ### `JAL`
-Usage: ``
+Usage: `JAL CMP RS1 RS2`
 
-Meaning: ``
+Meaning: `if (CMP) { RADDR = PC + 2 ; PC = RS1 << 8 | RS2 }`
 
-Description:
+Description: If the comparison type `CMP` is true as determined by the current ALU flags, set
+`RADDR` to the address of the next instruction and set `PC` to the address formed by `{RS1, RS2}`.
 
 Encoding:
 ```{python}
@@ -503,8 +547,8 @@ import wavedrom
 from IPython.display import SVG
 SVG(wavedrom.render(str({
     "reg": [
-        *[{"name": bit, "bits": 1} for bit in reversed("")],
-        {"name": "RD", "bits": 4},
+        *[{"name": bit, "bits": 1} for bit in reversed("1110")],
+        {"name": "CMP", "bits": 4},
         {"name": "RS1", "bits": 4},
         {"name": "RS2", "bits": 4}
     ],
@@ -513,11 +557,12 @@ SVG(wavedrom.render(str({
 ```
 
 ### `JMP`
-Usage: ``
+Usage: `JMP CMP RS1 RS2`
 
-Meaning: ``
+Meaning: `if (CMP) { PC = RS1 << 8 | RS2 }`
 
-Description:
+Description: If the comparison type `CMP` is true as determined byt he current ALU flags, set
+`PC` to the address formed by `{RS1, RS2}`.
 
 Encoding:
 ```{python}
@@ -526,8 +571,8 @@ import wavedrom
 from IPython.display import SVG
 SVG(wavedrom.render(str({
     "reg": [
-        *[{"name": bit, "bits": 1} for bit in reversed("")],
-        {"name": "RD", "bits": 4},
+        *[{"name": bit, "bits": 1} for bit in reversed("1111")],
+        {"name": "CMP", "bits": 4},
         {"name": "RS1", "bits": 4},
         {"name": "RS2", "bits": 4}
     ],

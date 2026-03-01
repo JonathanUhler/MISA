@@ -153,7 +153,14 @@ packInst inst =
     packFormatCRR op c  r1 r2 = [op .|. shiftL (fromReg c) 4,  fromReg r1 .|. shiftL (fromReg r2) 4]
     packFormatFRR op f  r1 r2 = [op .|. shiftL (fromFlag f) 4, fromReg r1 .|. shiftL (fromReg r2) 4]
     fromReg r  = fromIntegral (fromEnum r)
-    fromFlag f = 1 `shiftL` (fromReg f)
+    fromFlag f = case f of
+      ALWAYS        -> 0x0
+      EQUAL         -> 0x1
+      NOT_EQUAL     -> 0x8
+      GREATER       -> 0x2
+      LESS          -> 0x4
+      GREATER_EQUAL -> 0x3
+      LESS_EQUAL    -> 0x5
     fromImm i  = case i of
       (IntImm Full n) -> fromIntegral n
       (IntImm Low n)  -> fromIntegral n
