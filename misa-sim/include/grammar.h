@@ -6,64 +6,72 @@
 
 
 enum op {
-    ADD,
-    ADC,
-    SUB,
-    SBB,
-    AND,
-    OR,
-    XOR,
-    RRC,
-    LW,
-    SW,
-    RSR,
-    WSR,
-    SET,
-    JAL,
-    JMP,
-    HALT
+    HALT = 0x0,
+    ADD  = 0x1,
+    ADC  = 0x2,
+    SUB  = 0x3,
+    SBB  = 0x4,
+    AND  = 0x5,
+    OR   = 0x6,
+    XOR  = 0x7,
+    RRC  = 0x8,
+    SET  = 0x9,
+    LW   = 0xA,
+    SW   = 0xB,
+    RSR  = 0xC,
+    WSR  = 0xD,
+    JAL  = 0xE,
+    JMP  = 0xF
 };
 
 
 enum gpreg {
-    R0,
-    RA,
-    RB,
-    RC,
-    RD,
-    RE,
-    RF,
-    RG,
-    RH,
-    RU,
-    RV,
-    RW,
-    RX,
-    RY,
-    RZ,
-    RT
+    R0 = 0x0,
+    RA = 0x1,
+    RB = 0x2,
+    RC = 0x3,
+    RD = 0x4,
+    RE = 0x5,
+    RF = 0x6,
+    RG = 0x7,
+    RH = 0x8,
+    RU = 0x9,
+    RV = 0xA,
+    RW = 0xB,
+    RX = 0xC,
+    RY = 0xD,
+    RZ = 0xE,
+    RT = 0xF
 };
 
 
 enum csrreg {
-    SADDR,
-    RADDR,
-    FLAGS
+    SADDR = 0x1,
+    RADDR = 0x2,
+    FLAGS = 0x3,
+    CAUSE = 0x4
 };
 
 
 enum cmpflag {
-    ALWAYS,
-    EQUAL,
-    NOT_EQUAL,
-    GREATER,
-    LESS,
-    GREATER_EQUAL,
-    LESS_EQUAL
+    ALWAYS        = 0x0,
+    EQUAL         = 0x1,
+    NOT_EQUAL     = 0x8,
+    GREATER       = 0x2,
+    LESS          = 0x4,
+    GREATER_EQUAL = 0x3,
+    LESS_EQUAL    = 0x5
 };
 
 
 union inst {
+    struct {
+        enum op op;
+    } CHECK_OP;
+    struct {
+        enum op op;
+        enum gpreg rd;
+    } halt;
     struct {
         enum op op;
         enum gpreg rd;
@@ -152,10 +160,6 @@ union inst {
         enum gpreg rs1;
         enum gpreg rs2;
     } jmp;
-    struct {
-        enum op op;
-        enum gpreg rd;
-    } halt;
 };
 
 
