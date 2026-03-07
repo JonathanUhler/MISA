@@ -157,6 +157,7 @@ packInst inst =
       SADDR -> 0x1
       RADDR -> 0x2
       FLAGS -> 0x3
+      CAUSE -> 0x4
     fromFlag f = case f of
       ALWAYS        -> 0x0
       EQUAL         -> 0x1

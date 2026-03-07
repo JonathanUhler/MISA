@@ -7,7 +7,6 @@ import Relocator
 
 import Data.List (sort, group)
 import qualified Data.Set as Set
-import Debug.Trace (traceM)
 import Data.Word (Word8)
 import Grammar
 import ObjectFile
