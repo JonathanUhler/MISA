@@ -14,7 +14,7 @@ Two types of registers are visible to the programmer in various contexts.
 
 ### General Purpose Registers
 
-The general-purpose register file contains sixteen, 8-bit registers for generate computation and
+The general-purpose register file contains sixteen, 8-bit registers for general computation and
 data storage, defined by the following ABI:
 
 | ABI Name | Wide ABI Name | Encoding |
@@ -39,10 +39,8 @@ data storage, defined by the following ABI:
 The `R0` register must be hard-wired to ignore writes and always return the value `0b00000000` on
 reads. Wide registers are formed by two general-purpose registers, which must be equivalent to
 using the two 8-bit register names in order. For instance, `RAB` is semantically equivalent to
-`RA, RB` in that order.
-
-General purpose registers can be taken as the operands to most instructions which operate on
-registers.
+`RA, RB` in that order. General purpose registers can be taken as the operands to most instructions
+which operate on registers.
 
 ### Control and Status Registers
 
