@@ -4,18 +4,35 @@
 
 #include "grammar.h"
 
-#include <stdint.h>
+#include <cstdint>
+#include <systemc.h>
 
 
-struct csrfile {
-    uint16_t c[FLAGS - SADDR + 1];
+SC_MODULE(Csrfile) {
+    sc_in<bool> csr_wrsaddr;
+    sc_in<bool> csr_wrraddr;
+    sc_in<bool> csr_wrflags;
+    sc_in<bool> csr_wrcause;
+    sc_in<uint16_t> csr_saddrin;
+    sc_in<uint16_t> csr_raddrin;
+    sc_in<uint16_t> csr_flagsin;
+    sc_in<uint16_t> csr_causein;
+
+    sc_out<uint16_t> csr_saddrout;
+    sc_out<uint16_t> csr_raddrout;
+    sc_out<uint16_t> csr_flagsout;
+    sc_out<uint16_t> csr_causeout;
+
+
+    SC_CTOR(Csrfile) {
+        SC_METHOD(execute);
+        sensitive << csr_wrsaddr << csr_wrraddr << csr_wrflags << csr_wrcause
+                  << csr_saddrin << csr_raddrin << csr_flagsin << csr_causein;
+    }
+
+
+    void execute();
 };
-
-
-uint16_t csrfile_read(struct csrfile *csrfile, enum csrreg reg);
-
-
-void csrfile_write(struct csrfile *csrfile, enum csrreg reg, uint16_t dword);
 
 
 #endif  // _CSRFILE_H_

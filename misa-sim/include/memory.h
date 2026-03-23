@@ -2,18 +2,30 @@
 #define _MEMORY_H_
 
 
-#include <stdint.h>
+#include <cstdint>
+#include <systemc.h>
 
 
-struct memory {
-    uint8_t m[65535];
+SC_MODULE(Memory) {
+    uint8_t m[UINT16_MAX];
+
+    sc_in<bool> mem_read;
+    sc_in<bool> mem_write;
+    sc_in<uint8_t> mem_wdata;
+    sc_in<uint16_t> mem_addr;
+
+    sc_out<bool> mem_ready;
+    sc_out<uint8_t> mem_rdata;
+
+
+    SC_CTOR(Memory) {
+        SC_METHOD(execute);
+        sensitive << mem_wdata << mem_addr << mem_read << mem_write;
+    }
+
+
+    void execute();
 };
-
-
-uint8_t memory_read(struct memory *memory, uint16_t addr);
-
-
-void memory_write(struct memory *memory, uint16_t addr, uint8_t word);
 
 
 #endif  // _MEMORY_H_

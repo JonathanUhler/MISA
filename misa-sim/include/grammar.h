@@ -21,7 +21,9 @@ enum op {
     RSR  = 0xC,
     WSR  = 0xD,
     JAL  = 0xE,
-    JMP  = 0xF
+    JMP  = 0xF,
+
+    OP_MAX
 };
 
 
@@ -41,7 +43,9 @@ enum gpreg {
     RX = 0xC,
     RY = 0xD,
     RZ = 0xE,
-    RT = 0xF
+    RT = 0xF,
+
+    GPREG_MAX
 };
 
 
@@ -49,7 +53,9 @@ enum csrreg {
     SADDR = 0x1,
     RADDR = 0x2,
     FLAGS = 0x3,
-    CAUSE = 0x4
+    CAUSE = 0x4,
+
+    CSRREG_MAX
 };
 
 
@@ -60,106 +66,9 @@ enum cmpflag {
     GREATER       = 0x2,
     LESS          = 0x4,
     GREATER_EQUAL = 0x3,
-    LESS_EQUAL    = 0x5
-};
+    LESS_EQUAL    = 0x5,
 
-
-union inst {
-    struct {
-        enum op op;
-    } CHECK_OP;
-    struct {
-        enum op op;
-        enum gpreg rd;
-    } halt;
-    struct {
-        enum op op;
-        enum gpreg rd;
-        enum gpreg rs1;
-        enum gpreg rs2;
-    } add;
-    struct {
-        enum op op;
-        enum gpreg rd;
-        enum gpreg rs1;
-        enum gpreg rs2;
-    } adc;
-    struct {
-        enum op op;
-        enum gpreg rd;
-        enum gpreg rs1;
-        enum gpreg rs2;
-    } sub;
-    struct {
-        enum op op;
-        enum gpreg rd;
-        enum gpreg rs1;
-        enum gpreg rs2;
-    } sbb;
-    struct {
-        enum op op;
-        enum gpreg rd;
-        enum gpreg rs1;
-        enum gpreg rs2;
-    } and;
-    struct {
-        enum op op;
-        enum gpreg rd;
-        enum gpreg rs1;
-        enum gpreg rs2;
-    } or;
-    struct {
-        enum op op;
-        enum gpreg rd;
-        enum gpreg rs1;
-        enum gpreg rs2;
-    } xor;
-    struct {
-        enum op op;
-        enum gpreg rd;
-        enum gpreg rs1;
-    } rrc;
-    struct {
-        enum op op;
-        enum gpreg rd;
-        enum gpreg rs1;
-        enum gpreg rs2;
-    } lw;
-    struct {
-        enum op op;
-        enum gpreg rd;
-        enum gpreg rs1;
-        enum gpreg rs2;
-    } sw;
-    struct {
-        enum op op;
-        enum csrreg csr;
-        enum gpreg rs1;
-        enum gpreg rs2;
-    } rsr;
-    struct {
-        enum op op;
-        enum csrreg csr;
-        enum gpreg rs1;
-        enum gpreg rs2;
-    } wsr;
-    struct {
-        enum op op;
-        enum gpreg rd;
-        uint8_t imm;
-    } set;
-    struct {
-        enum op op;
-        enum cmpflag cmp;
-        enum gpreg rs1;
-        enum gpreg rs2;
-    } jal;
-    struct {
-        enum op op;
-        enum cmpflag cmp;
-        enum gpreg rs1;
-        enum gpreg rs2;
-    } jmp;
+    CMPFLAG_MAX
 };
 
 
