@@ -5,36 +5,32 @@ optional assembler extensions, special registers and hardware data structures, a
 implementation-agnostic features.
 
 The MISA architecture is an 8-bit architecture with up to a 16-bit address bus to interface with
-externally connected memory. Instructions are fixed-with 16-bit doublewords in little-endian byte
+externally connected memory. Instructions are fixed-width 16-bit doublewords in little-endian byte
 order.
 
-## Registers
-
-Two types of registers are visible to the programmer in various contexts.
-
-### General Purpose Registers
+## General Purpose Registers
 
 The general-purpose register file contains sixteen, 8-bit registers for general computation and
 data storage, defined by the following ABI:
 
-| ABI Name | Wide ABI Name | Encoding |
-|----------|---------------|----------|
-| `R0`     | N/A           | 0000     |
-| `RA`     | `RAB`         | 0001     |
-| `RB`     |               | 0010     |
-| `RC`     | `RCD`         | 0011     |
-| `RD`     |               | 0100     |
-| `RE`     | `REF`         | 0101     |
-| `RF`     |               | 0110     |
-| `RG`     | `RGH`         | 0111     |
-| `RH`     |               | 1000     |
-| `RU`     | `RUV`         | 1001     |
-| `RV`     |               | 1010     |
-| `RW`     | `RWX`         | 1011     |
-| `RX`     |               | 1100     |
-| `RY`     | `RYZ`         | 1101     |
-| `RZ`     |               | 1110     |
-| `RT`     | N/A           | 1111     |
+| ABI Name | ABI Purpose        | Wide ABI Name | Encoding |
+|----------|--------------------|---------------|----------|
+| `R0`     | Hard-wired zero    | N/A           | 0000     |
+| `RA`     | Argument/temporary | `RAB`         | 0001     |
+| `RB`     | Argument/temporary |               | 0010     |
+| `RC`     | Argument/temporary | `RCD`         | 0011     |
+| `RD`     | Argument/temporary |               | 0100     |
+| `RE`     | Argument/temporary | `REF`         | 0101     |
+| `RF`     | Argument/temporary |               | 0110     |
+| `RG`     | Saved              | `RGH`         | 0111     |
+| `RH`     | Saved              |               | 1000     |
+| `RU`     | Saved              | `RUV`         | 1001     |
+| `RV`     | Saved              |               | 1010     |
+| `RW`     | Saved              | `RWX`         | 1011     |
+| `RX`     | Saved              |               | 1100     |
+| `RY`     | Scratch            | `RYZ`         | 1101     |
+| `RZ`     | Scratch            |               | 1110     |
+| `RT`     | Argument/temporary | N/A           | 1111     |
 
 The `R0` register must be hard-wired to ignore writes and always return the value `0b00000000` on
 reads. Wide registers are formed by two general-purpose registers, which must be equivalent to
@@ -42,7 +38,15 @@ using the two 8-bit register names in order. For instance, `RAB` is semantically
 `RA, RB` in that order. General purpose registers can be taken as the operands to most instructions
 which operate on registers.
 
-### Control and Status Registers
+The order of argument and return registers is `RT` first, then `RA` through `RF` in order. Argument
+registers are also temporary registers (caller-saved). `RG` through `RX` are saved registers
+(callee-saved).
+
+The `RYZ` wide register is reserved as a "scratch" 16-bit register for the assembler. Certain
+pseudo-instructions and other macros will use this register when a temporary value is needed. As
+such, the value of `RYZ` should not be assumed to persist over time.
+
+## Control and Status Registers
 
 Also required are a few special registers, which cannot be used as instruction operands, but can
 be read and written from general purpose registers with the `RSR` and `WSR` instructions. Special
@@ -58,10 +62,12 @@ When used as operands for instructions, the special registers are encoded as fol
 | `FLAGS`  | 0011     |
 | `CAUSE`  | 0100     |
 
-#### `SADDR`
+The following sub-sections describe the purpose and layout of each special register.
+
+### `SADDR`
 
 The stack address or stack pointer. `SADDR` must be at least an 8-bit register and no more than a
-16-bit register supporting values from `0x00` to `0xFF`.
+16-bit register. It must support at least the values from `0x00` to `0xFF`.
 
 The instruction set architecture recommends an 8-bit `SADDR` register which defines a hardware
 stack at the second 256-byte page from `0x0100` to `0x01FF`. Implementations may also optionally
@@ -81,16 +87,16 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
-#### `RADDR`
+### `RADDR`
 
 The return address is also a dedicated special register given the limited number of general
 purpose registers available. `RADDR` is required to be wide enough to store an absolute address
 for the connected memory, which generally means 16-bit.
 
 The return address special register is not used by specific base instructions, but provides a
-dedicated 16-bit-wide register for subroutine calling. The linking `JAL` instruction sets the
+dedicated 16-bit-wide register for subroutine calling. The `JAL` instruction will set the
 `RADDR` register with the address of the instruction after the `JAL`. Returning to the location
-in `RADDR` requiring a `RSR` and `JMP`.
+in `RADDR` requires a `RSR` and `JMP`.
 
 ```{python}
 #| echo: false
@@ -104,7 +110,7 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
-#### `FLAGS`
+### `FLAGS`
 
 Conditional branching in the MISA architecture is based on ALU flag values for comparing integers.
 Both branching instructions, `JAL` and `JMP`, use these flags to make decisions on whether a branch
@@ -145,7 +151,7 @@ SVG(wavedrom.render(str({
 The `FLAGS` register can be accessed indirectly with the conditional jump instructions using
 special assembler symbols:
 
-| Symbol          | Operation        | Encoding |
+| ABI Name        | Logical Meaning  | Encoding |
 |-----------------|------------------|----------|
 | `ALWAYS`        | `1`              | 0000     |
 | `EQUAL`         | `Z`              | 0001     |
@@ -161,7 +167,7 @@ branch is taken, otherwise the branch is not taken. The assumption is that a com
 registers `RS1` and `RS2` is performed by invoking `SUB R0 RS1 RS2`, which sets the ALU flags
 appropriately for deciding `RS1 ? RS2` where `?` is a comparison operator.
 
-#### `CAUSE`
+### `CAUSE`
 
 The `CAUSE` special register holds information about the termination status of the processor. It
 is primarily set when the `HALT` instruction is executed, and may also be used for basic
@@ -190,11 +196,11 @@ SVG(wavedrom.render(str({
 | Instruction usage | 001      |
 | Memory usage      | 010      |
 
-##### `CAUSE` Reason: None
+#### `CAUSE` Reason: None
 The `CAUSE` register does not represent an exception, or represents an unknown/generic exception
 without a reason. If the reason is 000, the Type and Extended status fields have no significance.
 
-##### `CAUSE` Reason: Instruction Usage
+#### `CAUSE` Reason: Instruction Usage
 The exception cause is related to the use of a specific instruction or class of instructions. The
 valid Type fields are:
 
@@ -203,7 +209,7 @@ valid Type fields are:
 | Halt instruction    | 000      | The `HALT` instruction was executed. Extended status is the valid of the `RD` operand register. |
 | Illegal instruction | 001      | An ill-formed instruction failed to decode. Extended status is not used.                        |
 
-##### `CAUSE` Reason: Memory Usage
+#### `CAUSE` Reason: Memory Usage
 The exception cause is related to the use of an address or memory operation. The valid Type fields
 are:
 
@@ -650,3 +656,65 @@ SVG(wavedrom.render(str({
 ```
 
 ## Pseudo Instructions
+
+Because of the limitations of the core instruction set, this document also recommends a set of
+assembler macros whose functionality can be represented by one or more of the base 16 instructions.
+
+### `CALL`
+Usage: `CALL RS1 RS2`
+
+Meaning: `JAL ALWAYS RS1 RS2`
+
+Description: Jump to the subroutine at the address formed by `RS1` and `RS2` and link with
+the `RADDR` special register.
+
+### `CLR`
+Usage: `CLR`
+
+Meaning: `WSR FLAGS R0 R0`
+
+Description: Set the `FLAGS` special register to zero, effectively lowering all flags.
+
+### `CMP`
+Usage: `CMP RS1 RS2`
+
+Meaning: `SUB R0 RS1 RS2`
+
+Description: Perform an arithmetic operation which will set the `FLAGS` register such that
+the boolean operation `?` can be performed on `RS1 ? RS2`.
+
+### `MOV`
+Usage: `MOV RD RS1`
+
+Meaning: `OR RD RS1 R0`
+
+Description: Copy the contents of `RS1` into `RD`.
+
+### `NOP`
+Usage: `NOP`
+
+Meaning: `OR R0 R0 R0`
+
+Description: Do nothing.
+
+### `NOT`
+Usage: `NOT RD RS1`
+
+Meaning: `XOR RD RS1 RS1`
+
+Description: Compute the logical negation of `RS1` and store the result in `RD`.
+
+### `RET`
+Usage: `RET`
+
+Meaning: `RSR RADDR RYZ`, `JMP ALWAYS RYZ`
+
+Description: Return to the address in `RADDR`.
+
+### `SET2`
+Usage: `SET2 RS1 RS2 IMM`
+
+Meaning: `SET RS1 (IMM >> 8)`, `SET RS2 (IMM & 0xFF)`
+
+Description: Set both the `RS1` and `RS2` registers from the high and low halves of a 16-bit
+immediate value.

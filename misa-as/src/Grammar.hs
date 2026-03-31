@@ -62,7 +62,7 @@ data Inst
   | NotInst  GpReg   GpReg
   | MovInst  GpReg   GpReg
   | CmpInst  GpReg   GpReg
-  | SetdInst GpReg   GpReg Imm
+  | Set2Inst GpReg   GpReg Imm
   | CallInst GpReg   GpReg
   | RetInst
   | ClrInst
@@ -74,7 +74,7 @@ data Op
   -- Base instructions
   = ADD | ADC | SUB | SBB | AND | OR | XOR | RRC | LW | SW | RSR | WSR | SET | JAL | JMP | HALT
   -- Pseudo instructions
-  | NOP | NOT | MOV | CMP | SETD | CALL | RET | CLR
+  | NOP | NOT | MOV | CMP | SET2 | CALL | RET | CLR
   deriving (Show, Enum, Bounded)
 
 

@@ -189,7 +189,7 @@ parseInst = choice
     NotInst  <$> (parseThisIdent "not" *> parseGpReg) <*> parseGpReg,
     MovInst  <$> (parseThisIdent "mov" *> parseGpReg) <*> parseGpReg,
     CmpInst  <$> (parseThisIdent "cmp" *> parseGpReg) <*> parseGpReg,
-    (\(r1, r2) i -> SetdInst r1 r2 i) <$> (parseThisIdent "setd" *> parseRegPair) <*> parseFullImm,
+    (\(r1, r2) i -> Set2Inst r1 r2 i) <$> (parseThisIdent "set2" *> parseRegPair) <*> parseFullImm,
     (\(r1, r2) -> CallInst r1 r2)     <$> (parseThisIdent "call" *> parseRegPair),
     RetInst  <$   parseThisIdent "ret",
     ClrInst  <$   parseThisIdent "clr"

@@ -35,7 +35,7 @@ resolvePseudoInst inst = case inst of
   NotInst  rd  rs1     -> [XorInst rd rs1 rs1]
   MovInst  rd  rs1     -> [OrInst rd rs1 R0]
   CmpInst  rs1 rs2     -> [SubInst R0 rs1 rs2]
-  SetdInst rs1 rs2 imm -> [SetInst rs1 (highImm imm), SetInst rs2 (lowImm imm)]
+  Set2Inst rs1 rs2 imm -> [SetInst rs1 (highImm imm), SetInst rs2 (lowImm imm)]
   CallInst rs1 rs2     -> [JalInst ALWAYS rs1 rs2]
   RetInst              -> [RsrInst RADDR RY RZ, JmpInst ALWAYS RY RZ]
   ClrInst              -> [WsrInst FLAGS R0 R0]
@@ -81,7 +81,7 @@ extractRelocs statements = getWithPc statements 0
 
     extractLabelImm :: Inst -> Maybe Imm
     extractLabelImm (SetInst  _   label) = Just label
-    extractLabelImm (SetdInst _ _ label) = Just label
+    extractLabelImm (Set2Inst _ _ label) = Just label
     extractLabelImm _                    = Nothing
 
     fromPart :: ImmPart -> RelocType
