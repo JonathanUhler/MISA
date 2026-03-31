@@ -26,7 +26,7 @@ Building the MISA toolchain and simulator requires:
 - Stack 3.3.0 or later
 - A recent Haskell compiler
 - Cmake 3.22.0 or later
-- A recent C compiler
+- A recent GNU-based C++ compiler
 
 Typing `make` in the root directory of the cloned repository will build all components of the
 project. Other make targets include:
