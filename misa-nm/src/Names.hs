@@ -12,7 +12,7 @@ formatSyms (sym : syms) = formatSym sym ++ "\n" ++ formatSyms syms
 
 
 formatSym :: Sym -> String
-formatSym (Sym name addr) = "<- " ++ (printf "%04X" addr) ++ " " ++ name
+formatSym (Sym name addr) = "  <- " ++ (printf "%04X" addr) ++ " " ++ name
 
 
 formatRelocs :: RelocTable -> String
@@ -21,7 +21,8 @@ formatRelocs (reloc : relocs) = formatReloc reloc ++ "\n" ++ formatRelocs relocs
 
 
 formatReloc :: Reloc -> String
-formatReloc (Reloc kind addr name) = "-> " ++ (printf "%04X" addr) ++ " " ++ name ++ " " ++ kindStr
+formatReloc (Reloc kind addr name) =
+  "  -> " ++ (printf "%04X" addr) ++ " " ++ name ++ " " ++ kindStr
   where kindStr = case kind of
                     LowReloc  -> "(lo)"
                     HighReloc -> "(hi)"
@@ -34,7 +35,7 @@ formatSecs (sec : secs) = formatSec sec ++ formatSecs secs
 
 formatSec :: Sec -> String
 formatSec (Sec name _ syms relocs) =
-  "Section " ++ name ++ ":\n\n" ++ formatSyms syms ++ "\n" ++ formatRelocs relocs
+  "Section " ++ name ++ ":\n\n" ++ formatSyms syms ++ formatRelocs relocs
 
 
 formatNames :: BinaryObject -> String
