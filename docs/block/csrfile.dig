@@ -171,7 +171,7 @@
       <elementAttributes>
         <entry>
           <string>Label</string>
-          <string>csr_clk</string>
+          <string>csr\_clk</string>
         </entry>
       </elementAttributes>
       <pos x="400" y="140"/>
