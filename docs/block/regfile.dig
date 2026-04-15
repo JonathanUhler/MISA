@@ -830,7 +830,7 @@
           <string>port1\_data(in)</string>
         </entry>
       </elementAttributes>
-      <pos x="-640" y="740"/>
+      <pos x="-640" y="780"/>
     </visualElement>
     <visualElement>
       <elementName>Tunnel</elementName>
@@ -844,7 +844,7 @@
           <string>port2\_data(in)</string>
         </entry>
       </elementAttributes>
-      <pos x="-640" y="780"/>
+      <pos x="-640" y="740"/>
     </visualElement>
     <visualElement>
       <elementName>Tunnel</elementName>
