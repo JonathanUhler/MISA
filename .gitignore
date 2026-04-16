@@ -1,5 +1,6 @@
 **/.stack-work/
 **/build
+**/install
 *~
 **/venv
 *.bkp
