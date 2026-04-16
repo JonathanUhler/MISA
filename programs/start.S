@@ -1,9 +1,16 @@
+        .section vectors
+
+        .array 0x00 0x00
+        .array 0x00 0x00
+        .array 0x00 0xC0
+
+
         .section text
 _start:
-        SET2 RYZ 0xABCD
-        WSR SADDR RYZ
+        set2 ryz 0xABCD
+        wsr saddr ryz
 
-        SET2 RYZ main
-        JAL ALWAYS RYZ
+        set2 ryz main
+        jal always ryz
 
-        HALT RT
+        halt rt

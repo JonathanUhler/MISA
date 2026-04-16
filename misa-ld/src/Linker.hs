@@ -37,7 +37,7 @@ getAllRelocDefs objs = concatMap (concatMap namesFromSec) objs
 
 
 getAllSecDefs :: [BinaryObject] -> [Label]
-getAllSecDefs objs = map (concatMap (\(Sec name _ _ _) -> name)) objs
+getAllSecDefs objs = concatMap (map (\(Sec name _ _ _) -> name)) objs
 
 
 getAllMappedSecs :: MemMap -> [Label]
@@ -68,8 +68,8 @@ getMultiMappedSecs memmap =
 getOverflowedSecs :: [PlacedSec] -> MemMap -> [Label]
 getOverflowedSecs _ [] = []
 getOverflowedSecs secs (MemRegion start end names : regions)
-  | totalSecSize <= (end - start) =          getOverflowedSecs secs regions
-  | otherwise                     = names ++ getOverflowedSecs secs regions
+  | totalSecSize <= (end - start + 1) =          getOverflowedSecs secs regions
+  | otherwise                         = names ++ getOverflowedSecs secs regions
   where secsInRegion = filter (\(PlacedSec (Sec name _ _ _) _) -> elem name names) secs
         totalSecSize = foldr (\(PlacedSec sec _) size -> size + getSecSize sec) 0 secsInRegion
 
@@ -81,10 +81,15 @@ joinLinkedSecs (PlacedSec (Sec _ (LiteralCode arr : []) _ _) start : secs) acc
 joinLinkedSecs _ acc = acc
 
 
+padTo64K :: [Word8] -> [Word8]
+padTo64K bytes = bytes ++ padding
+  where padding = replicate (max (65536 - length bytes) 0) (0x00 :: Word8)
+
+
 linkBinaryObjectsSafe :: [BinaryObject] -> MemMap -> Either LinkError BinaryExe
 linkBinaryObjectsSafe objs memmap
   | overflowedSecs /= [] = Left (CodeTooLarge overflowedSecs)
-  | otherwise            = Right (joinLinkedSecs relocdSecs [])
+  | otherwise            = Right (padTo64K (joinLinkedSecs relocdSecs []))
   where placedSecs     = placeSecs objs memmap
         overflowedSecs = getOverflowedSecs placedSecs memmap
         allSyms        = getAllSyms placedSecs

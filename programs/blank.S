@@ -1,4 +1,4 @@
         .section text
 main:
-        SET RT 0
-        RET
+        set rt 0
+        ret
