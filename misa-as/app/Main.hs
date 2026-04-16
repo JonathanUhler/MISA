@@ -8,6 +8,7 @@ import Parser
 import qualified Data.ByteString as B
 import System.Environment (getArgs)
 import System.Exit
+import System.IO
 import Text.Megaparsec
 
 
@@ -16,7 +17,7 @@ assemble inputPath outputPath = do
   content <- readFile inputPath
   case runParser parseProgram inputPath content of
     Left  err     -> do
-      putStrLn (errorBundlePretty err)
+      hPutStrLn stderr (errorBundlePretty err)
       exitWith (ExitFailure 1)
     Right program -> do
       let object = encodeProgram program
