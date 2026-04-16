@@ -116,11 +116,13 @@ Conditional branching in the MISA architecture is based on ALU flag values for c
 Both branching instructions, `JAL` and `JMP`, use these flags to make decisions on whether a branch
 will be taken.
 
-`FLAGS` is set based on the result of each ALU operation. For instructions which do not use the ALU,
-it is implementation-defined whether or not `FLAGS` will be updated, although programmers should
-never assume that `FLAGS` will persist across multiple instructions. A conditional branch that
-relies on `FLAGS` must be performed immediately after the conditional comparison or a `WSR` to
-`FLAGS`.
+`FLAGS` is set based on the result of each ALU operation. The instructions which must update
+the `FLAGS` register are: `ADD`, `ADC`, `SUB`, `SBB`. Instructions which may, depending on the
+implementation, update the `FLAGS` register are: `HALT`, `AND`, `OR`, `XOR`, `RRC`, `SET`.
+Instructions which must not update the `FLAGS` register are: `LW`, `SW`, `RSR`, `WSR` (must not
+update `FLAGS` asynchronously through the ALU output, but will update `FLAGS` if writing directly
+to it), `JAL`, `JMP`. A conditional branch that relies on `FLAGS` should be performed immediately
+after the conditional comparison or a `WSR` to `FLAGS`.
 
 The `FLAGS` special register is a flags register (one bit per flag) which must be at least 4 bits
 and support the following:

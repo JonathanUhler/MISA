@@ -25,12 +25,20 @@ Building the MISA toolchain and simulator requires:
 
 - Stack 3.3.0 or later
 - A recent Haskell compiler
-- Cmake 3.22.0 or later
-- A recent GNU-based C++ compiler
+- Python 3.10 or later
 
 Typing `make` in the root directory of the cloned repository will build all components of the
-project. Other make targets include:
+project.
 
-- `build-toolchain`: To build just the toolchain applications (everything but the simulator)
-- `build-sim`: To build just the simulator
-- `clean`: To remove build artifacts
+## Installing and Usage
+
+The project components can be installed with `make install`. By default, the installation will be
+made in the local `install` directory. A custom path can be set by specifying the Make variable
+`INSTALL_DIR`.
+
+The install directory will be populated with the following tools:
+
+- `misa-as` and `mias-ld`: CLI utilities written in Python to make the usage of the Haskell
+  binaries easier.
+- `misa-as-exe`, `misa-ld-exe`, and `misa-nm-exe`: binaries built from the Haskell source that
+  provide a very minimal command line interface for use by the Python CLI wrappers.
