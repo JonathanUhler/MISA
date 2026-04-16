@@ -16,23 +16,23 @@ versionString = "misa-nm version 0.1.0.0"
 
 progDescString :: String
 progDescString =
-  "misa-nm lists the symbols from the object files [objfile...]. If no object files are listed "  ++
-  "as arguments, misa-nm will produce no output."                                                 ++
-  "\n\n"                                                                                          ++
-  "For each symbol in each object file, misa-nm shows:"                                           ++
-  "\n\n"                                                                                          ++
+  "misa-nm lists the symbols from the object files [objfile...]. If no object files are listed " ++
+  "as arguments, misa-nm will produce no output."                                                ++
+  "\n\n"                                                                                         ++
+  "For each symbol in each object file, misa-nm shows:"                                          ++
+  "\n\n"                                                                                         ++
   "• The symbol type, indicating whether the symbol is provided or required by the object file " ++
-  "during linking:"                                                                            ++
-  "\n\n"                                                                                          ++
-  "\"<-\" The symbol is defined in and provided by the object file.\n"                         ++
-  "\"->\" The symbol is required by the object file for linking."                              ++
-  "\n\n"                                                                                          ++
+  "during linking:"                                                                              ++
+  "\n\n"                                                                                         ++
+  "\"<-\" The symbol is defined in and provided by the object file.\n"                           ++
+  "\"->\" The symbol is required by the object file for linking."                                ++
+  "\n\n"                                                                                         ++
   "• The symbol or relocation address within the object file, in hexadecimal.\n"                 ++
   "• The name of the symbol as specified in the object file.\n"                                  ++
   "• If the symbol is required (->), whether the relocation address is the high or low word of " ++
-  "the symbol's value:"                                                                        ++
-  "\n\n"                                                                                          ++
-  "\"(hi)\" The relocation uses bits 15:8 of the symbol.\n"                                    ++
+  "the symbol's value:"                                                                          ++
+  "\n\n"                                                                                         ++
+  "\"(hi)\" The relocation uses bits 15:8 of the symbol.\n"                                      ++
   "\"(lo)\" The relocation uses bits 7:0 of the symbol."
 
 

@@ -41,7 +41,7 @@ library:
   source-dirs: src
 
 executables:
-  misa-as:
+  misa-as-exe:
     main:                Main.hs
     source-dirs:         app
     ghc-options:

@@ -44,7 +44,7 @@ library
     , text
   default-language: Haskell2010
 
-executable misa-as
+executable misa-as-exe
   main-is: Main.hs
   other-modules:
       Paths_misa_as
