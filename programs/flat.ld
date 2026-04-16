@@ -1,0 +1,2 @@
+section 0x0000 - 0xFFF0 : text data ;
+section 0xFFFA - 0xFFFF : vectors ;

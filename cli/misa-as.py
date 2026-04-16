@@ -31,11 +31,13 @@ help_text: str = (
     "options as well as the paths of all generated object files and all non-source files. For "
     "instance:"
     "\n\n"
-    "  misa-as file1.s file2.asm library.o --linker /usr/bin/misa-ld --linker-options other.o"
+    "  misa-as file1.s file2.asm library.o \\"
+    "    --linker /usr/bin/misa-ld         \\"
+    "    --linker-options \"-M memmap.ld other.o\""
     "\n\n"
     "Will result in this call to the linker:"
     "\n\n"
-    "  /usr/bin/misa-ld other.o file1.o file2.o library.o"
+    "  /usr/bin/misa-ld -M memmap.ld other.o file1.o file2.o library.o"
     "\n\n"
     "The linker will not be invoked when the -a flag is specified. In this case, only source "
     "files will be assembled, generated object files will not be deleted, and non-source files "
@@ -139,9 +141,9 @@ def link_artifact_files(artifact_files: list,
     artifact_options: str = " ".join([artifact_file.name for artifact_file in artifact_files])
     obj_options: str = " ".join([str(obj_path) for obj_path in obj_paths])
     output_option: str = "" if output is None else f"-o {output}"
-    linker_option: str = "" if linker_options is None else linker_options
+    linker_option: str = " ".join(linker_options)
     linker_command: str = \
-        f"{linker} {artifact_options} {obj_options} {linker_option} {output_option}"
+        f"{linker} {linker_option} {artifact_options} {obj_options} {output_option}"
 
     result: CompletedProcess = subprocess.run(shlex.split(linker_command), capture_output = True)
     if (result.returncode != 0):
@@ -159,7 +161,7 @@ def main() -> None:
                         help = "assemble but do not link")
     parser.add_argument("--linker", metavar = "<linker>", default = "misa-ld",
                         help = "name or path or the linker binary to invoke")
-    parser.add_argument("--linker-options", action = "append", metavar = "<options>",
+    parser.add_argument("--linker-options", action = "append", metavar = "<options>", default = [],
                         help = "string of command-line options to pass to <linker>")
     parser.add_argument("-o", "--output", metavar = "<file>",
                         help = "place the output into <file>")
