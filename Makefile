@@ -1,20 +1,12 @@
-.PHONY: all build-toolchain configure-sim build-sim clean
+.PHONY: all build-toolchain clean
 
 
-all: build-toolchain build-sim
+all: build-toolchain
 
 
 build-toolchain:
 	stack build
 
 
-configure-sim:
-	cd misa-sim && cmake -B build
-
-
-build-sim: configure-sim
-	cd misa-sim && cmake --build build
-
-
 clean:
-	stack clean && rm -rf misa-sim/build
+	stack clean
