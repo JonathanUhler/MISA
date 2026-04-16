@@ -16,32 +16,32 @@ import textwrap
 version_text: str = "0.1.0.0"
 
 
-help_text: str = \
-"""
-misa-as is the assembler for the MISA instruction set architecture. It is intended to assemble
-source assembly language files into object files for use by the misa-ld linker.
-
-Each time misa-as runs, it assembles exactly one object file per source file. Source files are those
-which end with one of the following case-insensitive extensions: .asm, .s, .src. Files provided
-to misa-as without these extensions are assumed to be pre-assembled object files or libraries and
-will be passed directly to the linker (if invoked).
-
-Linking will happen automatically if the assembly of all source files is successful. The linker
-to invoke can be specified with the --linker option. Extra options can be passed to the linker
-with the --linker-options flag. misa-as will invoke the linker with the extra options as well as
-the paths of all generated object files and all non-source files. For instance:
-
-  misa-as file1.s file2.asm library.o --linker /usr/bin/misa-ld --linker-options other_library.o
-
-Will result in this call to the linker:
-
-  /usr/bin/misa-ld other_library.o file1.o file2.o library.o
-
-The linker will not be invoked when the -a flag is specified. In this case, only source files will
-be assembled, generated object files will not be deleted, and non-source files provided to misa-as
-will be ignored. The -o flag cannot be specified with the -a flag when more than one source file
-is provided.
-"""
+help_text: str = (
+    "misa-as is the assembler for the MISA instruction set architecture. It is intended to "
+    "assemble source assembly language files into object files for use by the misa-ld linker."
+    "\n\n"
+    "Each time misa-as runs, it assembles exactly one object file per source file. Source files "
+    "are those which end with one of the following case-insensitive extensions: .asm, .s, .src. "
+    "Files provided to misa-as without these extensions are assumed to be pre-assembled object "
+    "files or libraries and will be passed directly to the linker (if invoked)."
+    "\n\n"
+    "Linking will happen automatically if the assembly of all source files is successful. The "
+    "linker to invoke can be specified with the --linker option. Extra options can be passed to "
+    "the linker with the --linker-options flag. misa-as will invoke the linker with the extra "
+    "options as well as the paths of all generated object files and all non-source files. For "
+    "instance:"
+    "\n\n"
+    "  misa-as file1.s file2.asm library.o --linker /usr/bin/misa-ld --linker-options other.o"
+    "\n\n"
+    "Will result in this call to the linker:"
+    "\n\n"
+    "  /usr/bin/misa-ld other.o file1.o file2.o library.o"
+    "\n\n"
+    "The linker will not be invoked when the -a flag is specified. In this case, only source "
+    "files will be assembled, generated object files will not be deleted, and non-source files "
+    "provided to misa-as will be ignored. The -o flag cannot be specified with the -a flag when "
+    "more than one source file is provided."
+)
 
 
 class SmartHelpFormatter(HelpFormatter):
@@ -49,7 +49,7 @@ class SmartHelpFormatter(HelpFormatter):
     def _fill_text(self, text: str, width: int, indent: int):
         lines: list = text.splitlines()
         wrapped: list = [
-            textwrap.fill(line, width,  initial_indent = indent, subsequent_indent = indent)
+            textwrap.fill(line, width, initial_indent = indent, subsequent_indent = indent)
             for line in lines
         ]
         return "\n".join(wrapped)
