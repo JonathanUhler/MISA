@@ -54,7 +54,7 @@ parseMemRegion = do
 
 
 parseMemMap :: Parser MemMap
-parseMemMap = some parseMemRegion <* eof
+parseMemMap = skip *> some parseMemRegion <* eof
 
 
 numMappings :: Label -> MemMap -> Int

@@ -60,6 +60,22 @@ def error(message: str) -> None:
     sys.exit(1)
 
 
+def format_subprocess_output(process: CompletedProcess) -> str:
+    output: str = ""
+
+    has_stdout: bool = len(process.stdout) > 0
+    has_stderr: bool = len(process.stderr) > 0
+
+    if (has_stdout):
+        output += process.stdout.decode("utf-8")
+        if (has_stderr):
+            output += "\n"
+    if (has_stderr):
+        output += process.stderr.decode("utf-8")
+
+    return output
+
+
 def sort_paths(asm_paths: list) -> (list, list):
     src_extensions: set = {".asm", ".s", ".src"}
 
@@ -88,7 +104,7 @@ def assemble(src_path: Path, out_path: Path) -> (bool, str):
     result: CompletedProcess = \
         subprocess.run(["misa-as-exe", str(src_path), str(out_path)], capture_output = True)
     assembled: bool = result.returncode == 0
-    return assembled, result.stderr.decode("utf-8")
+    return assembled, format_subprocess_output(result)
 
 
 def assemble_all(src_paths: list) -> list:
@@ -129,7 +145,7 @@ def link_artifact_files(artifact_files: list,
 
     result: CompletedProcess = subprocess.run(shlex.split(linker_command), capture_output = True)
     if (result.returncode != 0):
-        error(f"linker messages\n{result.stderr.decode('utf-8')}")
+        error(f"linker messages\n{format_subprocess_output(result)}")
 
 
 def main() -> None:
