@@ -39,7 +39,7 @@
           <int>10</int>
         </entry>
       </elementAttributes>
-      <pos x="220" y="-260"/>
+      <pos x="400" y="-300"/>
     </visualElement>
     <visualElement>
       <elementName>Tunnel</elementName>
@@ -49,7 +49,7 @@
           <string>clk</string>
         </entry>
       </elementAttributes>
-      <pos x="240" y="-260"/>
+      <pos x="420" y="-300"/>
     </visualElement>
     <visualElement>
       <elementName>Register</elementName>
@@ -1185,10 +1185,6 @@
       <p2 x="1140" y="-260"/>
     </wire>
     <wire>
-      <p1 x="220" y="-260"/>
-      <p2 x="240" y="-260"/>
-    </wire>
-    <wire>
       <p1 x="-300" y="-260"/>
       <p2 x="-280" y="-260"/>
     </wire>
@@ -1315,6 +1311,10 @@
     <wire>
       <p1 x="760" y="40"/>
       <p2 x="780" y="40"/>
+    </wire>
+    <wire>
+      <p1 x="400" y="-300"/>
+      <p2 x="420" y="-300"/>
     </wire>
     <wire>
       <p1 x="740" y="-300"/>

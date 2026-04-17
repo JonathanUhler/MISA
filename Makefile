@@ -2,7 +2,7 @@ BUILD_DIR   ?= build
 INSTALL_DIR ?= install
 
 
-.PHONY: all build build-toolchain install clean
+.PHONY: all build build-toolchain docs install clean
 
 
 all: build install
@@ -13,6 +13,10 @@ build: build-toolchain
 
 build-toolchain:
 	stack build --work-dir $(BUILD_DIR)
+
+
+docs:
+	cd docs/arch && quarto render --to pdf
 
 
 CLI_SCRIPTS := $(wildcard cli/*.py)
