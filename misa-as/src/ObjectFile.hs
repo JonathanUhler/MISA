@@ -129,29 +129,29 @@ packInst :: Inst -> [Word8]
 packInst inst =
   case inst of
     HaltInst rs1          -> packFormatR   0x0 rs1
-    AddInst  rd   rs1 rs2 -> packFormatRRR 0x1 rd   rs1 rs2
-    AdcInst  rd   rs1 rs2 -> packFormatRRR 0x2 rd   rs1 rs2
-    SubInst  rd   rs1 rs2 -> packFormatRRR 0x3 rd   rs1 rs2
-    SbbInst  rd   rs1 rs2 -> packFormatRRR 0x4 rd   rs1 rs2
-    AndInst  rd   rs1 rs2 -> packFormatRRR 0x5 rd   rs1 rs2
-    OrInst   rd   rs1 rs2 -> packFormatRRR 0x6 rd   rs1 rs2
-    XorInst  rd   rs1 rs2 -> packFormatRRR 0x7 rd   rs1 rs2
-    RrcInst  rd   rs1     -> packFormatRR  0x8 rd   rs1
-    SetInst  rd   imm     -> packFormatRI  0x9 rd   imm
-    LwInst   rd   rs1 rs2 -> packFormatRRR 0xA rd   rs1 rs2
-    SwInst   rd   rs1 rs2 -> packFormatRRR 0xB rd   rs1 rs2
-    RsrInst  csr  rs1 rs2 -> packFormatCRR 0xC csr  rs1 rs2
-    WsrInst  csr  rs1 rs2 -> packFormatCRR 0xD csr  rs1 rs2
-    JalInst  flag rs1 rs2 -> packFormatFRR 0xE flag rs1 rs2
-    JmpInst  flag rs1 rs2 -> packFormatFRR 0xF flag rs1 rs2
+    AddInst  rd   rs1 rs2 -> packFormatRRR 0x1 rd  rs1 rs2
+    AdcInst  rd   rs1 rs2 -> packFormatRRR 0x2 rd  rs1 rs2
+    SubInst  rd   rs1 rs2 -> packFormatRRR 0x3 rd  rs1 rs2
+    SbbInst  rd   rs1 rs2 -> packFormatRRR 0x4 rd  rs1 rs2
+    AndInst  rd   rs1 rs2 -> packFormatRRR 0x5 rd  rs1 rs2
+    OrInst   rd   rs1 rs2 -> packFormatRRR 0x6 rd  rs1 rs2
+    XorInst  rd   rs1 rs2 -> packFormatRRR 0x7 rd  rs1 rs2
+    RrcInst  rd   rs      -> packFormatRR  0x8 rd  rs
+    SetInst  rd   imm     -> packFormatRI  0x9 rd  imm
+    LwInst   rd   rs1 rs2 -> packFormatRRR 0xA rd  rs1 rs2
+    SwInst   rd   rs1 rs2 -> packFormatRRR 0xB rd  rs1 rs2
+    RsrInst  csr  rs1 rs2 -> packFormatRRC 0xC rs1 rs2 csr
+    WsrInst  csr  rs1 rs2 -> packFormatRRC 0xD rs1 rs2 csr
+    JalInst  flag rs1 rs2 -> packFormatRRF 0xE rs1 rs2 flag
+    JmpInst  flag rs1 rs2 -> packFormatRRF 0xF rs1 rs2 flag
     _                     -> error ("cannot pack pseudo-instruction " ++ show inst)
   where
     packFormatR   op r1       = [op .|. shiftL (fromReg r1) 4, 0x00]
     packFormatRR  op r1 r2    = [op .|. shiftL (fromReg r1) 4, fromReg r2]
     packFormatRRR op r1 r2 r3 = [op .|. shiftL (fromReg r1) 4, fromReg r2 .|. shiftL (fromReg r3) 4]
     packFormatRI  op r  i     = [op .|. shiftL (fromReg r) 4,  fromImm i]
-    packFormatCRR op c  r1 r2 = [op .|. shiftL (fromCsr c) 4,  fromReg r1 .|. shiftL (fromReg r2) 4]
-    packFormatFRR op f  r1 r2 = [op .|. shiftL (fromFlag f) 4, fromReg r1 .|. shiftL (fromReg r2) 4]
+    packFormatRRC op r1 r2 c  = [op .|. shiftL (fromReg r1) 4, fromReg r2 .|. shiftL (fromCsr c) 4]
+    packFormatRRF op r1 r2 f  = [op .|. shiftL (fromReg r1) 4, fromReg r2 .|. shiftL (fromFlag f) 4]
     fromReg r  = fromIntegral (fromEnum r)
     fromCsr c  = case c of
       SADDR -> 0x1

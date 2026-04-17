@@ -208,7 +208,7 @@ valid Type fields are:
 
 | Type                | Encoding | Commentary                                                                                      |
 |---------------------|----------|-------------------------------------------------------------------------------------------------|
-| Halt instruction    | 000      | The `HALT` instruction was executed. Extended status is the valid of the `RD` operand register. |
+| Halt instruction    | 000      | The `HALT` instruction was executed. Extended status is the valid of the `RS` operand register. |
 | Illegal instruction | 001      | An ill-formed instruction failed to decode. Extended status is not used.                        |
 
 #### `CAUSE` Reason: Memory Usage
@@ -562,7 +562,7 @@ SVG(wavedrom.render(str({
 ```
 
 ### `RSR`
-Usage: `RSR CSR RS1 RS2`
+Usage: `RSR RS1 RS2 CSR`
 
 Meaning: `RS1 = CSR >> 8 ; RS2 = CSR & 0xFF`
 
@@ -577,16 +577,16 @@ from IPython.display import SVG
 SVG(wavedrom.render(str({
     "reg": [
         *[{"name": bit, "bits": 1} for bit in reversed("1100")],
-        {"name": "CSR", "bits": 4},
         {"name": "RS1", "bits": 4},
-        {"name": "RS2", "bits": 4}
+        {"name": "RS2", "bits": 4},
+        {"name": "CSR", "bits": 4}
     ],
     "config": {"bits": 16}
 })).tostring())
 ```
 
 ### `WSR`
-Usage: `WSR CSR RS1 RS2`
+Usage: `WSR RS1 RS2 CSR`
 
 Meaning: `CSR = RS1 << 8 | RS2`
 
@@ -601,16 +601,16 @@ from IPython.display import SVG
 SVG(wavedrom.render(str({
     "reg": [
         *[{"name": bit, "bits": 1} for bit in reversed("1101")],
-        {"name": "CSR", "bits": 4},
         {"name": "RS1", "bits": 4},
-        {"name": "RS2", "bits": 4}
+        {"name": "RS2", "bits": 4},
+        {"name": "CSR", "bits": 4}
     ],
     "config": {"bits": 16}
 })).tostring())
 ```
 
 ### `JAL`
-Usage: `JAL CMP RS1 RS2`
+Usage: `JAL RS1 RS2 CMP`
 
 Meaning: `if (CMP) { RADDR = PC + 2 ; PC = RS1 << 8 | RS2 }`
 
@@ -625,16 +625,16 @@ from IPython.display import SVG
 SVG(wavedrom.render(str({
     "reg": [
         *[{"name": bit, "bits": 1} for bit in reversed("1110")],
-        {"name": "CMP", "bits": 4},
         {"name": "RS1", "bits": 4},
-        {"name": "RS2", "bits": 4}
+        {"name": "RS2", "bits": 4},
+        {"name": "CMP", "bits": 4}
     ],
     "config": {"bits": 16}
 })).tostring())
 ```
 
 ### `JMP`
-Usage: `JMP CMP RS1 RS2`
+Usage: `JMP RS1 RS2 CMP`
 
 Meaning: `if (CMP) { PC = RS1 << 8 | RS2 }`
 
@@ -649,9 +649,9 @@ from IPython.display import SVG
 SVG(wavedrom.render(str({
     "reg": [
         *[{"name": bit, "bits": 1} for bit in reversed("1111")],
-        {"name": "CMP", "bits": 4},
         {"name": "RS1", "bits": 4},
-        {"name": "RS2", "bits": 4}
+        {"name": "RS2", "bits": 4},
+        {"name": "CMP", "bits": 4}
     ],
     "config": {"bits": 16}
 })).tostring())
