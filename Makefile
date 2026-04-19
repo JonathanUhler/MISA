@@ -29,9 +29,10 @@ install: $(CLI_TARGETS)
 
 
 $(INSTALL_DIR)/%: cli/%.py
+	@mkdir -p $(INSTALL_DIR)
 	cp $< $@
 	chmod +x $@
 
 
 clean:
-	stack clean
+	rm -rf $(BUILD_DIR) $(INSTALL_DIR)
