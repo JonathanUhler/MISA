@@ -1,11 +1,20 @@
 #!/usr/bin/python3
 
 
+"""
+The command line interface wrapper for the misa-ld linker.
+
+This script exists to provide a higher quality interface to the Haskell linker, which only supports
+a very minimal CLI to link several files together with a provided memory map file.
+
+See the help text for more usage information.
+
+Author: Jonathan Uhler
+"""
+
+
 from argparse import ArgumentParser, HelpFormatter, Namespace
-import os
 from pathlib import Path
-import shlex
-import shutil
 import subprocess
 from subprocess import CompletedProcess
 import sys
@@ -86,6 +95,14 @@ def format_subprocess_output(process: CompletedProcess) -> str:
 
 
 def get_default_memmap() -> NamedTemporaryFile:
+    """
+    Writes the default memory map in the default_memmap global string to a temporary file and
+    returns that NamedTemporaryFile pointer.
+
+    Returns:
+      NamedTemporaryFile: The temporary file containing the default memory map.
+    """
+
     memmap_file: NamedTemporaryFile = NamedTemporaryFile()
     memmap_file.write(default_memmap.encode())
     memmap_file.seek(0)
@@ -93,6 +110,27 @@ def get_default_memmap() -> NamedTemporaryFile:
 
 
 def link(memmap_path: Path, obj_paths: list, out_path: Path) -> (bool, str):
+    """
+    Links several object files together with a memory map file to produce a final executable.
+
+    This function is a wrapper for the following Haskell linker call, which must be in the user's
+    PATH:
+
+      misa-ld-exe ${memmap_path}, ${obj_paths} ${out_path}
+
+    Arguments:
+      memmap_path (Path): Path to the memory map file to use. This can be a temporary file obtained
+                          by creating the default memmap.
+      obj_paths (list):   A list of Path objects to the object files that are being linked.
+      out_path (Path):    Path to write the output flat binary.
+
+    Returns:
+      bool: True if linking was successful, False if any error occured. out_path will only be
+            usable as the final binary if this is True.
+      str:  The stdout and stderr from the Haskell linker, which can be presented to the user as
+            debug information if linking failed.
+    """
+
     result: CompletedProcess = \
         subprocess.run(["misa-ld-exe", str(memmap_path), *obj_paths, str(out_path)],
                        capture_output = True)
@@ -101,6 +139,10 @@ def link(memmap_path: Path, obj_paths: list, out_path: Path) -> (bool, str):
 
 
 def main() -> None:
+    """
+    Command line entry point for misa-ld.
+    """
+
     parser: ArgumentParser = ArgumentParser(
         prog = "misa-ld",
         formatter_class = SmartHelpFormatter,
