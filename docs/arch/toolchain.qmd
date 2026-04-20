@@ -1,0 +1,171 @@
+# Toolchain
+
+The MISA project provides a standard toolchain for low-level development of programs on a processor
+supporting the full MISA architecture. This includes an assembler, linker, some debug/analysis
+tools, and a reference simulator.
+
+This chapter covers the usage and technical details of the toolchain for building programs. That is,
+all components of the MISA software package except the functional simulator.
+
+## Assembler
+
+`misa-as` in the reference assembler for the MISA instruction set architecture described in Chapter
+1 of this document. It supports all the behavior of the ISA chapter, including the recommended
+pseudo instructions and assembler macros.
+
+Using `misa-as` is similar to an abbreviated version of the GNU `as` assemblers and others like it.
+For a full description, see the help text at `misa-as --help`. In short, there are two common ways
+to use the assembler:
+
+1) Assembling source files to a binary: `misa-as file1.S file2.S ... fileN.S`
+2) Assembling source files to object files: `misa-as -a file1.S file2.S ... fileN.S`
+
+The assembler produces object files in a simple format accepted by the MISA linker. By default,
+assembling will also invoke the linker to produce a final binary, although this step can be
+omitted.
+
+### MISA Linkable Format
+
+Object files produced by `misa-as` are in the custom `MISA_LF` linkable format, which are binary
+files that contain:
+
+- The assembled source code for one or more sections defined in a single assembler translation unit.
+- A list of symbols (assembler labels) defined in the translation unit, along with their addresses
+  relative to the beginning of the object file's machine code.
+- A list of symbols required (not defined) by the translation unit during the linking phase, along
+  with the address relative to the beginning of the object file's machine code where the symbol
+  is needed.
+  
+#### Object File Description
+  
+Binary object files and all fields within them are encoded with little endian byte order. Each
+object file contains the following information:
+
+| Length   | Type    | Content                                                                                              |
+|----------|---------|------------------------------------------------------------------------------------------------------|
+| 8        | String  | The string `MISA_LF `, where `M` is the least significant byte and ` ` is the most significant byte. |
+| 2        | Word16  | The number of sections present in the object file.                                                   |
+| Variable | Section | The content of each section, repeated as many times as specified in the length field.                |
+
+Each section contains the following information:
+
+| Length   | Type       | Content                                                                     |
+|----------|------------|-----------------------------------------------------------------------------|
+| 2        | Word16     | The length in bytes of the section name string field.                       |
+| Variable | String     | The name of the section as defined with the `.section` assembler directive. |
+| Variable | Code       | The content of the assembled machine code for the specified section.        |
+| Variable | SymTable   | The table of symbols defined by the code in the specified section.          |
+| Variable | RelocTable | The table of relocations required by the code in the specified section.     |
+
+Each code table contains the following information:
+
+| Length   | Type    | Content                                  |
+|----------|---------|------------------------------------------|
+| 2        | Word16  | The length in bytes of the machine code. |
+| Variable | [Word8] | The machine code.                        |
+
+Each symbol table contains the following information:
+
+| Length   | Type   | Content                                    |
+|----------|--------|--------------------------------------------|
+| 2        | Word16 | The number of symbols in the symbol table. |
+| Variable | [Sym]  | The list of symbols.                       |
+
+| Length   | Type   | Content                                                                        |
+|----------|--------|--------------------------------------------------------------------------------|
+| 2        | Word16 | The address relative to the start of the code table that the symbol points to. |
+| 2        | Word16 | The length in bytes of the symbol's string name.                               |
+| Variable | String | The string name of the symbol.                                                 |
+
+Each relocation table contains the following information:
+
+| Length   | Type    | Content                                        |
+|----------|---------|------------------------------------------------|
+| 2        | Word16  | The number of relocations in the symbol table. |
+| Variable | [Reloc] | The list of relocations.                       |
+
+| Length   | Type   | Content                                                                                                                              |
+|----------|--------|--------------------------------------------------------------------------------------------------------------------------------------|
+| 1        | Word8  | Whether the byte at the relocation address must be filled with the high (0x01) or low (0x00) half of the relocated symbol's address. |
+| 2        | Word16 | The address relative to the start of the code table of the byte that needs to be filled by the linker.                               |
+| 2        | Word16 | The length in bytes of the relocation's string name.                                                                                 |
+| Variable | String | The string name of the required symbol for relocation.                                                                               |
+
+#### Object File Example
+
+Consider the following simple assembly program and the object file that it would generate when
+built with the MISA assembler:
+
+```asm
+    .section vectors
+    .array 0x00 0x00  0x00 0x00  0x00 0x00  0x00 0x00
+           0x00 0x00  0x00 0x00  0x00 0x00  0x00 0xC0
+
+    .section text
+
+_start:
+    set2 ryz main
+    jal always ryz
+    halt rt
+```
+
+`misa-as` would generate the following object file:
+
+
+```
+-- Object file header --
+
+4d4953415f4c4620                 : MISA_LF 
+0200                             : ..
+
+-- Name of first section --
+
+0400                             : ..
+74657874                         : text
+
+-- Code of first section --
+
+0800                             : ..
+d900e900de0ef000                 : ........
+
+-- Symbols of first section --
+
+0100                             : ..
+0000                             : ..
+0600                             : ..
+5f7374617274                     : _start
+
+-- Relocations of first section --
+
+0200                             : ..
+01                               : .
+0100                             : ..
+0400                             : ..
+6d61696e                         : main
+00                               : .
+0300                             : ..
+0400                             : ..
+6d61696e                         : main
+
+-- Name of second section --
+
+0700                             : ..
+766563746f7273                   : vectors
+
+-- Code of second section --
+
+1000                             : ..
+000000000000000000000000000000c0 : ................
+
+-- Symbols of second section --
+
+0000                             : ..
+
+-- Relocations of second section --
+
+0000                             : ..
+```
+
+## Linker
+
+## Other Tools

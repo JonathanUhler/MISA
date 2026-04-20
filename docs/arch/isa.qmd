@@ -13,24 +13,24 @@ order.
 The general-purpose register file contains sixteen, 8-bit registers for general computation and
 data storage, defined by the following ABI:
 
-| ABI Name | ABI Purpose        | Wide ABI Name | Encoding |
-|----------|--------------------|---------------|----------|
-| `R0`     | Hard-wired zero    | N/A           | 0000     |
-| `RA`     | Argument/temporary | `RAB`         | 0001     |
-| `RB`     | Argument/temporary |               | 0010     |
-| `RC`     | Argument/temporary | `RCD`         | 0011     |
-| `RD`     | Argument/temporary |               | 0100     |
-| `RE`     | Argument/temporary | `REF`         | 0101     |
-| `RF`     | Argument/temporary |               | 0110     |
-| `RG`     | Saved              | `RGH`         | 0111     |
-| `RH`     | Saved              |               | 1000     |
-| `RU`     | Saved              | `RUV`         | 1001     |
-| `RV`     | Saved              |               | 1010     |
-| `RW`     | Saved              | `RWX`         | 1011     |
-| `RX`     | Saved              |               | 1100     |
-| `RY`     | Scratch            | `RYZ`         | 1101     |
-| `RZ`     | Scratch            |               | 1110     |
-| `RT`     | Argument/temporary | N/A           | 1111     |
+| ABI Name | ABI Purpose               | Wide ABI Name | Encoding |
+|----------|---------------------------|---------------|----------|
+| `R0`     | Hard-wired zero           | N/A           | 0000     |
+| `RA`     | Argument/temporary        | `RAB`         | 0001     |
+| `RB`     | Argument/temporary        |               | 0010     |
+| `RC`     | Argument/temporary        | `RCD`         | 0011     |
+| `RD`     | Argument/temporary        |               | 0100     |
+| `RE`     | Argument/temporary        | `REF`         | 0101     |
+| `RF`     | Argument/temporary        |               | 0110     |
+| `RG`     | Saved                     | `RGH`         | 0111     |
+| `RH`     | Saved                     |               | 1000     |
+| `RU`     | Saved                     | `RUV`         | 1001     |
+| `RV`     | Saved                     |               | 1010     |
+| `RW`     | Saved                     | `RWX`         | 1011     |
+| `RX`     | Saved                     |               | 1100     |
+| `RY`     | Scratch                   | `RYZ`         | 1101     |
+| `RZ`     | Scratch                   |               | 1110     |
+| `RT`     | Argument/return/temporary | N/A           | 1111     |
 
 The `R0` register must be hard-wired to ignore writes and always return the value `0b00000000` on
 reads. Wide registers are formed by two general-purpose registers, which must be equivalent to
@@ -229,11 +229,16 @@ which are required by all maps.
 
 ### Required Memory Regions
 
-Addresses 0xFFFA - 0xFFFF are reserved for a three-element hardware vector array and must always
+Addresses 0xFFF0 - 0xFFFF are reserved for an eight-element hardware vector array and must always
 contain the following function pointers (which are absolute 16-bit addresses):
 
 | Vector Address  | Commentary   |
 |-----------------|--------------|
+| 0xFFF0 - 0xFFF1 | (Reserved)   |
+| 0xFFF2 - 0xFFF3 | (Reserved)   |
+| 0xFFF4 - 0xFFF5 | (Reserved)   |
+| 0xFFF6 - 0xFFF7 | (Reserved)   |
+| 0xFFF8 - 0xFFF9 | (Reserved)   |
 | 0xFFFA - 0xFFFB | (Reserved)   |
 | 0xFFFC - 0xFFFD | (Reserved)   |
 | 0xFFFE - 0xFFFF | Reset vector |
@@ -258,10 +263,10 @@ SECTION 0x0200 - 0x7FFF : data bss ;
 SECTION 0x8000 - 0xBFFF : ;
 
 // Program ROM
-SECTION 0xC000 - 0xFFF0 : text rodata ;
+SECTION 0xC000 - 0xFFEF : text rodata ;
 
 // Hardware vector addresses, described above
-SECTION 0xFFFA - 0xFFFF : vectors ;
+SECTION 0xFFF0 - 0xFFFF : vectors ;
 ```
 
 Which define the following sections by convention:

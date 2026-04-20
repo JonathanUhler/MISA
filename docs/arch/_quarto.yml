@@ -4,11 +4,11 @@ project:
 book:
   title: "MISA Computer Architecture"
   author: "Jonathan Uhler"
-  date: "2026-02-25"
+  date: "2026-04-20"
   chapters:
     - index.qmd
     - isa.qmd
-    - summary.qmd
+    - toolchain.qmd
 
 format:
   html:

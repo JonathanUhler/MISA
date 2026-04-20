@@ -184,8 +184,7 @@ know what bytes in the packed code correspond to relocations, but not which part
 are instructions vs. literal binary data.
 -}
 packCode :: Code -> [Word8]
-packCode code
-  = packDoubleWord (fromIntegral (length packedCode)) ++ packedCode
+packCode code = packDoubleWord (fromIntegral (length packedCode)) ++ packedCode
   where packedCode = concatMap packCodeElem code
 
 
@@ -196,8 +195,8 @@ If the code element is an instruction, `packInst` is used, otherwise the literal
 byte array is returned.
 -}
 packCodeElem :: CodeElem -> [Word8]
-packCodeElem (InstCode inst) = packInst inst
-packCodeElem (LiteralCode bytes)    = bytes
+packCodeElem (InstCode inst)     = packInst inst
+packCodeElem (LiteralCode bytes) = bytes
 
 
 {- |
@@ -213,8 +212,7 @@ bytes of all packed symbols. Thus to skip past the packed symbol table, each sym
 -}
 packSyms :: SymTable -> [Word8]
 packSyms [] = packDoubleWord 0
-packSyms syms
-  = packDoubleWord (fromIntegral (length syms)) ++ packedSyms
+packSyms syms = packDoubleWord (fromIntegral (length syms)) ++ packedSyms
   where packedSyms = concatMap packSym syms
 
 
