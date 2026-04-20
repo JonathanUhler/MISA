@@ -207,7 +207,7 @@ The exception cause is related to the use of a specific instruction or class of 
 valid Type fields are:
 
 | Type                | Encoding | Commentary                                                                                      |
-|---------------------|----------|-------------------------------------------------------------------------------------------------|
+|------------------------|--------------|-----------------------------------------------------------------------------|
 | Halt instruction    | 000      | The `HALT` instruction was executed. Extended status is the valid of the `RS` operand register. |
 | Illegal instruction | 001      | An ill-formed instruction failed to decode. Extended status is not used.                        |
 
@@ -216,7 +216,7 @@ The exception cause is related to the use of an address or memory operation. The
 are:
 
 | Type             | Encoding | Commentary                                                                                  |
-|------------------|----------|---------------------------------------------------------------------------------------------|
+|------------------------|--------------|-----------------------------------------------------------------------------|
 | Address overflow | 000      | A memory operation attempted to access an address which is outside the mapped memory space. |
 | PC overflow      | 001      | The program counter overflowed an unsigned 16-bit value.                                    |
 
@@ -272,7 +272,7 @@ SECTION 0xFFF0 - 0xFFFF : vectors ;
 Which define the following sections by convention:
 
 | Section   | Commentary                                                                                                                                                                                         |
-|-----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+|-----------------|------------------------------------------------------------------------------------------------|
 | `direct`  | Contents to place in the first 256-byte page. This page may support faster memory operations on certain hardware implementations, and thus may be a desirable target for frequently accessed data. |
 | `data`    | Initialized global data that is mutable.                                                                                                                                                           |
 | `bss`     | Declared but uninitialized global data that is mutable. Runtime/startup code should initialize `bss` symbols to zero.                                                                              |

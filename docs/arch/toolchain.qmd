@@ -42,7 +42,7 @@ Binary object files and all fields within them are encoded with little endian by
 object file contains the following information:
 
 | Length   | Type    | Content                                                                                              |
-|----------|---------|------------------------------------------------------------------------------------------------------|
+|--------------|-------------|-----------------------------------------------------------------------------------------|
 | 8        | String  | The string `MISA_LF `, where `M` is the least significant byte and ` ` is the most significant byte. |
 | 2        | Word16  | The number of sections present in the object file.                                                   |
 | Variable | Section | The content of each section, repeated as many times as specified in the length field.                |
@@ -50,7 +50,7 @@ object file contains the following information:
 Each section contains the following information:
 
 | Length   | Type       | Content                                                                     |
-|----------|------------|-----------------------------------------------------------------------------|
+|--------------|-------------|-----------------------------------------------------------------------------------------|
 | 2        | Word16     | The length in bytes of the section name string field.                       |
 | Variable | String     | The name of the section as defined with the `.section` assembler directive. |
 | Variable | Code       | The content of the assembled machine code for the specified section.        |
@@ -60,19 +60,19 @@ Each section contains the following information:
 Each code table contains the following information:
 
 | Length   | Type    | Content                                  |
-|----------|---------|------------------------------------------|
+|--------------|-------------|-----------------------------------------------------------------------------------------|
 | 2        | Word16  | The length in bytes of the machine code. |
 | Variable | [Word8] | The machine code.                        |
 
 Each symbol table contains the following information:
 
 | Length   | Type   | Content                                    |
-|----------|--------|--------------------------------------------|
+|--------------|-------------|-----------------------------------------------------------------------------------------|
 | 2        | Word16 | The number of symbols in the symbol table. |
 | Variable | [Sym]  | The list of symbols.                       |
 
 | Length   | Type   | Content                                                                        |
-|----------|--------|--------------------------------------------------------------------------------|
+|--------------|-------------|-----------------------------------------------------------------------------------------|
 | 2        | Word16 | The address relative to the start of the code table that the symbol points to. |
 | 2        | Word16 | The length in bytes of the symbol's string name.                               |
 | Variable | String | The string name of the symbol.                                                 |
@@ -80,12 +80,12 @@ Each symbol table contains the following information:
 Each relocation table contains the following information:
 
 | Length   | Type    | Content                                        |
-|----------|---------|------------------------------------------------|
+|--------------|-------------|-----------------------------------------------------------------------------------------|
 | 2        | Word16  | The number of relocations in the symbol table. |
 | Variable | [Reloc] | The list of relocations.                       |
 
 | Length   | Type   | Content                                                                                                                              |
-|----------|--------|--------------------------------------------------------------------------------------------------------------------------------------|
+|--------------|-------------|-----------------------------------------------------------------------------------------|
 | 1        | Word8  | Whether the byte at the relocation address must be filled with the high (0x01) or low (0x00) half of the relocated symbol's address. |
 | 2        | Word16 | The address relative to the start of the code table of the byte that needs to be filled by the linker.                               |
 | 2        | Word16 | The length in bytes of the relocation's string name.                                                                                 |
