@@ -12,5 +12,3 @@
         rsr raddr ruv
         rsr flags ruv
         rsr cause ruv
-
-        sub r0 ra rb
