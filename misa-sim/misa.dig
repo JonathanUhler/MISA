@@ -36,7 +36,7 @@
       <elementAttributes>
         <entry>
           <string>Frequency</string>
-          <int>50</int>
+          <int>10</int>
         </entry>
       </elementAttributes>
       <pos x="320" y="-80"/>
@@ -835,7 +835,7 @@ LW  - Done
 SW  - Done
 RSR - Done
 WSR - Done
-JAL - Need RADDR update
+JAL - Done
 JMP - Done</string>
         </entry>
       </elementAttributes>
@@ -2976,6 +2976,10 @@ JMP - Done</string>
       <p2 x="-860" y="1040"/>
     </wire>
     <wire>
+      <p1 x="-1380" y="1680"/>
+      <p2 x="400" y="1680"/>
+    </wire>
+    <wire>
       <p1 x="500" y="-20"/>
       <p2 x="520" y="-20"/>
     </wire>
@@ -3256,12 +3260,12 @@ JMP - Done</string>
       <p2 x="860" y="300"/>
     </wire>
     <wire>
-      <p1 x="-1360" y="1580"/>
-      <p2 x="-660" y="1580"/>
-    </wire>
-    <wire>
       <p1 x="-820" y="940"/>
       <p2 x="-720" y="940"/>
+    </wire>
+    <wire>
+      <p1 x="-680" y="1580"/>
+      <p2 x="-660" y="1580"/>
     </wire>
     <wire>
       <p1 x="300" y="1200"/>
@@ -3884,16 +3888,16 @@ JMP - Done</string>
       <p2 x="-220" y="1020"/>
     </wire>
     <wire>
-      <p1 x="-1380" y="1660"/>
-      <p2 x="400" y="1660"/>
-    </wire>
-    <wire>
       <p1 x="-160" y="380"/>
       <p2 x="-140" y="380"/>
     </wire>
     <wire>
       <p1 x="700" y="380"/>
       <p2 x="860" y="380"/>
+    </wire>
+    <wire>
+      <p1 x="-1360" y="1660"/>
+      <p2 x="-680" y="1660"/>
     </wire>
     <wire>
       <p1 x="-900" y="320"/>
@@ -3949,7 +3953,7 @@ JMP - Done</string>
     </wire>
     <wire>
       <p1 x="400" y="1300"/>
-      <p2 x="400" y="1660"/>
+      <p2 x="400" y="1680"/>
     </wire>
     <wire>
       <p1 x="660" y="380"/>
@@ -3994,6 +3998,10 @@ JMP - Done</string>
     <wire>
       <p1 x="-420" y="1380"/>
       <p2 x="-420" y="1560"/>
+    </wire>
+    <wire>
+      <p1 x="-680" y="1580"/>
+      <p2 x="-680" y="1660"/>
     </wire>
     <wire>
       <p1 x="-940" y="260"/>
@@ -4153,7 +4161,7 @@ JMP - Done</string>
     </wire>
     <wire>
       <p1 x="-1360" y="40"/>
-      <p2 x="-1360" y="1580"/>
+      <p2 x="-1360" y="1660"/>
     </wire>
     <wire>
       <p1 x="80" y="800"/>
@@ -4201,7 +4209,7 @@ JMP - Done</string>
     </wire>
     <wire>
       <p1 x="-1380" y="-160"/>
-      <p2 x="-1380" y="1660"/>
+      <p2 x="-1380" y="1680"/>
     </wire>
     <wire>
       <p1 x="-100" y="1200"/>
