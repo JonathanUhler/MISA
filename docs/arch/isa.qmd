@@ -229,22 +229,8 @@ which are required by all maps.
 
 ### Required Memory Regions
 
-Addresses 0xFFF0 - 0xFFFF are reserved for an eight-element hardware vector array and must always
-contain the following function pointers (which are absolute 16-bit addresses):
-
-| Vector Address  | Commentary   |
-|-----------------|--------------|
-| 0xFFF0 - 0xFFF1 | (Reserved)   |
-| 0xFFF2 - 0xFFF3 | (Reserved)   |
-| 0xFFF4 - 0xFFF5 | (Reserved)   |
-| 0xFFF6 - 0xFFF7 | (Reserved)   |
-| 0xFFF8 - 0xFFF9 | (Reserved)   |
-| 0xFFFA - 0xFFFB | (Reserved)   |
-| 0xFFFC - 0xFFFD | (Reserved)   |
-| 0xFFFE - 0xFFFF | Reset vector |
-
-When power is supplied, the microprocessor must load the program counter to be:
-`PC = Memory[0xFFFF] << 8 | Memory[0xFFFE]`.
+The region 0xFFF0 - 0xFFFF is reserved for reset code. When the processor is taken out of reset,
+the program counter must be initialized to 0xFFF0 and begin execution there.
 
 ### Recommended Memory Map
 
@@ -265,20 +251,20 @@ SECTION 0x8000 - 0xBFFF : ;
 // Program ROM
 SECTION 0xC000 - 0xFFEF : text rodata ;
 
-// Hardware vector addresses, described above
-SECTION 0xFFF0 - 0xFFFF : vectors ;
+// Reset code
+SECTION 0xFFF0 - 0xFFFF : reset ;
 ```
 
 Which define the following sections by convention:
 
-| Section   | Commentary                                                                                                                                                                                         |
-|-----------------|------------------------------------------------------------------------------------------------|
-| `direct`  | Contents to place in the first 256-byte page. This page may support faster memory operations on certain hardware implementations, and thus may be a desirable target for frequently accessed data. |
-| `data`    | Initialized global data that is mutable.                                                                                                                                                           |
-| `bss`     | Declared but uninitialized global data that is mutable. Runtime/startup code should initialize `bss` symbols to zero.                                                                              |
-| `text`    | Executable and immutable program code.                                                                                                                                                             |
-| `rodata`  | Initialized global constants.                                                                                                                                                                      |
-| `vectors` | The three required hardware vector addresses.                                                                                                                                                      |
+| Section  | Commentary                                                                                                                                                                                         |
+|----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `direct` | Contents to place in the first 256-byte page. This page may support faster memory operations on certain hardware implementations, and thus may be a desirable target for frequently accessed data. |
+| `data`   | Initialized global data that is mutable.                                                                                                                                                           |
+| `bss`    | Declared but uninitialized global data that is mutable. Runtime/startup code should initialize `bss` symbols to zero.                                                                              |
+| `text`   | Executable and immutable program code.                                                                                                                                                             |
+| `rodata` | Initialized global constants.                                                                                                                                                                      |
+| `reset`  | A small region for code to execute when the processor resets.                                                                                                                                      |
 
 ## Base Instructions
 

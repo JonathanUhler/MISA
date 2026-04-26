@@ -1,4 +1,4 @@
         .section text
 main:
-        set rt 0
+        set rt 0xFF
         ret
