@@ -8,6 +8,7 @@ from the average computer science undergraduate degree into one project.
 
 The project includes the following software applications:
 
+- `misa-ar`: An archiver to bundle several object files together
 - `misa-as`: An assembler for the MISA instruction set that produces object files
 - `misa-ld`: A linker to produce flat binaries from one or more object files
 - `misa-nm`: A program to list symbol names imported and exported by object files
@@ -38,7 +39,7 @@ made in the local `install` directory. A custom path can be set by specifying th
 
 The install directory will be populated with the following tools:
 
-- `misa-as` and `mias-ld`: CLI utilities written in Python to make the usage of the Haskell
-  binaries easier.
-- `misa-as-exe`, `misa-ld-exe`, and `misa-nm-exe`: binaries built from the Haskell source that
-  provide a very minimal command line interface for use by the Python CLI wrappers.
+- `misa-ar`, `misa-as`, and `mias-ld`: CLI utilities written in Python to make the usage of the
+  Haskell binaries easier.
+- `misa-ar-exe`, `misa-as-exe`, `misa-ld-exe`, and `misa-nm-exe`: binaries built from the Haskell
+  source that provide a very minimal command line interface for use by the Python CLI wrappers.
