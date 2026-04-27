@@ -14,10 +14,11 @@ Author: Jonathan Uhler
 
 
 from argparse import ArgumentParser, Namespace
+import os
 from pathlib import Path
 import subprocess
 from subprocess import CompletedProcess
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from helpers import SmartHelpFormatter, error, format_subprocess_output
 
 
@@ -39,6 +40,10 @@ help_text: str = (
     "files produced by the misa-as assembler (run with -a) and combines them into a single flat "
     "binary, handling symbol placement and relocation."
     "\n\n"
+    "Archive files generated with the misa-ar archiver can also be passed as input to misa-ld. "
+    "These files are identified by the case-insensitive extension '.a'. Before running misa-ld, "
+    "any archives will be extracted with misa-ar, and the resulting object files passed to misa-ld."
+    "\n\n"
     "misa-ld accepts memory map files (a basic form of linker scripts) that explain to the "
     "linker how to place sections of the program binary within the address space. The basic "
     "grammar of the memory map file is:"
@@ -58,6 +63,32 @@ help_text: str = (
     "represents the entire 64kB address space allowed by the MISA instruction set architecture. "
     "This file can be loaded directly into memory of a MISA processor to run."
 )
+
+
+def sort_paths(paths: list) -> (list, list):
+    archive_extensions: set = {".a"}
+
+    archive_paths: list = []
+    obj_paths: list = []
+
+    for path in paths:
+        extension: str = os.path.splitext(path)[1]
+        if (extension.lower() in archive_extensions):
+            archive_paths.append(path)
+        else:
+            obj_paths.append(path)
+
+    return archive_paths, obj_paths
+
+
+def extract_archives(archive_paths: list, extract_dir: TemporaryDirectory) -> (bool, str):
+    for archive_path in archive_paths:
+        result: CompletedProcess = \
+            subprocess.run(["misa-ar", "x", archive_path, "-o", extract_dir.name])
+        extracted: bool = result.returncode == 0
+        if (not extracted):
+            return False, format_subprocess_output(result)
+    return True, ""
 
 
 def get_default_memmap() -> NamedTemporaryFile:
@@ -129,7 +160,15 @@ def main() -> None:
         memmap_file: NamedTemporaryFile = get_default_memmap()
         memmap_path: str = Path(memmap_file.name)
 
-    linked, errors = link(memmap_path, args.objfile, args.output)
+    archive_paths, obj_paths = sort_paths(args.objfile)
+    extract_dir: TemporaryDirectory = TemporaryDirectory()
+    extracted, errors = extract_archives(archive_paths, extract_dir)
+    extracted_paths: list = [os.path.join(extract_dir.name, extracted_file)
+                             for extracted_file in os.listdir(extract_dir.name)]
+    if (not extracted):
+        error(program_name, errors)
+
+    linked, errors = link(memmap_path, obj_paths + extracted_paths, args.output)
     if (not linked):
         error(program_name, errors)
 
