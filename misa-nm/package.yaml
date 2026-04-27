@@ -19,8 +19,8 @@ dependencies:
 - base >= 4.7 && < 5
 - bytestring
 - megaparsec
-- optparse-applicative
 - misa-as
+- text
 
 ghc-options:
 - -Wall

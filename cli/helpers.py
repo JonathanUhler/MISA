@@ -1,6 +1,9 @@
 from argparse import HelpFormatter
+import os
+import subprocess
 from subprocess import CompletedProcess
 import sys
+from tempfile import TemporaryDirectory
 import textwrap
 
 
@@ -34,3 +37,27 @@ def format_subprocess_output(process: CompletedProcess) -> str:
         output += process.stderr.decode("utf-8")
 
     return output
+
+
+def sort_paths(paths: list, extensions: set) -> (list, list):
+    matches: list = []
+    nonmatches: list = []
+
+    for path in paths:
+        extension: str = os.path.splitext(path)[1]
+        if (extension.lower() in extensions):
+            matches.append(path)
+        else:
+            nonmatches.append(path)
+
+    return matches, nonmatches
+
+
+def extract_archives(archive_paths: list, extract_dir: TemporaryDirectory) -> (bool, str):
+    for archive_path in archive_paths:
+        result: CompletedProcess = \
+            subprocess.run(["misa-ar", "x", archive_path, "-o", extract_dir.name])
+        extracted: bool = result.returncode == 0
+        if (not extracted):
+            return False, format_subprocess_output(result)
+    return True, ""

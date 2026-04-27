@@ -22,7 +22,7 @@ import shlex
 import subprocess
 from subprocess import CompletedProcess
 from tempfile import NamedTemporaryFile
-from helpers import SmartHelpFormatter, error, format_subprocess_output
+from helpers import SmartHelpFormatter, error, format_subprocess_output, sort_paths
 
 
 program_name: str = "misa-as"
@@ -57,38 +57,6 @@ help_text: str = (
     "provided to misa-as will be ignored. The -o flag cannot be specified with the -a flag when "
     "more than one source file is provided."
 )
-
-
-def sort_paths(asm_paths: list) -> (list, list):
-    """
-    Sorts a list of paths on the command line into assembly source files and object files based
-    on their file extensions.
-
-    Files that have the following case-insensitive extensions will be considered to be assembly
-    source files: .asm, .s, .src. All other files are considered to be object files and will be
-    passed to the linker without being assembled.
-
-    Arguments:
-      asm_paths (list): The list of all file paths from the command line, in any order.
-
-    Returns:
-      list: The list of files in the order they appear in asm_paths which are source files.
-      list: The list of files in the order they appear in asm_paths which are NOT source files.
-    """
-
-    src_extensions: set = {".asm", ".s", ".src"}
-
-    src_paths: list = []
-    obj_paths: list = []
-
-    for asm_path in asm_paths:
-        extension: str = os.path.splitext(asm_path)[1]
-        if (extension.lower() in src_extensions):
-            src_paths.append(asm_path)
-        else:
-            obj_paths.append(asm_path)
-
-    return src_paths, obj_paths
 
 
 def generate_output_paths(src_paths: list) -> list:
@@ -269,7 +237,7 @@ def main() -> None:
                         help = "assemble source files <asmfile ...>")
     args: Namespace = parser.parse_args()
 
-    src_paths, obj_paths = sort_paths(args.asmfile)
+    src_paths, obj_paths = sort_paths(args.asmfile, {".asm", ".s", ".src"})
     artifact_files: list = assemble_all(src_paths)
 
     if (args.assemble):

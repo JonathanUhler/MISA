@@ -19,7 +19,11 @@ from pathlib import Path
 import subprocess
 from subprocess import CompletedProcess
 from tempfile import NamedTemporaryFile, TemporaryDirectory
-from helpers import SmartHelpFormatter, error, format_subprocess_output
+from helpers import (SmartHelpFormatter,
+                     error,
+                     format_subprocess_output,
+                     sort_paths,
+                     extract_archives)
 
 
 default_memmap: str = \
@@ -63,32 +67,6 @@ help_text: str = (
     "represents the entire 64kB address space allowed by the MISA instruction set architecture. "
     "This file can be loaded directly into memory of a MISA processor to run."
 )
-
-
-def sort_paths(paths: list) -> (list, list):
-    archive_extensions: set = {".a"}
-
-    archive_paths: list = []
-    obj_paths: list = []
-
-    for path in paths:
-        extension: str = os.path.splitext(path)[1]
-        if (extension.lower() in archive_extensions):
-            archive_paths.append(path)
-        else:
-            obj_paths.append(path)
-
-    return archive_paths, obj_paths
-
-
-def extract_archives(archive_paths: list, extract_dir: TemporaryDirectory) -> (bool, str):
-    for archive_path in archive_paths:
-        result: CompletedProcess = \
-            subprocess.run(["misa-ar", "x", archive_path, "-o", extract_dir.name])
-        extracted: bool = result.returncode == 0
-        if (not extracted):
-            return False, format_subprocess_output(result)
-    return True, ""
 
 
 def get_default_memmap() -> NamedTemporaryFile:
@@ -160,7 +138,7 @@ def main() -> None:
         memmap_file: NamedTemporaryFile = get_default_memmap()
         memmap_path: str = Path(memmap_file.name)
 
-    archive_paths, obj_paths = sort_paths(args.objfile)
+    archive_paths, obj_paths = sort_paths(args.objfile, {".a"})
     extract_dir: TemporaryDirectory = TemporaryDirectory()
     extracted, errors = extract_archives(archive_paths, extract_dir)
     extracted_paths: list = [os.path.join(extract_dir.name, extracted_file)

@@ -34,7 +34,7 @@ library
     , bytestring
     , megaparsec
     , misa-as
-    , optparse-applicative
+    , text
   default-language: Haskell2010
 
 executable misa-nm-exe
@@ -52,7 +52,7 @@ executable misa-nm-exe
     , megaparsec
     , misa-as
     , misa-nm
-    , optparse-applicative
+    , text
   default-language: Haskell2010
 
 test-suite misa-nm-test
@@ -71,5 +71,5 @@ test-suite misa-nm-test
     , megaparsec
     , misa-as
     , misa-nm
-    , optparse-applicative
+    , text
   default-language: Haskell2010
