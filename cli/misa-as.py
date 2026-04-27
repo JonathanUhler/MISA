@@ -201,6 +201,15 @@ def emit_artifact_files(artifact_files: list, output_paths: list) -> None:
             output_file.write(artifact_file.read())
 
 
+def emit_archive_file(artifact_files: list, output_path: str) -> None:
+    result: CompletedProcess = \
+        subprocess.run(["misa-ar", "c",
+                        *[artifact_file.name for artifact_file in artifact_files],
+                        "-o", output_path])
+    if (result.returncode != 0):
+        error(program_name, format_subprocess_output(result))
+
+
 def link_artifact_files(artifact_files: list,
                         obj_paths: list,
                         linker: str,
@@ -265,10 +274,11 @@ def main() -> None:
 
     if (args.assemble):
         if (len(artifact_files) > 1 and args.output is not None):
-            error(program_name, "-o cannot be specified with -a and more than one source file")
-        output_paths: list = \
-            [args.output] if args.output is not None else generate_output_paths(src_paths)
-        emit_artifact_files(artifact_files, output_paths)
+            emit_archive_file(artifact_files, args.output)
+        else:
+            output_paths: list = \
+                [args.output] if args.output is not None else generate_output_paths(src_paths)
+            emit_artifact_files(artifact_files, output_paths)
     else:
         link_artifact_files(artifact_files,
                             obj_paths,
