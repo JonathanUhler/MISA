@@ -24,6 +24,56 @@ The assembler produces object files in a simple format accepted by the MISA link
 assembling will also invoke the linker to produce a final binary, although this step can be
 omitted.
 
+### Assembler Semantics
+
+#### Instructions
+
+`misa-as` supports the instruction semantics defined in the "Usage" notes of the ISA chapter.
+Opcodes and instruction operands are not comma-separated, and are case-insensitive.
+
+#### Labels
+
+Labels are programmer-defined symbols in assembly source code that are resolved to specific
+addresses by the linker. Labels are C-style identifiers (containg the characters '_', a-z, A-Z, and
+0-9, but not starting with 0-9) which end with a colon (':').
+
+Label names are global to a binary at the linking stage, and can only be defined once. Assembly
+written for the MISA standard library and other system code reserves double-underscore prefix `__`
+for "local" labels. The recommended convention local labels in created by compilers and non-library
+assembly is a single-underscore prefix `_`. In both cases, local labels should use the name of
+their containing function as a discriminant. Compilers are encouraged to support name mangling for
+global function labels.
+
+During linking, labels used as instruction operands will be resolved to the address of the
+first instruction after the label. For example, consider the following code:
+
+```asm
+    SET RA 0
+    SET RB 10
+loop:
+    SET2 RYZ loop
+    JMP LESS RA RB
+```
+
+In this case, the label `loop` has the relative address in this code of 0x0004, and refers to
+the `SET2` instruction.
+
+#### Directives
+
+`misa-as` supports several assembler directives that change the behavior of the assembler and its
+code generation. Directives are C-style reserved identifiers that begin with a period ('.') and
+may take one or more operands.
+
+The following directives are currently supported by `misa-as`:
+
+- `.word <Word8>`: Emits the raw byte `<Word8>` in the generated code at the location of the
+  directive
+- `.array <Word8> [Word8...]`: Emits the raw bytes `<Word8> [Word8...]` in the generated code at the
+  location of the directive. Earlier bytes in the array definition will be placed at lower
+  addresses. `.array` is equivalent to many consecutive `.word` directives
+- `.section <String>`: Defines for the linker that all the following code until the next
+  section directive should be placed in a section called `<String>`
+
 ### MISA Linkable Format
 
 Object files produced by `misa-as` are in the custom `MISA_LF` linkable format, which are binary

@@ -28,8 +28,8 @@ data storage, defined by the following ABI:
 | `RV`     | Saved                     |               | 1010     |
 | `RW`     | Saved                     | `RWX`         | 1011     |
 | `RX`     | Saved                     |               | 1100     |
-| `RY`     | Scratch                   | `RYZ`         | 1101     |
-| `RZ`     | Scratch                   |               | 1110     |
+| `RY`     | Assembler scratch         | `RYZ`         | 1101     |
+| `RZ`     | Assembler scratch         |               | 1110     |
 | `RT`     | Argument/return/temporary | N/A           | 1111     |
 
 The `R0` register must be hard-wired to ignore writes and always return the value `0b00000000` on
@@ -38,13 +38,16 @@ using the two 8-bit register names in order. For instance, `RAB` is semantically
 `RA, RB` in that order. General purpose registers can be taken as the operands to most instructions
 which operate on registers.
 
-The order of argument and return registers is `RT` first, then `RA` through `RF` in order. Argument
+Argument and return registers are `RA` - `RF` and `RT`. The `RT` register should be used as the
+first return register, if the value being returned logically fits in a single (not wide) register.
+Otherwise, the register pair `RAB` should be preferred as the first return register. Argument
 registers are also temporary registers (caller-saved). `RG` through `RX` are saved registers
 (callee-saved).
 
 The `RYZ` wide register is reserved as a "scratch" 16-bit register for the assembler. Certain
-pseudo-instructions and other macros will use this register when a temporary value is needed. As
-such, the value of `RYZ` should not be assumed to persist over time.
+pseudo-instructions and other macros will use this register when a temporary value is needed (like
+loading an address to jump to). As such, the value of `RYZ` should not be assumed to persist over
+time.
 
 ## Control and Status Registers
 
