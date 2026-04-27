@@ -32,7 +32,6 @@ resolvePseudoInsts (stat : stats) =
 resolvePseudoInst :: Inst -> [Inst]
 resolvePseudoInst inst = case inst of
   NopInst              -> [OrInst R0 R0 R0]
-  NotInst  rd  rs1     -> [XorInst rd rs1 rs1]
   MovInst  rd  rs1     -> [OrInst rd rs1 R0]
   CmpInst  rs1 rs2     -> [SubInst R0 rs1 rs2]
   Set2Inst rs1 rs2 imm -> [SetInst rs1 (highImm imm), SetInst rs2 (lowImm imm)]

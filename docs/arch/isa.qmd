@@ -736,13 +736,6 @@ Meaning: `OR R0 R0 R0`
 
 Description: Do nothing.
 
-### `NOT`
-Usage: `NOT RD RS1`
-
-Meaning: `XOR RD RS1 RS1`
-
-Description: Compute the logical negation of `RS1` and store the result in `RD`.
-
 ### `RET`
 Usage: `RET`
 
