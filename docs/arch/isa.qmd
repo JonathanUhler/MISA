@@ -220,6 +220,33 @@ are:
 | Address overflow | 000      | A memory operation attempted to access an address which is outside the mapped memory space. |
 | PC overflow      | 001      | The program counter overflowed an unsigned 16-bit value.                                    |
 
+## Data Formats and Alignments
+
+The MISA architecture defined in this chapter only supports 8-bit signed integers using two's
+complement encoding, where the value of an integer is given by the sum of its active bits:
+
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        {"name": "1", "bits": 1},
+        {"name": "2", "bits": 1},
+        {"name": "4", "bits": 1},
+        {"name": "8", "bits": 1},
+        {"name": "16", "bits": 1},
+        {"name": "32", "bits": 1},
+        {"name": "64", "bits": 1},
+        {"name": "-127", "bits": 1}
+    ],
+    "config": {"bits": 8}
+})).tostring())
+```
+
+16-bit data types may be supported in software using the `ADC` and `SBB` instructions for
+arithmetic.
+
 ## Memory
 
 The MISA architecture supports up to a 16-bit address bus for memory operations, and memory must
@@ -265,6 +292,22 @@ Which define the following sections by convention:
 | `text`   | Executable and immutable program code.                                                                                                                                                             |
 | `rodata` | Initialized global constants.                                                                                                                                                                      |
 | `reset`  | A small region for code to execute when the processor resets.                                                                                                                                      |
+
+## Reset
+
+When the processor is taken out of the reset state, it is guaranteed by the ISA to initialize some
+internal state, including:
+
+- The program counter must be set to `0xFFF0` and begin program execution of an instruction placed
+  at addresses `0xFFF0` - `0xFFF1`
+
+The state of general purpose registers and control and status registers is implementation defined.
+
+## Exceptions and Interrupts
+
+The core ISA defined in this chapter does not support traditional exceptions or interrupts. The
+`CAUSE` special register is intended for use as a diagnostic tool, and `HALT` is the only
+instruction that is required to update it.
 
 ## Base Instructions
 
