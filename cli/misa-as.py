@@ -15,20 +15,18 @@ Author: Jonathan Uhler
 """
 
 
-from argparse import ArgumentParser, HelpFormatter, Namespace
+from argparse import ArgumentParser, Namespace
 import os
 from pathlib import Path
 import shlex
 import subprocess
 from subprocess import CompletedProcess
-import sys
 from tempfile import NamedTemporaryFile
-import textwrap
+from helpers import SmartHelpFormatter, error, format_subprocess_output
 
 
+program_name: str = "misa-as"
 version_text: str = "0.1.0.0"
-
-
 help_text: str = (
     "misa-as is the assembler for the MISA instruction set architecture. It is intended to "
     "assemble source assembly language files into object files for use by the misa-ld linker."
@@ -59,66 +57,6 @@ help_text: str = (
     "provided to misa-as will be ignored. The -o flag cannot be specified with the -a flag when "
     "more than one source file is provided."
 )
-
-
-class SmartHelpFormatter(HelpFormatter):
-    """
-    An argparse formatter help text than preserves explicit newlines in the original help text,
-    but still wraps lines within the same sentence (split by \n).
-    """
-
-    def _fill_text(self, text: str, width: int, indent: int):
-        lines: list = text.splitlines()
-        wrapped: list = [
-            textwrap.fill(line, width, initial_indent = indent, subsequent_indent = indent)
-            for line in lines
-        ]
-        return "\n".join(wrapped)
-
-
-def error(message: str, retcode: int = 1) -> None:
-    """
-    Produces an error message from misa-as and exits with a failure return code.
-
-    Arguments:
-      message (str): The message to print to standard output, which will be prefixed with the
-                     extra string "misa-as: error: "
-      retcode (int): The return code to exit with.
-    """
-
-    print(f"misa-as: error: {message}")
-    sys.exit(retcode)
-
-
-def format_subprocess_output(process: CompletedProcess) -> str:
-    """
-    Retreives and formats the output of a subprocess CompletedProcess object.
-
-    This method checks if stdout and stderr are present. If they are, they are added to the
-    formatted output returned by this function in that order. If only one is present, only it will
-    be added. If both are present, they are separated by a single newline. If both streams are
-    empty, an empty string is returned.
-
-    Arguments:
-      process (CompletedProcess): The result of a subprocess running.
-
-    Returns:
-      str: The formatted output of the subprocess, if present.
-    """
-
-    output: str = ""
-
-    has_stdout: bool = len(process.stdout) > 0
-    has_stderr: bool = len(process.stderr) > 0
-
-    if (has_stdout):
-        output += process.stdout.decode("utf-8")
-        if (has_stderr):
-            output += "\n"
-    if (has_stderr):
-        output += process.stderr.decode("utf-8")
-
-    return output
 
 
 def sort_paths(asm_paths: list) -> (list, list):
@@ -233,7 +171,7 @@ def assemble_all(src_paths: list) -> list:
         out_path: Path = Path(out_file.name)
         assembled, errors = assemble(src_path, out_path)
         if (not assembled):
-            error(errors)
+            error(program_name, errors)
         artifact_files.append(out_file)
 
     return artifact_files
@@ -255,7 +193,7 @@ def emit_artifact_files(artifact_files: list, output_paths: list) -> None:
     """
 
     if (len(artifact_files) != len(output_paths)):
-        error("-o cannot be specified with -a and more than one source file")
+        error(program_name, "-o cannot be specified with -a and more than one source file")
 
     for i, artifact_file in enumerate(artifact_files):
         output_path: str = output_paths[i]
@@ -295,7 +233,7 @@ def link_artifact_files(artifact_files: list,
 
     result: CompletedProcess = subprocess.run(shlex.split(linker_command), capture_output = True)
     if (result.returncode != 0):
-        error(f"linker messages\n{format_subprocess_output(result)}")
+        error(program_name, f"linker messages\n{format_subprocess_output(result)}")
 
 
 def main() -> None:
@@ -304,7 +242,7 @@ def main() -> None:
     """
 
     parser: ArgumentParser = ArgumentParser(
-        prog = "misa-as",
+        prog = program_name,
         formatter_class = SmartHelpFormatter,
         description = help_text
     )
@@ -327,7 +265,7 @@ def main() -> None:
 
     if (args.assemble):
         if (len(artifact_files) > 1 and args.output is not None):
-            error("-o cannot be specified with -a and more than one source file")
+            error(program_name, "-o cannot be specified with -a and more than one source file")
         output_paths: list = \
             [args.output] if args.output is not None else generate_output_paths(src_paths)
         emit_artifact_files(artifact_files, output_paths)

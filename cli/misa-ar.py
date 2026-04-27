@@ -1,18 +1,27 @@
 #!/usr/bin/python3
 
 
-from argparse import ArgumentParser, HelpFormatter, Namespace
+"""
+The command line interface wrapper for the misa archiver misa-ar written in Haskell.
+
+The archiver functionality can be found int he misa-ar subdirectory of this repository. The Haskell
+code has a very basic CLI, which this script extends with a prettier one.
+
+See the help text (-h) for more information on usage.
+
+Author: Jonathan Uhler
+"""
+
+
+from argparse import ArgumentParser, Namespace
 from pathlib import Path
 import subprocess
 from subprocess import CompletedProcess
-import sys
-from tempfile import NamedTemporaryFile
-import textwrap
+from helpers import SmartHelpFormatter, error, format_subprocess_output
 
 
+program_name: str = "misa-ar"
 version_text: str = "0.1.0.0"
-
-
 help_text: str = (
     "misa-ar is an archiver tool for object files in the MISA linkable format. It takes one or "
     "more object files produced by the misa-as assembler (run with -a) and combines them into a "
@@ -29,38 +38,6 @@ help_text: str = (
     "\n"
     "  x\tExtract the files within an archive."
 )
-
-
-class SmartHelpFormatter(HelpFormatter):
-
-    def _fill_text(self, text: str, width: int, indent: int):
-        lines: list = text.splitlines()
-        wrapped: list = [
-            textwrap.fill(line, width,  initial_indent = indent, subsequent_indent = indent)
-            for line in lines
-        ]
-        return "\n".join(wrapped)
-
-
-def error(message: str) -> None:
-    print(f"misa-ar: error: {message}")
-    sys.exit(1)
-
-
-def format_subprocess_output(process: CompletedProcess) -> str:
-    output: str = ""
-
-    has_stdout: bool = len(process.stdout) > 0
-    has_stderr: bool = len(process.stderr) > 0
-
-    if (has_stdout):
-        output += process.stdout.decode("utf-8")
-        if (has_stderr):
-            output += "\n"
-    if (has_stderr):
-        output += process.stderr.decode("utf-8")
-
-    return output
 
 
 def create(obj_paths: list, out_path: Path) -> (bool, str):
@@ -84,7 +61,7 @@ def main() -> None:
     """
 
     parser: ArgumentParser = ArgumentParser(
-        prog = "misa-ar",
+        prog = program_name,
         formatter_class = SmartHelpFormatter,
         description = help_text
     )
@@ -105,15 +82,16 @@ def main() -> None:
 
     args: Namespace = parser.parse_args()
 
+    finished, errors = False, None
     if (args.command == "c"):
         finished, errors = create(args.objfile, args.output)
     elif (args.command == "x"):
         finished, errors = extract(args.archive, args.output)
     else:
-        error(f"unsupported action '{args.command}'")
+        error(program_name, f"unsupported action '{args.command}'")
 
     if (not finished):
-        error(errors)
+        error(program_name, errors)
 
 
 if (__name__ == "__main__"):

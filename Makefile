@@ -19,12 +19,13 @@ docs:
 	cd docs/arch && quarto render --to pdf
 
 
-CLI_SCRIPTS := $(wildcard cli/*.py)
-CLI_TARGETS := $(patsubst cli/%.py, $(INSTALL_DIR)/%, $(CLI_SCRIPTS))
+CLI_SCRIPTS := $(wildcard cli/misa-*.py)
+CLI_TARGETS := $(patsubst cli/misa-%.py, $(INSTALL_DIR)/misa-%, $(CLI_SCRIPTS))
 
 
 install: $(CLI_TARGETS)
 	@mkdir -p $(INSTALL_DIR)
+	cp cli/helpers.py $(INSTALL_DIR)
 	stack install --work-dir $(BUILD_DIR) --local-bin-path $(INSTALL_DIR)
 
 
