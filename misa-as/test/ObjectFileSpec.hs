@@ -1,4 +1,4 @@
-module EncoderSpec (spec) where
+module ObjectFileSpec (spec) where
 
 
 import Test.Hspec
