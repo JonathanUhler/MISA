@@ -5,4 +5,5 @@ import Test.Hspec
 
 
 spec :: Spec
-spec = undefined
+spec = do
+  describe "foo" $ do it "foo" $ 0 `shouldBe` 0
