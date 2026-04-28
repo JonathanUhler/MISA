@@ -35,7 +35,7 @@ data Statement
   | LabelStatement Label
   -- | A statement which is a reserved assembler or linker directive.
   | DirStatement Dir
-  deriving (Show)
+  deriving (Show, Eq)
 
 
 -- | The type of an instruction in the assembly language.
