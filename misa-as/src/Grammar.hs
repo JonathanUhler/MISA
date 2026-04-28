@@ -65,7 +65,7 @@ data Inst
   | CallInst GpReg   GpReg
   | RetInst
   | ClrInst
-  deriving (Show)
+  deriving (Show, Eq)
 
 
 -- | The list of instruction opcodes.
@@ -79,7 +79,7 @@ data Op
 
 -- | The list of general purpose register names.
 data GpReg = R0 | RA | RB | RC | RD | RE | RF | RG | RH | RU | RV | RW | RX | RY | RZ | RT
-  deriving (Show, Enum, Bounded)
+  deriving (Show, Enum, Bounded, Eq)
 
 
 -- | The list of 16-bit general purpose register aliases.
@@ -88,24 +88,24 @@ data WideReg = RAB | RCD | REF | RGH | RUV | RWX | RYZ
 
 
 data CsrReg = SADDR | RADDR | FLAGS | CAUSE
-  deriving (Show, Enum, Bounded)
+  deriving (Show, Enum, Bounded, Eq)
 
 
 data CmpFlag = ALWAYS | EQUAL | NOT_EQUAL | GREATER | LESS | GREATER_EQUAL | LESS_EQUAL
-  deriving (Show, Enum, Bounded)
+  deriving (Show, Enum, Bounded, Eq)
 
 
 data Imm
   = IntImm ImmPart Int
   | LabelImm ImmPart Label
-  deriving (Show)
+  deriving (Show, Eq)
 
 
 data ImmPart
   = Low
   | High
   | Full
-  deriving (Show)
+  deriving (Show, Eq)
 
 
 -- | The type of a label definition/name.
@@ -120,4 +120,4 @@ data Dir
   | ArrayDir [Word8]
   -- | The .section directive, .section NAME => place following binary in section called NAME
   | SectionDir String
-  deriving (Show)
+  deriving (Show, Eq)

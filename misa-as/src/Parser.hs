@@ -203,4 +203,4 @@ parseStatement =
 
 
 parseProgram :: Parser Program
-parseProgram = (some (skip *> parseStatement)) <* eof
+parseProgram = (some (skip *> parseStatement <* skip)) <* eof
