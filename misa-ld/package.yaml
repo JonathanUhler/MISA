@@ -21,6 +21,7 @@ dependencies:
 - bytestring
 - containers
 - megaparsec
+- hspec
 
 ghc-options:
 - -Wall

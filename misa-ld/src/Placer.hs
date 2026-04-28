@@ -8,7 +8,7 @@ import Grammar
 
 
 data PlacedSec = PlacedSec Sec Word16
-  deriving Show
+  deriving (Show, Eq)
 
 
 placeSecs :: [BinaryObject] -> MemMap -> [PlacedSec]
