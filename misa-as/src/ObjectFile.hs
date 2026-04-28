@@ -13,6 +13,20 @@ module ObjectFile (BinaryObject,
                    RelocTable,
                    Reloc(..),
                    RelocType(..),
+                   packInst,
+                   packCode,
+                   packCodeElem,
+                   packSyms,
+                   packSym,
+                   packRelocs,
+                   packReloc,
+                   packSec,
+                   unpackCode,
+                   unpackSyms,
+                   unpackSym,
+                   unpackRelocs,
+                   unpackReloc,
+                   unpackSec,
                    packBinaryObject,
                    packNamedBinaryObject,
                    unpackBinaryObject,
@@ -50,7 +64,7 @@ object file/final binary), symbols defined within the section and their section-
 and relocations used in the section with section-relative addresses to the "holes" in the code.
 -}
 data Sec = Sec Label Code SymTable RelocTable
-  deriving (Show)
+  deriving (Show, Eq)
 
 
 -- | The type of a section's code, which is a list of instructions or binary literals.
@@ -63,7 +77,7 @@ data CodeElem
   = InstCode Inst
   -- | Literal binary data in the code of a section (e.g. from .array/.word directives).
   | LiteralCode [Word8]
-  deriving (Show)
+  deriving (Show, Eq)
 
 
 -- | The type of a symbol table.
@@ -72,7 +86,7 @@ type SymTable = [Sym]
 
 -- | The type of a symbol in a section, which is a labeled section-relative address.
 data Sym = Sym Label Word16
-  deriving (Show)
+  deriving (Show, Eq)
 
 
 -- | The type of a relocation table.
@@ -85,7 +99,7 @@ missing symbol existed in the assembly code. The relocation includes the name of
 and which part of the symbol (e.g. high or low word) should be used to fill the hole.
 -}
 data Reloc = Reloc RelocType Word16 Label
-  deriving (Show)
+  deriving (Show, Eq)
 
 
 -- | How to fill a relocation.
@@ -267,7 +281,6 @@ sections. To navigate the object file, sub-components must be recursively visite
 the size of a section's code, number of symbols, size of each symbol, number of relocations, ...)
 -}
 packBinaryObject :: BinaryObject -> [Word8]
-packBinaryObject [] = packDoubleWord 0
 packBinaryObject secs
   =  B.unpack (E.encodeUtf8 (T.pack magicHeader))
   ++ packDoubleWord (fromIntegral (length secs))
