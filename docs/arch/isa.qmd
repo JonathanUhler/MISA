@@ -13,24 +13,24 @@ order.
 The general-purpose register file contains sixteen, 8-bit registers for general computation and
 data storage, defined by the following ABI:
 
-| ABI Name | ABI Purpose               | Wide ABI Name | Encoding |
-|----------|---------------------------|---------------|----------|
-| `R0`     | Hard-wired zero           | N/A           | 0000     |
-| `RA`     | Argument/temporary        | `RAB`         | 0001     |
-| `RB`     | Argument/temporary        |               | 0010     |
-| `RC`     | Argument/temporary        | `RCD`         | 0011     |
-| `RD`     | Argument/temporary        |               | 0100     |
-| `RE`     | Argument/temporary        | `REF`         | 0101     |
-| `RF`     | Argument/temporary        |               | 0110     |
-| `RG`     | Saved                     | `RGH`         | 0111     |
-| `RH`     | Saved                     |               | 1000     |
-| `RU`     | Saved                     | `RUV`         | 1001     |
-| `RV`     | Saved                     |               | 1010     |
-| `RW`     | Saved                     | `RWX`         | 1011     |
-| `RX`     | Saved                     |               | 1100     |
-| `RY`     | Assembler scratch         | `RYZ`         | 1101     |
-| `RZ`     | Assembler scratch         |               | 1110     |
-| `RT`     | Argument/return/temporary | N/A           | 1111     |
+| ABI Name    | ABI Purpose               | Wide ABI Name | Encoding |
+|-------------|---------------------------|---------------|----------|
+| `R0`        | Hard-wired zero           | N/A           | 0000     |
+| `RA`        | Argument/temporary        | `RAB`         | 0001     |
+| `RB`        | Argument/temporary        |               | 0010     |
+| `RC`        | Argument/temporary        | `RCD`         | 0011     |
+| `RD`        | Argument/temporary        |               | 0100     |
+| `RE`        | Argument/temporary        | `REF`         | 0101     |
+| `RF`        | Argument/temporary        |               | 0110     |
+| `RU`        | Saved                     | `RUV`         | 0111     |
+| `RV`        | Saved                     |               | 1000     |
+| `RW`        | Saved                     | `RWX`         | 1001     |
+| `RX`        | Saved                     |               | 1010     |
+| `RY`        | Saved                     | `RYZ`         | 1011     |
+| `RZ`        | Saved                     |               | 1100     |
+| `RT`        | Argument/return/temporary | N/A           | 1101     |
+| `RSCRATCH0` | Assembler scratch         | `RSCRATCH`    | 1110     |
+| `RSCRATCH1` | Assembler scratch         |               | 1111     |
 
 The `R0` register must be hard-wired to ignore writes and always return the value `0b00000000` on
 reads. Wide registers are formed by two general-purpose registers, which must be equivalent to
@@ -44,10 +44,10 @@ Otherwise, the register pair `RAB` should be preferred as the first return regis
 registers are also temporary registers (caller-saved). `RG` through `RX` are saved registers
 (callee-saved).
 
-The `RYZ` wide register is reserved as a "scratch" 16-bit register for the assembler. Certain
+The `RSCRATCH` wide register is reserved as a "scratch" 16-bit register for the assembler. Certain
 pseudo-instructions and other macros will use this register when a temporary value is needed (like
-loading an address to jump to). As such, the value of `RYZ` should not be assumed to persist over
-time.
+loading an address to jump to). As such, the value of `RSCRATCH` should not be assumed to persist
+over time.
 
 ## Control and Status Registers
 
@@ -120,8 +120,8 @@ Both branching instructions, `JAL` and `JMP`, use these flags to make decisions 
 will be taken.
 
 `FLAGS` is set based on the result of each ALU operation. The instructions which must update
-the `FLAGS` register are: `ADD`, `ADC`, `SUB`, `SBB`. Instructions which may, depending on the
-implementation, update the `FLAGS` register are: `HALT`, `AND`, `OR`, `XOR`, `RRC`, `SET`.
+the `FLAGS` register are: `ADD`, `ADC`, `SUB`, `SBB`, `RRC`. Instructions which may, depending on
+the implementation, update the `FLAGS` register are: `HALT`, `AND`, `OR`, `XOR`, `SET`.
 Instructions which must not update the `FLAGS` register are: `LW`, `SW`, `RSR`, `WSR` (must not
 update `FLAGS` asynchronously through the ALU output, but will update `FLAGS` if writing directly
 to it), `JAL`, `JMP`. A conditional branch that relies on `FLAGS` should be performed immediately
@@ -739,7 +739,7 @@ Description: Do nothing.
 ### `RET`
 Usage: `RET`
 
-Meaning: `RSR RADDR RYZ`, `JMP ALWAYS RYZ`
+Meaning: `RSR RADDR RSCRATCH`, `JMP ALWAYS RSCRATCH`
 
 Description: Return to the address in `RADDR`.
 

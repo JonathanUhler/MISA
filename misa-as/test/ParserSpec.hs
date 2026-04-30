@@ -60,7 +60,7 @@ spec = do
     it "parses add with all registers (second set)" $
       "add rc rd re" `parsesAs` AddInst RC RD RE
     it "parses add with all registers (third set)" $
-      "add rf rg rh" `parsesAs` AddInst RF RG RH
+      "add rf ru rv" `parsesAs` AddInst RF RU RV
     it "parses add with all registers (fourth set)" $
       "add ru rv rw" `parsesAs` AddInst RU RV RW
     it "parses add with all registers (fifth set)" $
@@ -86,7 +86,7 @@ spec = do
     it "parses sub with different registers" $
       "sub ra rb rc" `parsesAs` SubInst RA RB RC
     it "parses sub with all registers combinations" $
-      "sub rg rh ru" `parsesAs` SubInst RG RH RU
+      "sub ru rv ru" `parsesAs` SubInst RU RV RU
 
   describe "SBB" $ do
     it "parses sbb with all same registers" $
@@ -110,7 +110,7 @@ spec = do
     it "parses or with different registers" $
       "or ra rb rc" `parsesAs` OrInst RA RB RC
     it "parses or with all registers" $
-      "or rf rg rh" `parsesAs` OrInst RF RG RH
+      "or rf ru rv" `parsesAs` OrInst RF RU RV
 
   describe "XOR" $ do
     it "parses xor with all same registers" $
@@ -130,7 +130,7 @@ spec = do
     it "parses rrc with all registers (second)" $
       "rrc re rf" `parsesAs` RrcInst RE RF
     it "parses rrc with all registers (third)" $
-      "rrc rg rh" `parsesAs` RrcInst RG RH
+      "rrc rscratch0 rscratch1" `parsesAs` RrcInst RSCRATCH0 RSCRATCH1
     it "parses rrc with all registers (fourth)" $
       "rrc ru rv" `parsesAs` RrcInst RU RV
     it "parses rrc with all registers (fifth)" $
@@ -152,9 +152,9 @@ spec = do
     it "parses lw with wide register RCD" $
       "lw re rcd" `parsesAs` LwInst RE RC RD
     it "parses lw with wide register REF" $
-      "lw rg ref" `parsesAs` LwInst RG RE RF
-    it "parses lw with wide register RGH" $
-      "lw rh rgh" `parsesAs` LwInst RH RG RH
+      "lw ru rscratch" `parsesAs` LwInst RU RSCRATCH0 RSCRATCH1
+    it "parses lw with wide register RSCRATCH" $
+      "lw rv rscratch" `parsesAs` LwInst RV RSCRATCH0 RSCRATCH1
     it "parses lw with wide register RUV" $
       "lw ra ruv" `parsesAs` LwInst RA RU RV
     it "parses lw with wide register RWX" $
@@ -175,10 +175,10 @@ spec = do
       "sw re rcd" `parsesAs` SwInst RE RC RD
     it "parses sw with wide register REF" $
       "sw rf ref" `parsesAs` SwInst RF RE RF
-    it "parses sw with wide register RGH" $
-      "sw rg rgh" `parsesAs` SwInst RG RG RH
+    it "parses sw with wide register RSCRATCH" $
+      "sw ru rscratch" `parsesAs` SwInst RU RSCRATCH0 RSCRATCH1
     it "parses sw with wide register RUV" $
-      "sw rh ruv" `parsesAs` SwInst RH RU RV
+      "sw rv rscratch" `parsesAs` SwInst RV RSCRATCH0 RSCRATCH1
     it "parses sw with wide register RWX" $
       "sw ru rwx" `parsesAs` SwInst RU RW RX
     it "parses sw with wide register RYZ" $
@@ -194,7 +194,7 @@ spec = do
     it "parses rsr with FLAGS" $
       "rsr flags re rf" `parsesAs` RsrInst FLAGS RE RF
     it "parses rsr with CAUSE" $
-      "rsr cause rg rh" `parsesAs` RsrInst CAUSE RG RH
+      "rsr cause rscratch" `parsesAs` RsrInst CAUSE RSCRATCH0 RSCRATCH1
     it "parses rsr with all registers" $
       "rsr saddr ru rv" `parsesAs` RsrInst SADDR RU RV
     it "parses rsr case-insensitively" $
@@ -208,7 +208,7 @@ spec = do
     it "parses wsr with FLAGS" $
       "wsr flags re rf" `parsesAs` WsrInst FLAGS RE RF
     it "parses wsr with CAUSE" $
-      "wsr cause rg rh" `parsesAs` WsrInst CAUSE RG RH
+      "wsr cause rscratch" `parsesAs` WsrInst CAUSE RSCRATCH0 RSCRATCH1
     it "parses wsr with all registers" $
       "wsr saddr rw rx" `parsesAs` WsrInst SADDR RW RX
     it "parses wsr case-insensitively" $
@@ -228,9 +228,9 @@ spec = do
     it "parses set with octal immediate" $
       "set rf 0o377" `parsesAs` SetInst RF (IntImm Low 255)
     it "parses set with label" $
-      "set rg myLabel" `parsesAs` SetInst RG (LabelImm Low "myLabel")
+      "set ru myLabel" `parsesAs` SetInst RU (LabelImm Low "myLabel")
     it "parses set with label case-insensitively" $
-      "set rh another_label" `parsesAs` SetInst RH (LabelImm Low "another_label")
+      "set rscratch0 another_label" `parsesAs` SetInst RSCRATCH0 (LabelImm Low "another_label")
     it "parses set with underscores in label" $
       "set ru _label_123" `parsesAs` SetInst RU (LabelImm Low "_label_123")
     it "parses set case-insensitively" $
@@ -244,7 +244,7 @@ spec = do
     it "parses jal with NOT_EQUAL condition" $
       "jal not_equal re rf" `parsesAs` JalInst NOT_EQUAL RE RF
     it "parses jal with GREATER condition" $
-      "jal greater rg rh" `parsesAs` JalInst GREATER RG RH
+      "jal greater RSCRATCH0 RSCRATCH1" `parsesAs` JalInst GREATER RSCRATCH0 RSCRATCH1
     it "parses jal with LESS condition" $
       "jal less ru rv" `parsesAs` JalInst LESS RU RV
     it "parses jal with GREATER_EQUAL condition" $
@@ -264,7 +264,7 @@ spec = do
     it "parses jmp with NOT_EQUAL condition" $
       "jmp not_equal re rf" `parsesAs` JmpInst NOT_EQUAL RE RF
     it "parses jmp with GREATER condition" $
-      "jmp greater rg rh" `parsesAs` JmpInst GREATER RG RH
+      "jmp greater rscratch" `parsesAs` JmpInst GREATER RSCRATCH0 RSCRATCH1
     it "parses jmp with LESS condition" $
       "jmp less ru rv" `parsesAs` JmpInst LESS RU RV
     it "parses jmp with GREATER_EQUAL condition" $
@@ -284,8 +284,8 @@ spec = do
     it "parses halt with register from each set" $ do
       "halt rb" `parsesAs` HaltInst RB
       "halt rc" `parsesAs` HaltInst RC
-      "halt rg" `parsesAs` HaltInst RG
       "halt ru" `parsesAs` HaltInst RU
+      "halt rv" `parsesAs` HaltInst RV
       "halt rz" `parsesAs` HaltInst RZ
     it "parses halt with RT" $
       "halt rt" `parsesAs` HaltInst RT
@@ -310,7 +310,7 @@ spec = do
     it "parses mov with all register combinations (second)" $
       "mov re rf" `parsesAs` MovInst RE RF
     it "parses mov with all register combinations (third)" $
-      "mov rg rh" `parsesAs` MovInst RG RH
+      "mov rscratch0 rscratch1" `parsesAs` MovInst RSCRATCH0 RSCRATCH1
     it "parses mov with all register combinations (fourth)" $
       "mov ru rv" `parsesAs` MovInst RU RV
     it "parses mov with all register combinations (fifth)" $
@@ -332,7 +332,7 @@ spec = do
     it "parses cmp with all register combinations (second)" $
       "cmp re rf" `parsesAs` CmpInst RE RF
     it "parses cmp with all register combinations (third)" $
-      "cmp rg rh" `parsesAs` CmpInst RG RH
+      "cmp RSCRATCH0 RSCRATCH1" `parsesAs` CmpInst RSCRATCH0 RSCRATCH1
     it "parses cmp with all register combinations (fourth)" $
       "cmp ru rv" `parsesAs` CmpInst RU RV
     it "parses cmp with all register combinations (fifth)" $
@@ -353,8 +353,8 @@ spec = do
       "set2 rcd 100" `parsesAs` Set2Inst RC RD (IntImm Full 100)
     it "parses set2 with wide register REF" $
       "set2 ref 200" `parsesAs` Set2Inst RE RF (IntImm Full 200)
-    it "parses set2 with wide register RGH" $
-      "set2 rgh 300" `parsesAs` Set2Inst RG RH (IntImm Full 300)
+    it "parses set2 with wide register RSCRATCH" $
+      "set2 rscratch 300" `parsesAs` Set2Inst RSCRATCH0 RSCRATCH1 (IntImm Full 300)
     it "parses set2 with wide register RUV" $
       "set2 ruv 400" `parsesAs` Set2Inst RU RV (IntImm Full 400)
     it "parses set2 with wide register RWX" $
@@ -368,7 +368,7 @@ spec = do
     it "parses set2 with octal immediate" $
       "set2 re rf 0o177777" `parsesAs` Set2Inst RE RF (IntImm Full 65535)
     it "parses set2 with label" $
-      "set2 rg rh myLabel" `parsesAs` Set2Inst RG RH (LabelImm Full "myLabel")
+      "set2 rscratch myLabel" `parsesAs` Set2Inst RSCRATCH0 RSCRATCH1 (LabelImm Full "myLabel")
     it "parses set2 case-insensitively" $
       "SET2 RA RB 5000" `parsesAs` Set2Inst RA RB (IntImm Full 5000)
 
@@ -381,8 +381,8 @@ spec = do
       "call rcd" `parsesAs` CallInst RC RD
     it "parses call with wide register REF" $
       "call ref" `parsesAs` CallInst RE RF
-    it "parses call with wide register RGH" $
-      "call rgh" `parsesAs` CallInst RG RH
+    it "parses call with wide register RSCRATCH" $
+      "call rscratch" `parsesAs` CallInst RSCRATCH0 RSCRATCH1
     it "parses call with wide register RUV" $
       "call ruv" `parsesAs` CallInst RU RV
     it "parses call with wide register RWX" $

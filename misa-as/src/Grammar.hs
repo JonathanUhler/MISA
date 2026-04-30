@@ -78,12 +78,14 @@ data Op
 
 
 -- | The list of general purpose register names.
-data GpReg = R0 | RA | RB | RC | RD | RE | RF | RG | RH | RU | RV | RW | RX | RY | RZ | RT
+data GpReg
+  = R0 | RA | RB | RC | RD | RE | RF | RU | RV | RW | RX | RY | RZ | RT
+  | RSCRATCH0 | RSCRATCH1
   deriving (Show, Enum, Bounded, Eq)
 
 
 -- | The list of 16-bit general purpose register aliases.
-data WideReg = RAB | RCD | REF | RGH | RUV | RWX | RYZ
+data WideReg = RAB | RCD | REF | RUV | RWX | RYZ | RSCRATCH
   deriving (Show, Enum, Bounded)
 
 

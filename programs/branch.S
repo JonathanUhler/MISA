@@ -1,7 +1,7 @@
         .section text
 
-        set2 ryz label
-        jmp always ryz
+        set2 rscratch label
+        jmp always rscratch
 
         .section vectors
 label:

@@ -1,9 +1,9 @@
         .section text
 _start:
-        set2 ryz 0xABCD
-        wsr saddr ryz
+        set2 rscratch 0xABCD
+        wsr saddr rscratch
 
-        set2 ryz main
-        jal always ryz
+        set2 rscratch main
+        jal always rscratch
 
         halt rt

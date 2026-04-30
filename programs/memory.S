@@ -1,4 +1,4 @@
         set ra 0xab
-        set2 ryz 0x8000
-        sw ra ryz
-        lw rb ryz
+        set2 rscratch 0x8000
+        sw ra rscratch
+        lw rb rscratch

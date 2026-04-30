@@ -50,8 +50,8 @@ spec = do
     it "resolves RET to RSR RADDR RY RZ followed by JMP ALWAYS RY RZ" $ do
       let result = resolvePseudoInst RetInst
       length result `shouldBe` 2
-      result !! 0 `shouldBe` RsrInst RADDR RY RZ
-      result !! 1 `shouldBe` JmpInst ALWAYS RY RZ
+      result !! 0 `shouldBe` RsrInst RADDR RSCRATCH0 RSCRATCH1
+      result !! 1 `shouldBe` JmpInst ALWAYS RSCRATCH0 RSCRATCH1
 
   describe "CLR resolution" $ do
     it "resolves CLR to WSR FLAGS R0 R0" $

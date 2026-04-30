@@ -134,13 +134,13 @@ parseWideReg :: Parser (GpReg, GpReg)
 parseWideReg = do
   wide <- parseLookup reservedWideRegs "register pair"
   case wide of
-    RAB -> return (RA, RB)
-    RCD -> return (RC, RD)
-    REF -> return (RE, RF)
-    RGH -> return (RG, RH)
-    RUV -> return (RU, RV)
-    RWX -> return (RW, RX)
-    RYZ -> return (RY, RZ)
+    RAB      -> return (RA, RB)
+    RCD      -> return (RC, RD)
+    REF      -> return (RE, RF)
+    RUV      -> return (RU, RV)
+    RWX      -> return (RW, RX)
+    RYZ      -> return (RY, RZ)
+    RSCRATCH -> return (RSCRATCH0, RSCRATCH1)
 
 parseRegPair :: Parser (GpReg, GpReg)
 parseRegPair = choice [try parseWideReg, (,) <$> parseGpReg <*> parseGpReg]

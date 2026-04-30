@@ -96,11 +96,11 @@ spec = do
     it "packs JAL with GREATER" $
       packInst (JalInst GREATER RE RF) `shouldBe` [0x5E, 0x26]
     it "packs JAL with LESS" $
-      packInst (JalInst LESS RG RH) `shouldBe` [0x7E, 0x48]
+      packInst (JalInst LESS RU RV) `shouldBe` [0x7E, 0x48]
     it "packs JAL with GREATER_EQUAL" $
-      packInst (JalInst GREATER_EQUAL RU RV) `shouldBe` [0x9E, 0x3A]
+      packInst (JalInst GREATER_EQUAL RW RX) `shouldBe` [0x9E, 0x3A]
     it "packs JAL with LESS_EQUAL" $
-      packInst (JalInst LESS_EQUAL RW RX) `shouldBe` [0xBE, 0x5C]
+      packInst (JalInst LESS_EQUAL RY RZ) `shouldBe` [0xBE, 0x5C]
     it "packs JAL with ALWAYS" $
       packInst (JmpInst ALWAYS R0 R0) `shouldBe` [0x0F, 0x00]
     it "packs JMP with EQUAL" $
@@ -110,11 +110,11 @@ spec = do
     it "packs JMP with GREATER" $
       packInst (JmpInst GREATER RE RF) `shouldBe` [0x5F, 0x26]
     it "packs JMP with LESS" $
-      packInst (JmpInst LESS RG RH) `shouldBe` [0x7F, 0x48]
+      packInst (JmpInst LESS RU RV) `shouldBe` [0x7F, 0x48]
     it "packs JMP with GREATER_EQUAL" $
-      packInst (JmpInst GREATER_EQUAL RU RV) `shouldBe` [0x9F, 0x3A]
+      packInst (JmpInst GREATER_EQUAL RW RX) `shouldBe` [0x9F, 0x3A]
     it "packs JMP with LESS_EQUAL" $
-      packInst (JmpInst LESS_EQUAL RW RX) `shouldBe` [0xBF, 0x5C]
+      packInst (JmpInst LESS_EQUAL RY RZ) `shouldBe` [0xBF, 0x5C]
 
   describe "packCodeElem" $ do
     it "packs single instruction" $
