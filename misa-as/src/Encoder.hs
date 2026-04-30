@@ -42,7 +42,18 @@ resolvePseudoInst inst = case inst of
   MovInst  rd  rs1     -> [OrInst rd rs1 R0]
   CmpInst  rs1 rs2     -> [SubInst R0 rs1 rs2]
   Set2Inst rs1 rs2 imm -> [SetInst rs1 (highImm imm), SetInst rs2 (lowImm imm)]
-  CallInst rs1 rs2     -> [JalInst ALWAYS rs1 rs2]
+  JmpiInst cmp imm     -> [SetInst RSCRATCH0 (highImm imm),
+                           SetInst RSCRATCH1 (lowImm imm),
+                           JmpInst cmp RSCRATCH0 RSCRATCH1]
+  JaliInst cmp imm     -> [SetInst RSCRATCH0 (highImm imm),
+                           SetInst RSCRATCH1 (lowImm imm),
+                           JalInst cmp RSCRATCH0 RSCRATCH1]
+  GotoInst imm         -> [SetInst RSCRATCH0 (highImm imm),
+                           SetInst RSCRATCH1 (lowImm imm),
+                           JmpInst ALWAYS RSCRATCH0 RSCRATCH1]
+  CallInst imm         -> [SetInst RSCRATCH0 (highImm imm),
+                           SetInst RSCRATCH1 (lowImm imm),
+                           JalInst ALWAYS RSCRATCH0 RSCRATCH1]
   RetInst              -> [RsrInst RADDR RSCRATCH0 RSCRATCH1, JmpInst ALWAYS RSCRATCH0 RSCRATCH1]
   ClrInst              -> [WsrInst FLAGS R0 R0]
   _                    -> [inst]

@@ -189,7 +189,10 @@ parseInst = choice
     MovInst  <$> (parseThisIdent "mov" *> parseGpReg) <*> parseGpReg,
     CmpInst  <$> (parseThisIdent "cmp" *> parseGpReg) <*> parseGpReg,
     (\(r1, r2) i -> Set2Inst r1 r2 i) <$> (parseThisIdent "set2" *> parseRegPair) <*> parseFullImm,
-    (\(r1, r2) -> CallInst r1 r2)     <$> (parseThisIdent "call" *> parseRegPair),
+    (\f i -> JmpiInst f i)            <$> (parseThisIdent "jmpi" *> parseCmpFlag) <*> parseFullImm,
+    (\f i -> JaliInst f i)            <$> (parseThisIdent "jali" *> parseCmpFlag) <*> parseFullImm,
+    GotoInst <$> (parseThisIdent "goto" *> parseFullImm),
+    CallInst <$> (parseThisIdent "call" *> parseFullImm),
     RetInst  <$   parseThisIdent "ret",
     ClrInst  <$   parseThisIdent "clr"
   ] <?> "instruction"
