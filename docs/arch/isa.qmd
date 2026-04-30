@@ -675,7 +675,7 @@ Usage: `JMP RS1 RS2 CMP`
 
 Meaning: `if (CMP) { PC = RS1 << 8 | RS2 }`
 
-Description: If the comparison type `CMP` is true as determined byt he current ALU flags, set
+Description: If the comparison type `CMP` is true as determined by the current ALU flags, set
 `PC` to the address formed by `{RS1, RS2}`.
 
 Encoding:
@@ -700,12 +700,11 @@ Because of the limitations of the core instruction set, this document also recom
 assembler macros whose functionality can be represented by one or more of the base 16 instructions.
 
 ### `CALL`
-Usage: `CALL RS1 RS2`
+Usage: `CALL IMM`
 
-Meaning: `JAL ALWAYS RS1 RS2`
+Meaning: `SET RSCRATCH0 (IMM >> 8)`, `SET RSCRATCH1 (IMM & 0xFF)`, `JAL ALWAYS RSCRATCH0 RSCRATCH1`
 
-Description: Jump to the subroutine at the address formed by `RS1` and `RS2` and link with
-the `RADDR` special register.
+Description: Jump to the subroutine at the address `IMM` and link with the `RADDR` special register.
 
 ### `CLR`
 Usage: `CLR`
@@ -721,6 +720,29 @@ Meaning: `SUB R0 RS1 RS2`
 
 Description: Perform an arithmetic operation which will set the `FLAGS` register such that
 the boolean operation `?` can be performed on `RS1 ? RS2`.
+
+### `GOTO`
+Usage: `GOTO IMM`
+
+Meaning: `SET RSCRATCH0 (IMM >> 8)`, `SET RSCRATCH1 (IMM & 0xFF)`, `JMP ALWAYS RSCRATCH0 RSCRATCH1`
+
+Description: Unconditionally jump to the address `IMM`.
+
+### `JALI`
+Usage: `JALI CMP IMM`
+
+Meaning: `SET RSCRATCH0 (IMM >> 8)`, `SET RSCRATCH1 (IMM & 0xFF)`, `JAL CMP RSCRATCH0 RSCRATCH1`
+
+Description: If the comparison type `CMP` is true as determined by the current ALU flags, set
+`RADDR` to the address of the next instruction and set `PC` to the address `IMM`.
+
+### `JMPI`
+Usage: `JMPI CMP IMM`
+
+Meaning: `SET RSCRATCH0 (IMM >> 8)`, `SET RSCRATCH1 (IMM & 0xFF)`, `JMP CMP RSCRATCH0 RSCRATCH1`
+
+Description: If the comparison type `CMP` is true as determined by the current ALU flags, set
+`PC` to the address `IMM`.
 
 ### `MOV`
 Usage: `MOV RD RS1`
