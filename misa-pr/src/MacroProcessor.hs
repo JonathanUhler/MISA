@@ -15,9 +15,9 @@ type Parser = Parsec Void String
 type MacroMap = [(String, String)]
 
 
-data Line
+data Chunk
   = Macro String String
-  | SourceLine String
+  | SourceChunk String
   deriving (Show)
 
 
@@ -29,7 +29,7 @@ parseIdentifier = do
   return (first : rest)
 
 
-parseMacro :: Parser Line
+parseMacro :: Parser Chunk
 parseMacro = do
   _   <- space
   _   <- string "#macro"
@@ -40,54 +40,38 @@ parseMacro = do
   return (Macro key val)
 
 
-parseSourceLine :: Parser Line
-parseSourceLine = do
-  notFollowedBy eof
-  content <- manyTill anySingle (eol <|> (eof >> return ""))
-  return (SourceLine content)
+parseSourceChunk :: Parser Chunk
+parseSourceChunk = do
+  content <- some (notFollowedBy parseMacro *> anySingle)
+  return (SourceChunk content)
 
 
-parseLine :: Parser Line
-parseLine = try parseMacro <|> parseSourceLine
+parseChunks :: Parser [Chunk]
+parseChunks = many (try parseMacro <|> parseSourceChunk) <* eof
 
 
-parseLines :: Parser [Line]
-parseLines = many parseLine <* eof
-
-
-isMacroLine :: Line -> Bool
-isMacroLine (Macro _ _) = True
-isMacroLine _           = False
-
-
-getMacroMap :: [Line] -> MacroMap
-getMacroMap ls = map (\(Macro k v) -> (k, v)) macroLines
-  where macroLines = filter isMacroLine ls
-
-
-getSource :: [Line] -> String
-getSource ls = unlines (map (\(SourceLine s) -> s) sourceLines)
-  where sourceLines = filter (not . isMacroLine) ls
-
-
-findAndReplaceOne :: (String, String) -> String -> String
-findAndReplaceOne (k, v) = concatMap replaceMacro . tokenizeSource
+replaceMacro :: String -> (String, String) -> String
+replaceMacro content (k, v) = (concatMap filterToken . tokenizeSource) content
   where tokenizeSource = groupBy ((==) `on` isSpace)
-        replaceMacro sourceToken
+        filterToken sourceToken
           | sourceToken == k = v
           | otherwise        = sourceToken
 
 
-findAndReplaceAll :: MacroMap -> String -> String
-findAndReplaceAll []                source = source
-findAndReplaceAll ((k, v) : macros) source = findAndReplaceAll macros newSource
-  where newSource = findAndReplaceOne (k, v) source
+replaceMacros :: MacroMap -> String -> String
+replaceMacros macros content = foldl replaceMacro content macros
+
+
+resolveChunks :: [Chunk] -> String
+resolveChunks chunks = acc [] chunks
+  where acc :: MacroMap -> [Chunk] -> String
+        acc _      []                       = ""
+        acc macros ((Macro k v) : rest)     = acc ((k, v) : macros) rest
+        acc macros ((SourceChunk s) : rest) = (replaceMacros macros s) ++ (acc macros rest)
 
 
 resolveMacros :: String -> Either String String
 resolveMacros content =
-  case parse parseLines "<input>" content of
-    Left err -> Left (errorBundlePretty err)
-    Right ls -> Right (findAndReplaceAll macros source)
-      where macros = getMacroMap ls
-            source = getSource ls
+  case parse parseChunks "<input>" content of
+    Left err     -> Left (errorBundlePretty err)
+    Right chunks -> Right (resolveChunks chunks)

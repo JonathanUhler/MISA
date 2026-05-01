@@ -35,12 +35,8 @@ parseSourceLine = do
   return (SourceLine content)
 
 
-parseLine :: Parser Line
-parseLine = try parseInclude <|> parseSourceLine
-
-
 parseLines :: Parser [Line]
-parseLines = many parseLine <* eof
+parseLines = many (try parseInclude <|> parseSourceLine) <* eof
 
 
 resolveLine :: FilePath -> Line -> IO (Either String [String])
