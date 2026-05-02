@@ -1,4 +1,4 @@
-module MacroProcessor (resolveMacros) where
+module MacroProcessor (MacroMap, resolveMacros) where
 
 
 import Data.Char (isSpace)
@@ -62,16 +62,16 @@ replaceMacros :: MacroMap -> String -> String
 replaceMacros macros content = foldl replaceMacro content macros
 
 
-resolveChunks :: [Chunk] -> String
-resolveChunks chunks = acc [] chunks
+resolveChunks :: [Chunk] -> MacroMap -> String
+resolveChunks chunks macroDefs = acc macroDefs chunks
   where acc :: MacroMap -> [Chunk] -> String
         acc _      []                       = ""
         acc macros ((Macro k v) : rest)     = acc ((k, v) : macros) rest
         acc macros ((SourceChunk s) : rest) = (replaceMacros macros s) ++ (acc macros rest)
 
 
-resolveMacros :: String -> Either String String
-resolveMacros content =
+resolveMacros :: String -> MacroMap -> Either String String
+resolveMacros content macroDefs =
   case parse parseChunks "<input>" content of
     Left err     -> Left (errorBundlePretty err)
-    Right chunks -> Right (resolveChunks chunks)
+    Right chunks -> Right (resolveChunks chunks macroDefs)

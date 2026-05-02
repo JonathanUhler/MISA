@@ -90,20 +90,22 @@ def generate_output_paths(src_paths: list) -> list:
     return output_paths
 
 
-def preprocess(src_path: Path, out_path: Path) -> (bool, str):
+def preprocess(src_path: Path, out_path: Path, macros: list) -> (bool, str):
+    macros = [val for macro in macros for val in ("-D", macro)]
     result: CompletedProcess = \
-        subprocess.run(["misa-pr", str(src_path), "-o", str(out_path)], capture_output = True)
+        subprocess.run(["misa-pr", str(src_path), "-o", str(out_path), *macros],
+                       capture_output = True)
     processed: bool = result.returncode == 0
     return processed, format_subprocess_output(result)
 
 
-def preprocess_all(src_paths: list) -> list:
+def preprocess_all(src_paths: list, macros: list) -> list:
     processed_files: list = []
 
     for src_path in src_paths:
         out_file: NamedTemporaryFile = NamedTemporaryFile()
         out_path: Path = Path(out_file.name)
-        processed, errors = preprocess(src_path, out_path)
+        processed, errors = preprocess(src_path, out_path, macros)
         if (not processed):
             error(program_name, errors)
         processed_files.append(out_file)
@@ -262,6 +264,8 @@ def main() -> None:
                         help = "assemble but do not link")
     parser.add_argument("-p", "--preprocess", action = "store_true",
                         help = "preprocess but do not assemble or link")
+    parser.add_argument("-D", "--define", action = "append", metavar = "<key>=<val>", default = [],
+                        help = "define the macro <key> to be replaced with <val>")
     parser.add_argument("-l", "--linker-options",
                         action = "append", metavar = "<options>", default = [],
                         help = "string of command-line options to pass to misa-ld")
@@ -273,7 +277,7 @@ def main() -> None:
     args: Namespace = parser.parse_args()
 
     src_paths, obj_paths = sort_paths(args.asmfile, {".asm", ".s", ".src"})
-    processed_files: list = preprocess_all(src_paths)
+    processed_files: list = preprocess_all(src_paths, args.define)
     if (args.preprocess):
         emit_processed_files(processed_files, args.output)
         return

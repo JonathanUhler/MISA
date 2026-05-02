@@ -35,8 +35,19 @@ help_text: str = (
 )
 
 
-def preprocess(src_path: Path, output_path: str) -> None:
-    result: CompletedProcess = subprocess.run(["misa-pr-exe", str(src_path), output_path])
+def parse_macros(macro_strs: list) -> list:
+    macros: list = []
+    for macro_str in macro_strs:
+        macro_split: list = macro_str.split("=")
+        key: str = macro_split[0]
+        val: str = "=".join(macro_split[1:])
+        macros.append(key)
+        macros.append(val)
+    return macros
+
+
+def preprocess(src_path: Path, output_path: str, macros: list) -> None:
+    result: CompletedProcess = subprocess.run(["misa-pr-exe", str(src_path), output_path, *macros])
     if (result.returncode != 0):
         error(program_name, format_subprocess_output(result))
 
@@ -51,6 +62,8 @@ def main() -> None:
         formatter_class = SmartHelpFormatter,
         description = help_text
     )
+    parser.add_argument("-D", "--define", action = "append", metavar = "<key>=<val>", default = [],
+                        help = "define the macro <key> to be replaced with <val>")
     parser.add_argument("-V", "--version", action = "version", version = f"%(prog)s {version_text}")
     parser.add_argument("-o", "--output", metavar = "<file>", default = "out.s",
                         help = "place the output into <file>")
@@ -59,7 +72,7 @@ def main() -> None:
 
     args: Namespace = parser.parse_args()
 
-    preprocess(args.srcfile, args.output)
+    preprocess(args.srcfile, args.output, macros = parse_macros(args.define))
 
 
 if (__name__ == "__main__"):

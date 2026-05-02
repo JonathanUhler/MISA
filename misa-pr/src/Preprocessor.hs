@@ -7,10 +7,10 @@ import MacroProcessor
 import System.FilePath
 
 
-preprocessFile :: FilePath -> IO (Either String String)
-preprocessFile path = do
+preprocessFile :: FilePath -> MacroMap -> IO (Either String String)
+preprocessFile path macroDefs = do
   content       <- readFile path
   includeResult <- resolveInclusions (takeDirectory path) content
   case includeResult of
     Left err           -> return (Left err)
-    Right totalContent -> return (resolveMacros totalContent)
+    Right totalContent -> return (resolveMacros totalContent macroDefs)
