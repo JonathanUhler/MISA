@@ -2,15 +2,10 @@
 
 
 from argparse import ArgumentParser, Namespace
-import os
 from pathlib import Path
 import subprocess
 from subprocess import CompletedProcess
-from helpers import (SmartHelpFormatter,
-                     error,
-                     format_subprocess_output,
-                     sort_paths,
-                     extract_archives)
+from helpers import (SmartHelpFormatter, error, format_subprocess_output)
 
 
 program_name: str = "misa-pr"
