@@ -87,6 +87,27 @@ def generate_output_paths(src_paths: list) -> list:
     return output_paths
 
 
+def preprocess(src_path: Path, out_path: Path) -> (bool, str):
+    result: CompletedProcess = \
+        subprocess.run(["misa-pr", str(src_path), "-o", str(out_path)], capture_output = True)
+    processed: bool = result.returncode == 0
+    return processed, format_subprocess_output(result)
+
+
+def preprocess_all(src_paths: list) -> list:
+    processed_files: list = []
+
+    for src_path in src_paths:
+        out_file: NamedTemporaryFile = NamedTemporaryFile()
+        out_path: Path = Path(out_file.name)
+        processed, errors = preprocess(src_path, out_path)
+        if (not processed):
+            error(program_name, errors)
+        processed_files.append(out_file)
+
+    return processed_files
+
+
 def assemble(src_path: Path, out_path: Path) -> (bool, str):
     """
     Calls the misa-as-exe Haskell assembler on a single source file.
@@ -143,6 +164,18 @@ def assemble_all(src_paths: list) -> list:
         artifact_files.append(out_file)
 
     return artifact_files
+
+
+def emit_processed_files(processed_files: list, output_path: str) -> None:
+    if (output_path is not None and len(processed_files) > 1):
+        error(program_name, "-o cannot be specified with -p and muliple source files")
+
+    for processed_file in processed_files:
+        if (output_path is None):
+            print(processed_file.read().decode())
+        else:
+            with open(output_path, "wb+") as output_file:
+                output_file.write(processed_file.read())
 
 
 def emit_artifact_files(artifact_files: list, output_paths: list) -> None:
@@ -226,6 +259,8 @@ def main() -> None:
 
     parser.add_argument("-a", "--assemble", action = "store_true",
                         help = "assemble but do not link")
+    parser.add_argument("-p", "--preprocess", action = "store_true",
+                        help = "preprocess but do not assemble or link")
     parser.add_argument("--linker", metavar = "<linker>", default = "misa-ld",
                         help = "name or path or the linker binary to invoke")
     parser.add_argument("--linker-options", action = "append", metavar = "<options>", default = [],
@@ -238,8 +273,13 @@ def main() -> None:
     args: Namespace = parser.parse_args()
 
     src_paths, obj_paths = sort_paths(args.asmfile, {".asm", ".s", ".src"})
-    artifact_files: list = assemble_all(src_paths)
+    processed_files: list = preprocess_all(src_paths)
+    if (args.preprocess):
+        emit_processed_files(processed_files, args.output)
+        return
 
+    processed_paths: list = [processed_file.name for processed_file in processed_files]
+    artifact_files: list = assemble_all(processed_paths)
     if (args.assemble):
         if (len(artifact_files) > 1 and args.output is not None):
             emit_archive_file(artifact_files, args.output)
@@ -247,12 +287,13 @@ def main() -> None:
             output_paths: list = \
                 [args.output] if args.output is not None else generate_output_paths(src_paths)
             emit_artifact_files(artifact_files, output_paths)
-    else:
-        link_artifact_files(artifact_files,
-                            obj_paths,
-                            linker = args.linker,
-                            linker_options = args.linker_options,
-                            output = args.output)
+        return
+
+    link_artifact_files(artifact_files,
+                        obj_paths,
+                        linker = args.linker,
+                        linker_options = args.linker_options,
+                        output = args.output)
 
 
 if (__name__ == "__main__"):

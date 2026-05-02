@@ -9,5 +9,5 @@
 
 
         MY_NOP
-        set r1 MY_MACRO
-        halt r1
+        set rt MY_MACRO
+        halt rt

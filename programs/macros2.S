@@ -5,4 +5,4 @@
         10
         #endm
 
-        set r2 MY_MACRO
+        set rb MY_MACRO
