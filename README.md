@@ -12,6 +12,7 @@ The project includes the following software applications:
 - `misa-as`: An assembler for the MISA instruction set that produces object files
 - `misa-ld`: A linker to produce flat binaries from one or more object files
 - `misa-nm`: A program to list symbol names imported and exported by object files
+- `misa-pr`: A preprocessor to add additional functionality to the assembly pipeline
 - `misa-sim`: A faithful simulator for a single-cycle CPU implementation of the MISA architecture
 
 ## Documentation
@@ -39,7 +40,8 @@ made in the local `install` directory. A custom path can be set by specifying th
 
 The install directory will be populated with the following tools:
 
-- `misa-ar`, `misa-as`, and `mias-ld`: CLI utilities written in Python to make the usage of the
-  Haskell binaries easier.
-- `misa-ar-exe`, `misa-as-exe`, `misa-ld-exe`, and `misa-nm-exe`: binaries built from the Haskell
-  source that provide a very minimal command line interface for use by the Python CLI wrappers.
+- `misa-ar`, `misa-as`, `misa-ld`, `misa-nm`, and `misa-pr`: CLI utilities written in Python to
+  make the usage of the Haskell binaries easier.
+- `misa-ar-exe`, `misa-as-exe`, `misa-ld-exe`, `misa-nm-exe`, and `misa-pr-exe`: binaries built
+  from the Haskell source that provide a very minimal command line interface for use by the Python
+  CLI wrappers.
