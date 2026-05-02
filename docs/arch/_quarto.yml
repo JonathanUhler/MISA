@@ -2,9 +2,9 @@ project:
   type: book
 
 book:
-  title: "MISA Computer Architecture"
+  title: "MISA: Minimal Instruction Set Architecture"
   author: "Jonathan Uhler"
-  date: "2026-04-20"
+  date: "2026-05-01"
   chapters:
     - index.qmd
     - isa.qmd
