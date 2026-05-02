@@ -24,11 +24,26 @@ The assembler produces object files in a simple format accepted by the MISA link
 assembling will also invoke the linker to produce a final binary, although this step can be
 omitted.
 
+### Assembler Pipeline
+
+The `misa-as` assembler is a wrapper CLI utility for several core binaries including the assembler,
+but also the preprocessor and linker.
+
+Assembling with no early-exit flags (e.g. `-p` or `-a`) runs provided files through a multi-step
+pipeline:
+
+1) All assembly source files are passed to the MISA preprocessor to resolve any preprocessor
+   directives. The pipeline can be stopped after this stage with the `-p` flag.
+2) The preprocessed output files are passed to the MISA assembler, which produces object files. The
+   pipeline can be stopped after this stage with the `-a` flag.
+3) The generated object files, as well as any non-source files originally passed to `misa-as`, are
+   passed to the MISA linker to produce the final flat binary.
+
 ### Assembler Semantics
 
 #### Instructions
 
-`misa-as` supports the instruction semantics defined in the "Usage" notes of the ISA chapter.
+`misa-as` supports the instruction semantics defined in the instruction "Usages" of the ISA chapter.
 Opcodes and instruction operands are not comma-separated, and are case-insensitive.
 
 #### Labels
@@ -58,7 +73,7 @@ loop:
 In this case, the label `loop` has the relative address in this code of 0x0004, and refers to
 the `SET2` instruction.
 
-#### Directives
+#### Assembler Directives
 
 `misa-as` supports several assembler directives that change the behavior of the assembler and its
 code generation. Directives are C-style reserved identifiers that begin with a period ('.') and
@@ -73,6 +88,12 @@ The following directives are currently supported by `misa-as`:
   addresses. `.array` is equivalent to many consecutive `.word` directives
 - `.section <String>`: Defines for the linker that all the following code until the next
   section directive should be placed in a section called `<String>`
+  
+#### Preprocessor Directives
+
+`misa-as` also supports preprocessor directives, but these are not resolved by the assembler
+directly. See the section of the MISA preprocessor `misa-pr` for more information on syntax.
+Preprocessor directives are resolved by the assembler before the assembly or linking phases.
 
 ### MISA Linkable Format
 
@@ -154,5 +175,9 @@ Each entry in the relocation table contains the following information:
 | Variable | String | The string name of the required symbol for relocation.                                                                               |
 
 ## Linker
+
+`misa-ld` is the reference linker for the MISA_LF linkable format of object files. It uses memory
+map files to place the code sections of one or more object files into a flat binary, resolving
+symbol positions along the way.
 
 ## Other Tools
