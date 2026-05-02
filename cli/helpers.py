@@ -26,8 +26,8 @@ def error(program: str, message: str) -> None:
 def format_subprocess_output(process: CompletedProcess) -> str:
     output: str = ""
 
-    has_stdout: bool = len(process.stdout) > 0
-    has_stderr: bool = len(process.stderr) > 0
+    has_stdout: bool = len(process.stdout) > 0 if process.stdout is not None else False
+    has_stderr: bool = len(process.stderr) > 0 if process.stderr is not None else False
 
     if (has_stdout):
         output += process.stdout.decode("utf-8")
