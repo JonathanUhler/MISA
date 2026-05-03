@@ -647,7 +647,7 @@ SVG(wavedrom.render(str({
 ```
 
 ### `JAL`
-Usage: `JAL RS1 RS2 CMP`
+Usage: `JAL CMP RS1 RS2`
 
 Meaning: `if (CMP) { RADDR = PC + 2 ; PC = RS1 << 8 | RS2 }`
 
@@ -671,7 +671,7 @@ SVG(wavedrom.render(str({
 ```
 
 ### `JMP`
-Usage: `JMP RS1 RS2 CMP`
+Usage: `JMP CMP RS1 RS2`
 
 Meaning: `if (CMP) { PC = RS1 << 8 | RS2 }`
 
