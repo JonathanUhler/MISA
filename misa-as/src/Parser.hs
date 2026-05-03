@@ -185,16 +185,18 @@ parseInst = choice
     (\f (r1, r2) -> JmpInst f r1 r2)  <$> (parseThisIdent "jmp"  *> parseCmpFlag) <*> parseRegPair,
     HaltInst <$> (parseThisIdent "halt" *> parseGpReg),
     -- Pseudo instructions
-    NopInst  <$   parseThisIdent "nop",
-    MovInst  <$> (parseThisIdent "mov" *> parseGpReg) <*> parseGpReg,
-    CmpInst  <$> (parseThisIdent "cmp" *> parseGpReg) <*> parseGpReg,
+    NopInst    <$   parseThisIdent "nop",
+    MovInst    <$> (parseThisIdent "mov" *> parseGpReg) <*> parseGpReg,
+    CmpInst    <$> (parseThisIdent "cmp" *> parseGpReg) <*> parseGpReg,
     (\(r1, r2) i -> Set2Inst r1 r2 i) <$> (parseThisIdent "set2" *> parseRegPair) <*> parseFullImm,
     (\f i -> JmpiInst f i)            <$> (parseThisIdent "jmpi" *> parseCmpFlag) <*> parseFullImm,
     (\f i -> JaliInst f i)            <$> (parseThisIdent "jali" *> parseCmpFlag) <*> parseFullImm,
-    GotoInst <$> (parseThisIdent "goto" *> parseFullImm),
-    CallInst <$> (parseThisIdent "call" *> parseFullImm),
-    RetInst  <$   parseThisIdent "ret",
-    ClrInst  <$   parseThisIdent "clr"
+    GotoInst   <$> (parseThisIdent "goto" *> parseFullImm),
+    CallInst   <$> (parseThisIdent "call" *> parseFullImm),
+    RetInst    <$   parseThisIdent "ret",
+    ClrInst    <$   parseThisIdent "clr",
+    PushInst   <$> (parseThisIdent "push" *> parseGpReg),
+    PopInst    <$> (parseThisIdent "pop" *> parseGpReg)
   ] <?> "instruction"
 
 

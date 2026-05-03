@@ -69,13 +69,8 @@ The following sub-sections describe the purpose and layout of each special regis
 
 ### `SADDR`
 
-The stack address or stack pointer. `SADDR` must be at least an 8-bit register and no more than a
-16-bit register. It must support at least the values from `0x00` to `0xFF`.
-
-The instruction set architecture recommends an 8-bit `SADDR` register which defines a hardware
-stack at the second 256-byte page from `0x0100` to `0x01FF`. Implementations may also optionally
-define a 16-bit `SADDR` register which can freely access a stack at any location in the mappable
-address space, or any width in-between.
+The stack address or stack pointer. `SADDR` must be at least an 8-bit register (supporting stack
+addresses `0x00` - `0xFF` with a possible high 8-bit prefix) and no more than a 16-bit register.
 
 ```{python}
 #| echo: false
@@ -295,6 +290,19 @@ Which define the following sections by convention:
 | `text`   | Executable and immutable program code.                                                                                                                                                             |
 | `rodata` | Initialized global constants.                                                                                                                                                                      |
 | `reset`  | A small region for code to execute when the processor resets.                                                                                                                                      |
+
+### Stack Conventions
+
+The MISA ISA requires a towards-lower-address stack that grows towards `0x0000` on pushes and
+contracts towards `0xFFFF` on pops. This convention must be respected regardless of the supported
+width of the `SADDR` special register or the location in memory of the stack.
+
+Stack operations must respect the convention of the `PUSH` and `POP` assembler macros. That is,
+pushing to the stack must write before decrementing `SADDR`, and popping from the stack must
+increment `SADDR` before reading.
+
+Multi-byte pushes and pops must be logically equivalent to chaining several `PUSH` or `POP`
+assembler macros.
 
 ## Reset
 
@@ -757,6 +765,36 @@ Usage: `NOP`
 Meaning: `OR R0 R0 R0`
 
 Description: Do nothing.
+
+### `POP`
+Usage: `POP RD
+
+Meaning:
+```
+RSR SADDR RSCRATCH
+SET RD 1
+ADD RSCRATCH1 RSCRATCH1 RD
+ADC RSCRATCH0 RSCRATCH0 R0
+LW RD RSCRATCH
+WSR SADDR RSCRATCH
+```
+
+Description: Increment `SADDR` by 1 byte and then load the byte at the new stack address into `RD`.
+
+### `PUSH`
+Usage: `PUSH RS`
+
+Meaning:
+```
+RSR SADDR RSCRATCH
+SW RS RSCRATCH
+ADD R0 R0 R0
+SBB RSCRATCH1 RSCRATCH1 R0
+SBB RSCRATCH0 RSCRATCH0 R0
+WSR SADDR RSCRATCH
+```
+
+Description: Write `RS` onto the stack at `SADDR`, and then decrement `SADDR` by 1 byte.
 
 ### `RET`
 Usage: `RET`
