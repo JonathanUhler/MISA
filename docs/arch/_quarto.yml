@@ -9,6 +9,7 @@ book:
     - index.qmd
     - isa.qmd
     - toolchain.qmd
+    - hardware.qmd
 
 format:
   html:

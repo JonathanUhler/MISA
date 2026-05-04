@@ -1,0 +1,97 @@
+# Hardware Reference Architecture
+
+The ultimate goal of the MISA project is to design, verify, and manufacture an ASIC running a
+complete implementation of the architecture. Tape out shuttle programs that offer such a service
+often have very restrictive area and pinout requirements. This chapter discusses several
+implementations of MISA architectures as digital circuits, including one architecture intended for
+tapeout.
+
+## Simulator Conventions and Development
+
+All MISA hardware simulators are designed using the [Digital](https://github.com/hneemann/digital)
+logic designer. While certainly far from an industry-standard tool, Digital provides all the
+functionality needed for designing basic MISA processors, including export to Verilog.
+
+Simulators and simulator components are located in the `misa-sim` subdirectory. Each top-level
+simulator is named `misa<width>[extensions]_<cpi>cpi_<pins>pin` where:
+
+- `<width>` is the width of the native architecture word (e.g. 8 for the base architecture)
+- `[extensions]` are letter codes for any implemented architecture extensions defined in the ISA
+- `<cpi>` is the approximate cycles-per-instruction of the implementation, used to differentiate
+  pipelined vs single-cycle designs
+- `<pins>` is the total number of input, output, and inout pins used by the design
+
+Additionally, files with the suffix `_package` contain a full system with both a MISA microprocessor
+and external memory.
+
+## Current Implementations
+
+### `misa8_3cpi_37pin` 
+
+`misa8_3cpi_37pin` is the first reference MISA implementation. It's primary design goal is to serve
+as a technically simple implementation that can be modified for tapeout programs. It implements the
+core 8-bit MISA architecture with no extensions as a 37-pin package with a 3-stage unpipelined
+execution path.
+
+#### Pinout
+
+`misa8_3cpi_37pin` uses the following pins, in no particular order:
+
+| Pins | Direction | Purpose              |
+|------|-----------|----------------------|
+| 1    | Input     | Clock                |
+| 1    | Input     | Reset                |
+| 8    | Input     | Memory read data     |
+| 1    | Input     | Memory ready signal  |
+| 8    | Output    | Memory write data    |
+| 16   | Output    | Memory address       |
+| 1    | Output    | Memory read request  |
+| 1    | Output    | Memory write request |
+
+#### Execution Path
+
+`misa8_3cpi_37pin` is not pipelined, but has three distinct phases of execution for each
+instruction:
+
+- Fetch low: Fetch the low byte of the next instruction from the current PC value
+- Fetch high: Fetch the high byte of the next instruction from the PC + 1
+- Execute: Execute the fetched 16-bit instruction
+
+Because every instruction requires at least two memory operations, the processor will be slow and
+subject to memory-related stalls. However, distinct fetches (i.e. a one input port memory) and
+no pipelining make the design easier to reason about, and hopefully will result in a smaller die.
+
+The stage is managed with a 2-bit counter modulo 3 which forever loops through the three stages.
+Instructions are stored in two 8-bit latches for the high and low words, which are merged before
+being sent to the decoder unit.
+
+<!--
+Possible pinout for tiny tapeout:
+
+Input
+0 Clock
+1 UART RX
+2 Reset
+3 Memory ready
+4 (unused)
+5 (unused)
+6 (unused)
+7 (unused)
+
+Inout - Multiplexed memory address/read data/write data
+ Bus phase = 00 ==> Low address byte
+ Bus phase = 01 ==> High address byte
+ Bus phase = 10 ==> Data (read or write, based on r/w enable signals)
+ 
+ Processor is always the driver of the inout bus except when bus phase = 10 AND memory read = 1
+
+Output
+0 Halted
+1 UART TX
+2 Memory read enable
+3 Memory write enable
+4 Bus phase [0]
+5 Bus phase [1]
+6 (unused)
+7 (unused)
+-->
