@@ -21,10 +21,10 @@ process inputPath outputPath macroDefs = do
 
 
 formatDefs :: [String] -> IO MacroMap
-formatDefs []             = return ([])
+formatDefs []             = return []
 formatDefs (k : v : rest) = do
   otherDefs <- formatDefs rest
-  return ((k, v) : otherDefs)
+  return ((k, [], v) : otherDefs)
 formatDefs k              = do
   hPutStrLn stderr ("no value associated with macro definition '" ++ show k ++ "'")
   exitWith (ExitFailure 1)
