@@ -22,8 +22,8 @@
       </transform>
     </entry>
     <entry>
-      <string>preloadProgram</string>
-      <boolean>true</boolean>
+      <string>Width</string>
+      <int>14</int>
     </entry>
     <entry>
       <string>preloadProgramFile</string>
@@ -291,11 +291,6 @@
       <pos x="300" y="500"/>
     </visualElement>
     <visualElement>
-      <elementName>memory.dig</elementName>
-      <elementAttributes/>
-      <pos x="1440" y="800"/>
-    </visualElement>
-    <visualElement>
       <elementName>Tunnel</elementName>
       <elementAttributes>
         <entry>
@@ -303,7 +298,7 @@
           <string>mem\_read\_data</string>
         </entry>
       </elementAttributes>
-      <pos x="1780" y="800"/>
+      <pos x="1980" y="780"/>
     </visualElement>
     <visualElement>
       <elementName>Tunnel</elementName>
@@ -332,20 +327,6 @@
         </entry>
       </elementAttributes>
       <pos x="1120" y="840"/>
-    </visualElement>
-    <visualElement>
-      <elementName>Tunnel</elementName>
-      <elementAttributes>
-        <entry>
-          <string>rotation</string>
-          <rotation rotation="2"/>
-        </entry>
-        <entry>
-          <string>NetName</string>
-          <string>clk</string>
-        </entry>
-      </elementAttributes>
-      <pos x="1420" y="880"/>
     </visualElement>
     <visualElement>
       <elementName>Demultiplexer</elementName>
@@ -1056,7 +1037,7 @@
           <string>ctl\_mem\_read</string>
         </entry>
       </elementAttributes>
-      <pos x="1420" y="840"/>
+      <pos x="1420" y="860"/>
     </visualElement>
     <visualElement>
       <elementName>Tunnel</elementName>
@@ -1070,7 +1051,7 @@
           <string>ctl\_mem\_write</string>
         </entry>
       </elementAttributes>
-      <pos x="1420" y="860"/>
+      <pos x="1420" y="900"/>
     </visualElement>
     <visualElement>
       <elementName>Tunnel</elementName>
@@ -1154,7 +1135,7 @@
           <string>reg\_port1\_data(out)</string>
         </entry>
       </elementAttributes>
-      <pos x="1420" y="800"/>
+      <pos x="1420" y="780"/>
     </visualElement>
     <visualElement>
       <elementName>Tunnel</elementName>
@@ -3225,6 +3206,78 @@
       </elementAttributes>
       <pos x="1100" y="-80"/>
     </visualElement>
+    <visualElement>
+      <elementName>In</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>mem\_read\_data</string>
+        </entry>
+        <entry>
+          <string>Bits</string>
+          <int>8</int>
+        </entry>
+      </elementAttributes>
+      <pos x="1960" y="780"/>
+    </visualElement>
+    <visualElement>
+      <elementName>In</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>mem\_ready</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1960" y="820"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>mem\_write\_data</string>
+        </entry>
+        <entry>
+          <string>Bits</string>
+          <int>8</int>
+        </entry>
+      </elementAttributes>
+      <pos x="1440" y="780"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>mem\_addr</string>
+        </entry>
+        <entry>
+          <string>Bits</string>
+          <int>16</int>
+        </entry>
+      </elementAttributes>
+      <pos x="1440" y="820"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>mem\_read</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1440" y="860"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>mem\_write</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1440" y="900"/>
+    </visualElement>
   </visualElements>
   <wires>
     <wire>
@@ -3324,6 +3377,10 @@
       <p2 x="560" y="900"/>
     </wire>
     <wire>
+      <p1 x="1420" y="900"/>
+      <p2 x="1440" y="900"/>
+    </wire>
+    <wire>
       <p1 x="480" y="520"/>
       <p2 x="500" y="520"/>
     </wire>
@@ -3382,6 +3439,14 @@
     <wire>
       <p1 x="-660" y="780"/>
       <p2 x="-640" y="780"/>
+    </wire>
+    <wire>
+      <p1 x="1420" y="780"/>
+      <p2 x="1440" y="780"/>
+    </wire>
+    <wire>
+      <p1 x="1960" y="780"/>
+      <p2 x="1980" y="780"/>
     </wire>
     <wire>
       <p1 x="-160" y="140"/>
@@ -3496,6 +3561,14 @@
       <p2 x="-220" y="660"/>
     </wire>
     <wire>
+      <p1 x="540" y="920"/>
+      <p2 x="560" y="920"/>
+    </wire>
+    <wire>
+      <p1 x="-1040" y="920"/>
+      <p2 x="-1020" y="920"/>
+    </wire>
+    <wire>
       <p1 x="-160" y="280"/>
       <p2 x="-140" y="280"/>
     </wire>
@@ -3522,14 +3595,6 @@
     <wire>
       <p1 x="-1060" y="1560"/>
       <p2 x="-960" y="1560"/>
-    </wire>
-    <wire>
-      <p1 x="540" y="920"/>
-      <p2 x="560" y="920"/>
-    </wire>
-    <wire>
-      <p1 x="-1040" y="920"/>
-      <p2 x="-1020" y="920"/>
     </wire>
     <wire>
       <p1 x="300" y="1180"/>
@@ -3572,20 +3637,12 @@
       <p2 x="560" y="800"/>
     </wire>
     <wire>
-      <p1 x="1760" y="800"/>
-      <p2 x="1780" y="800"/>
-    </wire>
-    <wire>
       <p1 x="1080" y="800"/>
       <p2 x="1100" y="800"/>
     </wire>
     <wire>
       <p1 x="1120" y="800"/>
       <p2 x="1140" y="800"/>
-    </wire>
-    <wire>
-      <p1 x="1420" y="800"/>
-      <p2 x="1440" y="800"/>
     </wire>
     <wire>
       <p1 x="80" y="800"/>
@@ -3732,6 +3789,18 @@
       <p2 x="-220" y="680"/>
     </wire>
     <wire>
+      <p1 x="-1040" y="940"/>
+      <p2 x="-1020" y="940"/>
+    </wire>
+    <wire>
+      <p1 x="-1000" y="940"/>
+      <p2 x="-980" y="940"/>
+    </wire>
+    <wire>
+      <p1 x="-980" y="940"/>
+      <p2 x="-880" y="940"/>
+    </wire>
+    <wire>
       <p1 x="140" y="300"/>
       <p2 x="160" y="300"/>
     </wire>
@@ -3758,18 +3827,6 @@
     <wire>
       <p1 x="-920" y="1580"/>
       <p2 x="-900" y="1580"/>
-    </wire>
-    <wire>
-      <p1 x="-1040" y="940"/>
-      <p2 x="-1020" y="940"/>
-    </wire>
-    <wire>
-      <p1 x="-1000" y="940"/>
-      <p2 x="-980" y="940"/>
-    </wire>
-    <wire>
-      <p1 x="-980" y="940"/>
-      <p2 x="-880" y="940"/>
     </wire>
     <wire>
       <p1 x="300" y="1200"/>
@@ -3982,10 +4039,6 @@
     <wire>
       <p1 x="1120" y="840"/>
       <p2 x="1140" y="840"/>
-    </wire>
-    <wire>
-      <p1 x="1420" y="840"/>
-      <p2 x="1440" y="840"/>
     </wire>
     <wire>
       <p1 x="220" y="840"/>
@@ -4298,10 +4351,6 @@
     <wire>
       <p1 x="-780" y="1260"/>
       <p2 x="-320" y="1260"/>
-    </wire>
-    <wire>
-      <p1 x="1420" y="880"/>
-      <p2 x="1440" y="880"/>
     </wire>
     <wire>
       <p1 x="1140" y="880"/>
