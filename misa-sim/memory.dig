@@ -92,7 +92,7 @@
           <string>mem\_ready</string>
         </entry>
       </elementAttributes>
-      <pos x="580" y="420"/>
+      <pos x="580" y="480"/>
     </visualElement>
     <visualElement>
       <elementName>RAMDualPort</elementName>
@@ -122,11 +122,25 @@
       </elementAttributes>
       <pos x="380" y="220"/>
     </visualElement>
+    <visualElement>
+      <elementName>Or</elementName>
+      <elementAttributes>
+        <entry>
+          <string>wideShape</string>
+          <boolean>true</boolean>
+        </entry>
+      </elementAttributes>
+      <pos x="480" y="460"/>
+    </visualElement>
   </visualElements>
   <wires>
     <wire>
       <p1 x="400" y="320"/>
       <p2 x="460" y="320"/>
+    </wire>
+    <wire>
+      <p1 x="560" y="480"/>
+      <p2 x="580" y="480"/>
     </wire>
     <wire>
       <p1 x="420" y="340"/>
@@ -137,8 +151,8 @@
       <p2 x="580" y="340"/>
     </wire>
     <wire>
-      <p1 x="560" y="420"/>
-      <p2 x="580" y="420"/>
+      <p1 x="440" y="500"/>
+      <p2 x="480" y="500"/>
     </wire>
     <wire>
       <p1 x="440" y="360"/>
@@ -165,20 +179,16 @@
       <p2 x="420" y="460"/>
     </wire>
     <wire>
+      <p1 x="420" y="460"/>
+      <p2 x="480" y="460"/>
+    </wire>
+    <wire>
       <p1 x="380" y="540"/>
       <p2 x="440" y="540"/>
     </wire>
     <wire>
-      <p1 x="440" y="540"/>
-      <p2 x="560" y="540"/>
-    </wire>
-    <wire>
       <p1 x="400" y="320"/>
       <p2 x="400" y="380"/>
-    </wire>
-    <wire>
-      <p1 x="560" y="420"/>
-      <p2 x="560" y="540"/>
     </wire>
     <wire>
       <p1 x="420" y="340"/>
@@ -190,6 +200,10 @@
     </wire>
     <wire>
       <p1 x="440" y="380"/>
+      <p2 x="440" y="500"/>
+    </wire>
+    <wire>
+      <p1 x="440" y="500"/>
       <p2 x="440" y="540"/>
     </wire>
   </wires>
