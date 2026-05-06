@@ -157,7 +157,7 @@
       <elementAttributes>
         <entry>
           <string>Label</string>
-          <string>ctl\_op\_lw</string>
+          <string>ctl\_op\_ld</string>
         </entry>
       </elementAttributes>
       <pos x="1200" y="1180"/>
@@ -167,7 +167,7 @@
       <elementAttributes>
         <entry>
           <string>Label</string>
-          <string>ctl\_op\_sw</string>
+          <string>ctl\_op\_st</string>
         </entry>
       </elementAttributes>
       <pos x="1200" y="1260"/>
@@ -688,7 +688,7 @@
         </entry>
         <entry>
           <string>NetName</string>
-          <string>ctl\_op\_lw</string>
+          <string>ctl\_op\_ld</string>
         </entry>
       </elementAttributes>
       <pos x="820" y="1860"/>
@@ -766,7 +766,7 @@
       <elementAttributes>
         <entry>
           <string>NetName</string>
-          <string>ctl\_op\_lw</string>
+          <string>ctl\_op\_ld</string>
         </entry>
       </elementAttributes>
       <pos x="940" y="1180"/>
@@ -776,7 +776,7 @@
       <elementAttributes>
         <entry>
           <string>NetName</string>
-          <string>ctl\_op\_sw</string>
+          <string>ctl\_op\_st</string>
         </entry>
       </elementAttributes>
       <pos x="940" y="1260"/>
@@ -1016,7 +1016,7 @@
         </entry>
         <entry>
           <string>NetName</string>
-          <string>ctl\_op\_lw</string>
+          <string>ctl\_op\_ld</string>
         </entry>
       </elementAttributes>
       <pos x="1180" y="1180"/>
@@ -1030,7 +1030,7 @@
         </entry>
         <entry>
           <string>NetName</string>
-          <string>ctl\_op\_sw</string>
+          <string>ctl\_op\_st</string>
         </entry>
       </elementAttributes>
       <pos x="1180" y="1260"/>
@@ -1212,7 +1212,7 @@
         </entry>
         <entry>
           <string>NetName</string>
-          <string>ctl\_op\_lw</string>
+          <string>ctl\_op\_ld</string>
         </entry>
       </elementAttributes>
       <pos x="820" y="2580"/>
@@ -1226,7 +1226,7 @@
         </entry>
         <entry>
           <string>NetName</string>
-          <string>ctl\_op\_sw</string>
+          <string>ctl\_op\_st</string>
         </entry>
       </elementAttributes>
       <pos x="920" y="2660"/>
@@ -1240,7 +1240,7 @@
         </entry>
         <entry>
           <string>NetName</string>
-          <string>ctl\_op\_lw</string>
+          <string>ctl\_op\_ld</string>
         </entry>
       </elementAttributes>
       <pos x="920" y="2360"/>
@@ -1458,7 +1458,7 @@
         </entry>
         <entry>
           <string>NetName</string>
-          <string>ctl\_op\_lw</string>
+          <string>ctl\_op\_ld</string>
         </entry>
       </elementAttributes>
       <pos x="820" y="3160"/>
@@ -1472,7 +1472,7 @@
         </entry>
         <entry>
           <string>NetName</string>
-          <string>ctl\_op\_sw</string>
+          <string>ctl\_op\_st</string>
         </entry>
       </elementAttributes>
       <pos x="820" y="3180"/>
@@ -1640,7 +1640,7 @@
         </entry>
         <entry>
           <string>NetName</string>
-          <string>ctl\_op\_lw</string>
+          <string>ctl\_op\_ld</string>
         </entry>
       </elementAttributes>
       <pos x="820" y="3440"/>
@@ -1654,7 +1654,7 @@
         </entry>
         <entry>
           <string>NetName</string>
-          <string>ctl\_op\_sw</string>
+          <string>ctl\_op\_st</string>
         </entry>
       </elementAttributes>
       <pos x="820" y="3460"/>

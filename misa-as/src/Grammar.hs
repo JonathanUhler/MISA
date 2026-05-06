@@ -41,7 +41,8 @@ data Statement
 -- | The type of an instruction in the assembly language.
 data Inst
   -- Base instructions
-  = AddInst  GpReg   GpReg GpReg
+  = HaltInst GpReg
+  | AddInst  GpReg   GpReg GpReg
   | AdcInst  GpReg   GpReg GpReg
   | SubInst  GpReg   GpReg GpReg
   | SbbInst  GpReg   GpReg GpReg
@@ -49,14 +50,13 @@ data Inst
   | OrInst   GpReg   GpReg GpReg
   | XorInst  GpReg   GpReg GpReg
   | RrcInst  GpReg   GpReg
-  | LwInst   GpReg   GpReg GpReg
-  | SwInst   GpReg   GpReg GpReg
+  | SetInst  GpReg   Imm
+  | LdInst   GpReg   GpReg GpReg
+  | StInst   GpReg   GpReg GpReg
   | RsrInst  CsrReg  GpReg GpReg
   | WsrInst  CsrReg  GpReg GpReg
-  | SetInst  GpReg   Imm
   | JalInst  CmpFlag GpReg GpReg
   | JmpInst  CmpFlag GpReg GpReg
-  | HaltInst GpReg
   -- Pseudo instructions
   | NopInst
   | MovInst    GpReg   GpReg
@@ -76,7 +76,7 @@ data Inst
 -- | The list of instruction opcodes.
 data Op
   -- Base instructions
-  = ADD | ADC | SUB | SBB | AND | OR | XOR | RRC | LW | SW | RSR | WSR | SET | JAL | JMP | HALT
+  = HALT | ADD | ADC | SUB | SBB | AND | OR | XOR | RRC | SET | LD | ST | RSR | WSR | JAL | JMP
   -- Pseudo instructions
   | NOP | MOV | CMP | SET2 | JMPI | JALI | GOTO | CALL | RET | CLR | PUSH | POP
   deriving (Show, Enum, Bounded)

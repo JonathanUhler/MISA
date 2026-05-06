@@ -116,11 +116,11 @@ will be taken.
 
 `FLAGS` is set based on the result of each ALU operation. The instructions which must update
 the `FLAGS` register are: `ADD`, `ADC`, `SUB`, `SBB`, `RRC`. Instructions which may, depending on
-the implementation, update the `FLAGS` register are: `HALT`, `AND`, `OR`, `XOR`, `SET`.
-Instructions which must not update the `FLAGS` register are: `LW`, `SW`, `RSR`, `WSR` (must not
-update `FLAGS` asynchronously through the ALU output, but will update `FLAGS` if writing directly
-to it), `JAL`, `JMP`. A conditional branch that relies on `FLAGS` should be performed immediately
-after the conditional comparison or a `WSR` to `FLAGS`.
+the implementation, update the `FLAGS` register are: `HALT`, `AND`, `OR`, `XOR`. Instructions which
+must not update the `FLAGS` register are: `SET`, `LD`, `ST`, `RSR`, `WSR` (must not update `FLAGS`
+asynchronously through the ALU output, but will update `FLAGS` if writing directly to it), `JAL`,
+`JMP`. A conditional branch that relies on `FLAGS` should be performed immediately after the
+conditional comparison or a `WSR` to `FLAGS`.
 
 The `FLAGS` special register is a flags register (one bit per flag) which must be at least 4 bits
 and support the following:
@@ -560,8 +560,8 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
-### `LW`
-Usage: `LW RD RS1 RS2`
+### `LD`
+Usage: `LD RD RS1 RS2`
 
 Meaning: `RD = Memory[RS1 << 8 | RS2]`
 
@@ -583,8 +583,8 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
-### `SW`
-Usage: `SW RD RS1 RS2`
+### `ST`
+Usage: `ST RD RS1 RS2`
 
 Meaning: `Memory[RS1 << 8 | RS2] = RD`
 
@@ -775,7 +775,7 @@ RSR SADDR RSCRATCH
 SET RD 1
 ADD RSCRATCH1 RSCRATCH1 RD
 ADC RSCRATCH0 RSCRATCH0 R0
-LW RD RSCRATCH
+LD RD RSCRATCH
 WSR SADDR RSCRATCH
 ```
 
@@ -787,7 +787,7 @@ Usage: `PUSH RS`
 Meaning:
 ```
 RSR SADDR RSCRATCH
-SW RS RSCRATCH
+ST RS RSCRATCH
 ADD R0 R0 R0
 SBB RSCRATCH1 RSCRATCH1 R0
 SBB RSCRATCH0 RSCRATCH0 R0

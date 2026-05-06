@@ -136,8 +136,8 @@ packInst inst =
     XorInst  rd   rs1 rs2 -> packFormatRRR 0x7 rd  rs1 rs2
     RrcInst  rd   rs      -> packFormatRR  0x8 rd  rs
     SetInst  rd   imm     -> packFormatRI  0x9 rd  imm
-    LwInst   rd   rs1 rs2 -> packFormatRRR 0xA rd  rs1 rs2
-    SwInst   rd   rs1 rs2 -> packFormatRRR 0xB rd  rs1 rs2
+    LdInst   rd   rs1 rs2 -> packFormatRRR 0xA rd  rs1 rs2
+    StInst   rd   rs1 rs2 -> packFormatRRR 0xB rd  rs1 rs2
     RsrInst  csr  rs1 rs2 -> packFormatRRC 0xC rs1 rs2 csr
     WsrInst  csr  rs1 rs2 -> packFormatRRC 0xD rs1 rs2 csr
     JalInst  flag rs1 rs2 -> packFormatRRF 0xE rs1 rs2 flag

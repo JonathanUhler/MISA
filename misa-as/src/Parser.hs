@@ -168,6 +168,7 @@ parseInst :: Parser Inst
 parseInst = choice
   [
     -- Base instructions
+    HaltInst <$> (parseThisIdent "halt" *> parseGpReg),
     AddInst  <$> (parseThisIdent "add"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
     AdcInst  <$> (parseThisIdent "adc"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
     SubInst  <$> (parseThisIdent "sub"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
@@ -176,14 +177,13 @@ parseInst = choice
     OrInst   <$> (parseThisIdent "or"   *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
     XorInst  <$> (parseThisIdent "xor"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
     RrcInst  <$> (parseThisIdent "rrc"  *> parseGpReg)   <*> parseGpReg,
-    (\rd (r1, r2) -> LwInst rd r1 r2) <$> (parseThisIdent "lw"   *> parseGpReg)   <*> parseRegPair,
-    (\rd (r1, r2) -> SwInst rd r1 r2) <$> (parseThisIdent "sw"   *> parseGpReg)   <*> parseRegPair,
+    SetInst  <$> (parseThisIdent "set"  *> parseGpReg)   <*> parseLowImm,
+    (\rd (r1, r2) -> LdInst rd r1 r2) <$> (parseThisIdent "ld"   *> parseGpReg)   <*> parseRegPair,
+    (\rd (r1, r2) -> StInst rd r1 r2) <$> (parseThisIdent "st"   *> parseGpReg)   <*> parseRegPair,
     (\c (r1, r2) -> RsrInst c r1 r2)  <$> (parseThisIdent "rsr"  *> parseCsrReg)  <*> parseRegPair,
     (\c (r1, r2) -> WsrInst c r1 r2)  <$> (parseThisIdent "wsr"  *> parseCsrReg)  <*> parseRegPair,
-    SetInst  <$> (parseThisIdent "set"  *> parseGpReg)   <*> parseLowImm,
     (\f (r1, r2) -> JalInst f r1 r2)  <$> (parseThisIdent "jal"  *> parseCmpFlag) <*> parseRegPair,
     (\f (r1, r2) -> JmpInst f r1 r2)  <$> (parseThisIdent "jmp"  *> parseCmpFlag) <*> parseRegPair,
-    HaltInst <$> (parseThisIdent "halt" *> parseGpReg),
     -- Pseudo instructions
     NopInst    <$   parseThisIdent "nop",
     MovInst    <$> (parseThisIdent "mov" *> parseGpReg) <*> parseGpReg,
