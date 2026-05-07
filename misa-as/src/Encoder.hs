@@ -73,10 +73,32 @@ resolvePseudoInst inst = case inst of
         SetInst rd (IntImm Low 0x01),
         AddInst RSCRATCH1 RSCRATCH1 rd,
         AdcInst RSCRATCH0 RSCRATCH0 R0,
-        LdInst rd RSCRATCH0 RSCRATCH1]
+        LdInst rd RSCRATCH0 RSCRATCH1,
+        WsrInst SADDR RSCRATCH0 RSCRATCH1]
+  Pop2Inst rd1 rd2
+    -> [RsrInst SADDR RSCRATCH0 RSCRATCH1,
+        SetInst rd2 (IntImm Low 0x01),
+        AddInst RSCRATCH1 RSCRATCH1 rd2,
+        AdcInst RSCRATCH0 RSCRATCH0 R0,
+        LdInst rd1 RSCRATCH0 RSCRATCH1,
+        AddInst RSCRATCH1 RSCRATCH1 rd2,
+        AdcInst RSCRATCH0 RSCRATCH0 R0,
+        LdInst rd2 RSCRATCH0 RSCRATCH1,
+        WsrInst SADDR RSCRATCH0 RSCRATCH1]
   PushInst rs
     -> [RsrInst SADDR RSCRATCH0 RSCRATCH1,
         StInst rs RSCRATCH0 RSCRATCH1,
+        AddInst R0 R0 R0,  -- To set FLAGS.C = 0
+        SbbInst RSCRATCH1 RSCRATCH1 R0,
+        SbbInst RSCRATCH0 RSCRATCH0 R0,
+        WsrInst SADDR RSCRATCH0 RSCRATCH1]
+  Push2Inst rs1 rs2
+    -> [RsrInst SADDR RSCRATCH0 RSCRATCH1,
+        StInst rs2 RSCRATCH0 RSCRATCH1,
+        AddInst R0 R0 R0,  -- To set FLAGS.C = 0
+        SbbInst RSCRATCH1 RSCRATCH1 R0,
+        SbbInst RSCRATCH0 RSCRATCH0 R0,
+        StInst rs1 RSCRATCH0 RSCRATCH1,
         AddInst R0 R0 R0,  -- To set FLAGS.C = 0
         SbbInst RSCRATCH1 RSCRATCH1 R0,
         SbbInst RSCRATCH0 RSCRATCH0 R0,

@@ -200,7 +200,9 @@ parseInst = choice
     (\(rd1, rd2) (rs1, rs2) (rs3, rs4) -> Or2Inst rd1 rd2 rs1 rs2 rs3 rs4)
                <$> (parseThisIdent "or2" *> parseRegPair) <*> parseRegPair <*> parseRegPair,
     PopInst    <$> (parseThisIdent "pop" *> parseGpReg),
+    (\(rd1, rd2) -> Pop2Inst rd1 rd2) <$> (parseThisIdent "pop2" *> parseRegPair),
     PushInst   <$> (parseThisIdent "push" *> parseGpReg),
+    (\(rs1, rs2) -> Push2Inst rs1 rs2) <$> (parseThisIdent "push2" *> parseRegPair),
     RetInst    <$   parseThisIdent "ret",
     (\(rd1, rd2) (rs1, rs2) -> Rrc2Inst rd1 rd2 rs1 rs2)
                <$> (parseThisIdent "rrc2" *> parseRegPair) <*> parseRegPair,
