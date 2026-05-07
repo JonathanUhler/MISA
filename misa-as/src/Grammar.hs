@@ -1,13 +1,5 @@
-{- |
-Grammar definition for the MISA assembler language.
-
-The grammar is context-free and defined by the production rules outlines with the `data` types
-in this file, where the start variable is `Program`.
-
-Author: Jonathan Uhler
--}
 module Grammar (Program,
-                Statement(..),
+                Stat(..),
                 Inst(..),
                 Op(..),
                 GpReg(..),
@@ -23,22 +15,16 @@ module Grammar (Program,
 import Data.Word (Word8)
 
 
--- | The start symbol for the grammar of a full program (the contents of an assembly file).
-type Program = [Statement]
+type Program = [Stat]
 
 
--- | The type of every line of an assembly program (the most broad classification of lexemes).
-data Statement
-  -- | A statement which is an instruction containing an opcode and operands.
-  = InstStatement Inst
-  -- | A statement which is a label declaration.
-  | LabelStatement Label
-  -- | A statement which is a reserved assembler or linker directive.
-  | DirStatement Dir
+data Stat
+  = InstStat Inst
+  | LabelStat Label
+  | DirStat Dir
   deriving (Show, Eq)
 
 
--- | The type of an instruction in the assembly language.
 data Inst
   -- Base instructions
   = HaltInst GpReg
@@ -84,7 +70,6 @@ data Inst
   deriving (Show, Eq)
 
 
--- | The list of instruction opcodes.
 data Op
   -- Base instructions
   = HALT | ADD | ADC | SUB | SBB | AND | OR | XOR | RRC | SET | LD | ST | RSR | WSR | JAL | JMP
@@ -94,14 +79,12 @@ data Op
   deriving (Show, Enum, Bounded)
 
 
--- | The list of general purpose register names.
 data GpReg
   = R0 | RA | RB | RC | RD | RE | RF | RU | RV | RW | RX | RY | RZ | RT
   | RSCRATCH0 | RSCRATCH1
   deriving (Show, Enum, Bounded, Eq)
 
 
--- | The list of 16-bit general purpose register aliases.
 data WideReg = RAB | RCD | REF | RUV | RWX | RYZ | RSCRATCH
   deriving (Show, Enum, Bounded)
 
@@ -127,16 +110,13 @@ data ImmPart
   deriving (Show, Eq)
 
 
--- | The type of a label definition/name.
 type Label = String
 
 
--- | The type of an assembler or linker directive.
 data Dir
-  -- | The .word directive, .word X => produce byte X in output
   = WordDir Word8
-  -- | The .array directive, .array X1 X2 ... => produce bytes X1 X2 ... in output
   | ArrayDir [Word8]
-  -- | The .section directive, .section NAME => place following binary in section called NAME
+  | AsciiDir String
+  | AsciizDir String
   | SectionDir String
   deriving (Show, Eq)

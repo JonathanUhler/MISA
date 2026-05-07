@@ -4,6 +4,7 @@ module Encoder (encodeProgram) where
 import Grammar
 import ObjectFile
 
+import Data.Char (ord)
 import qualified Data.Map as Map
 import Data.Word (Word16)
 
@@ -13,7 +14,7 @@ splitSecs stats = Map.toList (Map.map reverse (splitAcc "text" stats Map.empty))
   where
     splitAcc :: Label -> Program -> Map.Map String Program -> Map.Map String Program
     splitAcc _ [] acc = acc
-    splitAcc _ (DirStatement (SectionDir newSec) : rest) acc =
+    splitAcc _ (DirStat (SectionDir newSec) : rest) acc =
       let newAcc = Map.insertWith (++) newSec [] acc
       in splitAcc newSec rest newAcc
     splitAcc currSec (stat : rest) acc =
@@ -25,7 +26,7 @@ resolvePseudoInsts :: Program -> Program
 resolvePseudoInsts [] = []
 resolvePseudoInsts (stat : stats) =
   case stat of
-    (InstStatement inst) -> (map InstStatement (resolvePseudoInst inst)) ++ resolvePseudoInsts stats
+    (InstStat inst) -> (map InstStat (resolvePseudoInst inst)) ++ resolvePseudoInsts stats
     _                    -> stat : resolvePseudoInsts stats
 
 
@@ -117,36 +118,44 @@ resolvePseudoInst inst = case inst of
 
 
 extractCode :: Program -> Code
-extractCode []                                      = []
-extractCode (InstStatement inst            : stats) = InstCode inst      : extractCode stats
-extractCode (DirStatement (WordDir word)   : stats) = LiteralCode [word] : extractCode stats
-extractCode (DirStatement (ArrayDir array) : stats) = LiteralCode array  : extractCode stats
-extractCode (_ : stats)                             = extractCode stats
+extractCode []                                       = []
+extractCode (InstStat inst             : stats) = InstCode inst      : extractCode stats
+extractCode (DirStat (WordDir word)    : stats) = LiteralCode [word] : extractCode stats
+extractCode (DirStat (ArrayDir array)  : stats) = LiteralCode array  : extractCode stats
+extractCode (DirStat (AsciiDir value) : stats)  = LiteralCode array  : extractCode stats
+  where array = map (fromIntegral . ord) value
+extractCode (DirStat (AsciizDir value) : stats) = LiteralCode array  : extractCode stats
+  where array = (map (fromIntegral . ord) value) ++ [0x00]
+extractCode (_ : stats)                              = extractCode stats
 
 
 extractSyms :: Program -> SymTable
 extractSyms stats = getWithPc stats 0
   where
     getWithPc :: Program -> Word16 -> SymTable
-    getWithPc [] _                                  = []
-    getWithPc (InstStatement _           : rest) pc = getWithPc rest (pc + 2)
-    getWithPc (DirStatement (WordDir _)  : rest) pc = getWithPc rest (pc + 1)
-    getWithPc (DirStatement (ArrayDir a) : rest) pc = getWithPc rest (pc + fromIntegral (length a))
-    getWithPc (LabelStatement label      : rest) pc = [Sym label pc] ++ getWithPc rest pc
-    getWithPc (_                         : rest) pc = getWithPc rest (pc + 0)
+    getWithPc [] _                              = []
+    getWithPc (InstStat _            : rest) pc = getWithPc rest (pc + 2)
+    getWithPc (DirStat (WordDir _)   : rest) pc = getWithPc rest (pc + 1)
+    getWithPc (DirStat (ArrayDir a)  : rest) pc = getWithPc rest (pc + fromIntegral (length a))
+    getWithPc (DirStat (AsciiDir v)  : rest) pc = getWithPc rest (pc + fromIntegral (length v))
+    getWithPc (DirStat (AsciizDir v) : rest) pc = getWithPc rest (pc + fromIntegral (length v + 1))
+    getWithPc (LabelStat label       : rest) pc = [Sym label pc] ++ getWithPc rest pc
+    getWithPc (_                     : rest) pc = getWithPc rest (pc + 0)
 
 
 extractRelocs :: Program -> RelocTable
 extractRelocs statements = getWithPc statements 0
   where
     getWithPc :: Program -> Word16 -> RelocTable
-    getWithPc [] _                                  = []
-    getWithPc (InstStatement inst        : rest) pc = case extractLabelImm inst of
+    getWithPc [] _                              = []
+    getWithPc (InstStat inst         : rest) pc = case extractLabelImm inst of
       Just (LabelImm part sec) -> [Reloc (fromPart part) (pc + 1) sec] ++ getWithPc rest (pc + 2)
       _                        -> getWithPc rest (pc + 2)
-    getWithPc (DirStatement (WordDir _)  : rest) pc = getWithPc rest (pc + 1)
-    getWithPc (DirStatement (ArrayDir a) : rest) pc = getWithPc rest (pc + fromIntegral (length a))
-    getWithPc (_                         : rest) pc = getWithPc rest pc
+    getWithPc (DirStat (WordDir _)   : rest) pc = getWithPc rest (pc + 1)
+    getWithPc (DirStat (ArrayDir a)  : rest) pc = getWithPc rest (pc + fromIntegral (length a))
+    getWithPc (DirStat (AsciiDir v)  : rest) pc = getWithPc rest (pc + fromIntegral (length v))
+    getWithPc (DirStat (AsciizDir v) : rest) pc = getWithPc rest (pc + fromIntegral (length v + 1))
+    getWithPc (_                     : rest) pc = getWithPc rest pc
 
     extractLabelImm :: Inst -> Maybe Imm
     extractLabelImm (SetInst  _   label) = Just label

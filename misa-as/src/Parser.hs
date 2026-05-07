@@ -31,7 +31,7 @@ reservedCmpFlags :: [(String, CmpFlag)]
 reservedCmpFlags = [(map toLower (show f), f) | f <- [minBound..maxBound :: CmpFlag]]
 
 reservedDirs :: [String]
-reservedDirs = ["word", "array", "section"]
+reservedDirs = ["word", "array", "ascii", "asciiz", "section"]
 
 reservedIdentifiers :: Set.Set String
 reservedIdentifiers = Set.fromList (concat [map fst reservedOps,
@@ -52,6 +52,10 @@ lexeme = L.lexeme skip
 
 parseString :: String -> Parser String
 parseString s = lexeme (string' s)
+
+
+parseQuotedString :: Parser String
+parseQuotedString = lexeme (char '"' *> someTill anySingle (char '"'))
 
 
 parseInteger :: Parser Int
@@ -117,6 +121,8 @@ parseDir = do
   _   <- char '.' <?> "directive"
   choice [WordDir    <$> (parseString "word"    *> parseWord),
           ArrayDir   <$> (parseString "array"   *> some parseWord),
+          AsciizDir  <$> (parseString "asciiz"  *> parseQuotedString),
+          AsciiDir   <$> (parseString "ascii"   *> parseQuotedString),
           SectionDir <$> (parseString "section" *> parseUnreservedIdentifier)]
 
 
@@ -216,12 +222,12 @@ parseInst = choice
   ] <?> "instruction"
 
 
-parseStatement :: Parser Statement
-parseStatement =
-  choice [InstStatement  <$> parseInst,
-          DirStatement   <$> parseDir,
-          LabelStatement <$> parseLabel]
+parseStat :: Parser Stat
+parseStat =
+  choice [InstStat  <$> parseInst,
+          DirStat   <$> parseDir,
+          LabelStat <$> parseLabel]
 
 
 parseProgram :: Parser Program
-parseProgram = (some (skip *> parseStatement <* skip)) <* eof
+parseProgram = (some (skip *> parseStat <* skip)) <* eof
