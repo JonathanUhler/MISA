@@ -185,6 +185,10 @@ parseInst = choice
     (\f (r1, r2) -> JalInst f r1 r2)  <$> (parseThisIdent "jal"  *> parseCmpFlag) <*> parseRegPair,
     (\f (r1, r2) -> JmpInst f r1 r2)  <$> (parseThisIdent "jmp"  *> parseCmpFlag) <*> parseRegPair,
     -- Pseudo instructions
+    (\(rd1, rd2) (rs1, rs2) (rs3, rs4) -> Add2Inst rd1 rd2 rs1 rs2 rs3 rs4)
+               <$> (parseThisIdent "add2" *> parseRegPair) <*> parseRegPair <*> parseRegPair,
+    (\(rd1, rd2) (rs1, rs2) (rs3, rs4) -> And2Inst rd1 rd2 rs1 rs2 rs3 rs4)
+               <$> (parseThisIdent "and2" *> parseRegPair) <*> parseRegPair <*> parseRegPair,
     CallInst   <$> (parseThisIdent "call" *> parseFullImm),
     ClrInst    <$   parseThisIdent "clr",
     CmpInst    <$> (parseThisIdent "cmp" *> parseGpReg) <*> parseGpReg,
@@ -193,10 +197,18 @@ parseInst = choice
     (\f i -> JmpiInst f i) <$> (parseThisIdent "jmpi" *> parseCmpFlag) <*> parseFullImm,
     MovInst    <$> (parseThisIdent "mov" *> parseGpReg) <*> parseGpReg,
     NopInst    <$   parseThisIdent "nop",
+    (\(rd1, rd2) (rs1, rs2) (rs3, rs4) -> Or2Inst rd1 rd2 rs1 rs2 rs3 rs4)
+               <$> (parseThisIdent "or2" *> parseRegPair) <*> parseRegPair <*> parseRegPair,
     PopInst    <$> (parseThisIdent "pop" *> parseGpReg),
     PushInst   <$> (parseThisIdent "push" *> parseGpReg),
     RetInst    <$   parseThisIdent "ret",
-    (\(r1, r2) i -> Set2Inst r1 r2 i) <$> (parseThisIdent "set2" *> parseRegPair) <*> parseFullImm
+    (\(rd1, rd2) (rs1, rs2) -> Rrc2Inst rd1 rd2 rs1 rs2)
+               <$> (parseThisIdent "rrc2" *> parseRegPair) <*> parseRegPair,
+    (\(r1, r2) i -> Set2Inst r1 r2 i) <$> (parseThisIdent "set2" *> parseRegPair) <*> parseFullImm,
+    (\(rd1, rd2) (rs1, rs2) (rs3, rs4) -> Sub2Inst rd1 rd2 rs1 rs2 rs3 rs4)
+               <$> (parseThisIdent "sub2" *> parseRegPair) <*> parseRegPair <*> parseRegPair,
+    (\(rd1, rd2) (rs1, rs2) (rs3, rs4) -> Xor2Inst rd1 rd2 rs1 rs2 rs3 rs4)
+               <$> (parseThisIdent "xor2" *> parseRegPair) <*> parseRegPair <*> parseRegPair
   ] <?> "instruction"
 
 

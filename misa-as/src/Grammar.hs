@@ -58,18 +58,26 @@ data Inst
   | JalInst  CmpFlag GpReg GpReg
   | JmpInst  CmpFlag GpReg GpReg
   -- Pseudo instructions
-  | CallInst   Imm
+  | Add2Inst GpReg   GpReg GpReg GpReg GpReg GpReg
+  | And2Inst GpReg   GpReg GpReg GpReg GpReg GpReg
+  | CallInst Imm
   | ClrInst
-  | CmpInst    GpReg   GpReg
-  | GotoInst   Imm
-  | JaliInst   CmpFlag Imm
-  | JmpiInst   CmpFlag Imm
-  | MovInst    GpReg   GpReg
+  | CmpInst  GpReg   GpReg
+  | GotoInst Imm
+  | JaliInst CmpFlag Imm
+  | JmpiInst CmpFlag Imm
+  | Ld2Inst  GpReg   GpReg GpReg GpReg
+  | MovInst  GpReg   GpReg
   | NopInst
-  | PopInst    GpReg
-  | PushInst   GpReg
+  | Or2Inst  GpReg   GpReg GpReg GpReg GpReg GpReg
+  | PopInst  GpReg
+  | PushInst GpReg
   | RetInst
-  | Set2Inst   GpReg   GpReg Imm
+  | Rrc2Inst GpReg   GpReg GpReg GpReg
+  | Set2Inst GpReg   GpReg Imm
+  | St2Inst  GpReg   GpReg GpReg GpReg
+  | Sub2Inst GpReg   GpReg GpReg GpReg GpReg GpReg
+  | Xor2Inst GpReg   GpReg GpReg GpReg GpReg GpReg
   deriving (Show, Eq)
 
 
@@ -78,7 +86,8 @@ data Op
   -- Base instructions
   = HALT | ADD | ADC | SUB | SBB | AND | OR | XOR | RRC | SET | LD | ST | RSR | WSR | JAL | JMP
   -- Pseudo instructions
-  | CALL | CLR | CMP | GOTO | JALI | JMPI | MOV | NOP | POP | PUSH | RET | SET2
+  | ADD2 | AND2 | CALL | CLR | CMP | GOTO | JALI | JMPI | MOV | NOP | OR2 | POP | PUSH | RET | RRC2
+  | SET2 | SUB2 | XOR2
   deriving (Show, Enum, Bounded)
 
 
