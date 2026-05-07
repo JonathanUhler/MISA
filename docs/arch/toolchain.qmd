@@ -86,6 +86,15 @@ The following directives are currently supported by `misa-as`:
 - `.array <Word8> [Word8...]`: Emits the raw bytes `<Word8> [Word8...]` in the generated code at the
   location of the directive. Earlier bytes in the array definition will be placed at lower
   addresses. `.array` is equivalent to many consecutive `.word` directives
+- `.ascii "<String>"`: Emits the bytes of the string `<String>` using the ASCII encoding at the
+  location of the directive. The first letter of the string is placed at a lower address. The
+  string is not null-terminated. Escape characters are not supported.
+- `.asciiz "<String>"`: Equivalent to `.ascii "<String>"` followed immediately by `.word 0x00`.
+  That is, the string is null-terminated with a zero byte at the higher address following the
+  last character of the string.
+- `.space <Word16>`: Reserves a block of memory of length `<Word16>`. The contents of the memory
+  is undefined at runtime. Linker implementations may either fill the memory or simply not place
+  other data/text in the reserved area, leaving it uninitialized.
 - `.section <String>`: Defines for the linker that all the following code until the next
   section directive should be placed in a section called `<String>`
   
@@ -112,67 +121,81 @@ files that contain:
 Binary object files and all fields within them are encoded with little endian byte order. Each
 object file contains the following information:
 
-| Length   | Type    | Content                                                                                              |
-|--------------|-------------|-----------------------------------------------------------------------------------------|
-| 8        | String  | The string `MISA_LF `, where `M` is the least significant byte and ` ` is the most significant byte. |
-| 2        | Word16  | The number of sections present in the object file.                                                   |
-| Variable | Section | The content of each section, repeated as many times as specified in the length field.                |
+| Length   | Type               | Content                                                                                                           |
+|----------|--------------------|-------------------------------------------------------------------------------------------------------------------|
+| 8        | String             | The string `MISA_LF `, where `M` is the least significant byte and ` ` is the most significant byte.              |
+| 2        | Word16             | The number of sections present in the object file.                                                                |
+| Variable | [Sec]              | The content of each section, repeated as many times as specified in the length field.                             |
+| 2        | Word16             | The number of strings present in the string able.                                                                 |
+| Variable | [(Word16, String)] | The ordered list of all string identifiers preceeded by their lengths, repeated as specified in the length field. |
+
+: {tbl-colwidths="[10, 25, 65]"}
 
 #### Object File Section Description
 
 Each section contains the following information:
 
 | Length   | Type       | Content                                                                     |
-|--------------|-------------|-----------------------------------------------------------------------------------------|
+|----------|------------|-----------------------------------------------------------------------------|
 | 2        | Word16     | The length in bytes of the section name string field.                       |
 | Variable | String     | The name of the section as defined with the `.section` assembler directive. |
 | Variable | Code       | The content of the assembled machine code for the specified section.        |
 | Variable | SymTable   | The table of symbols defined by the code in the specified section.          |
 | Variable | RelocTable | The table of relocations required by the code in the specified section.     |
 
+: {tbl-colwidths="[10, 15, 75]"}
+
 #### Object File Code Description
 
 Each code table contains the following information:
 
 | Length   | Type    | Content                                  |
-|--------------|-------------|-----------------------------------------------------------------------------------------|
+|----------|---------|------------------------------------------|
 | 2        | Word16  | The length in bytes of the machine code. |
 | Variable | [Word8] | The machine code.                        |
+
+: {tbl-colwidths="[10, 15, 75]"}
 
 #### Object File Symbol Table Description
 
 Each symbol table contains the following information:
 
 | Length   | Type   | Content                                    |
-|--------------|-------------|-----------------------------------------------------------------------------------------|
+|----------|--------|--------------------------------------------|
 | 2        | Word16 | The number of symbols in the symbol table. |
 | Variable | [Sym]  | The list of symbols.                       |
 
+: {tbl-colwidths="[10, 15, 75]"}
+
 Each entry in the symbol table contains the following information:
 
-| Length   | Type   | Content                                                                        |
-|--------------|-------------|-----------------------------------------------------------------------------------------|
-| 2        | Word16 | The address relative to the start of the code table that the symbol points to. |
-| 2        | Word16 | The length in bytes of the symbol's string name.                               |
-| Variable | String | The string name of the symbol.                                                 |
+| Length | Type   | Content                                                                                       |
+|--------|--------|-----------------------------------------------------------------------------------------------|
+| 2      | Word16 | The address relative to the start of the code table that the symbol points to.                |
+| 2      | Word16 | The 0-aligned index into the object file's string table where the symbol's name can be found. |
+
+: {tbl-colwidths="[10, 15, 75]"}
 
 #### Object File Relocation Table Description
 
 Each relocation table contains the following information:
 
 | Length   | Type    | Content                                        |
-|--------------|-------------|-----------------------------------------------------------------------------------------|
+|----------|---------|------------------------------------------------|
 | 2        | Word16  | The number of relocations in the symbol table. |
 | Variable | [Reloc] | The list of relocations.                       |
 
+: {tbl-colwidths="[10, 15, 75]"}
+
 Each entry in the relocation table contains the following information:
 
-| Length   | Type   | Content                                                                                                                              |
-|--------------|-------------|-----------------------------------------------------------------------------------------|
-| 1        | Word8  | Whether the byte at the relocation address must be filled with the high (0x01) or low (0x00) half of the relocated symbol's address. |
-| 2        | Word16 | The address relative to the start of the code table of the byte that needs to be filled by the linker.                               |
-| 2        | Word16 | The length in bytes of the relocation's string name.                                                                                 |
-| Variable | String | The string name of the required symbol for relocation.                                                                               |
+| Length | Type   | Content                                                                                                                              |
+|--------|--------|--------------------------------------------------------------------------------------------------------------------------------------|
+| 1      | Word8  | Whether the byte at the relocation address must be filled with the high (0x01) or low (0x00) half of the relocated symbol's address. |
+| 2      | Word16 | The address relative to the start of the code table of the byte that needs to be filled by the linker.                               |
+| 2      | Word16 | The 0-aligned index into the object file's string table where the symbol's name can be found.                                        |
+
+: {tbl-colwidths="[10, 15, 75]"}
 
 ## Linker
 
