@@ -6,7 +6,7 @@ import ObjectFile
 
 import Data.Char (ord)
 import qualified Data.Map as Map
-import Data.Word (Word16)
+import Data.Word (Word8, Word16)
 
 
 splitSecs :: Program -> [(Label, Program)]
@@ -122,11 +122,13 @@ extractCode []                                       = []
 extractCode (InstStat inst             : stats) = InstCode inst      : extractCode stats
 extractCode (DirStat (WordDir word)    : stats) = LiteralCode [word] : extractCode stats
 extractCode (DirStat (ArrayDir array)  : stats) = LiteralCode array  : extractCode stats
-extractCode (DirStat (AsciiDir value) : stats)  = LiteralCode array  : extractCode stats
+extractCode (DirStat (AsciiDir value)  : stats) = LiteralCode array  : extractCode stats
   where array = map (fromIntegral . ord) value
 extractCode (DirStat (AsciizDir value) : stats) = LiteralCode array  : extractCode stats
   where array = (map (fromIntegral . ord) value) ++ [0x00]
-extractCode (_ : stats)                              = extractCode stats
+extractCode (DirStat (SpaceDir size)   : stats) = LiteralCode array : extractCode stats
+  where array = replicate (fromIntegral size) (0x00 :: Word8)
+extractCode (_                         : stats) = extractCode stats
 
 
 extractSyms :: Program -> SymTable
@@ -139,6 +141,7 @@ extractSyms stats = getWithPc stats 0
     getWithPc (DirStat (ArrayDir a)  : rest) pc = getWithPc rest (pc + fromIntegral (length a))
     getWithPc (DirStat (AsciiDir v)  : rest) pc = getWithPc rest (pc + fromIntegral (length v))
     getWithPc (DirStat (AsciizDir v) : rest) pc = getWithPc rest (pc + fromIntegral (length v + 1))
+    getWithPc (DirStat (SpaceDir s)  : rest) pc = getWithPc rest (pc + s)
     getWithPc (LabelStat label       : rest) pc = [Sym label pc] ++ getWithPc rest pc
     getWithPc (_                     : rest) pc = getWithPc rest (pc + 0)
 
@@ -155,6 +158,7 @@ extractRelocs statements = getWithPc statements 0
     getWithPc (DirStat (ArrayDir a)  : rest) pc = getWithPc rest (pc + fromIntegral (length a))
     getWithPc (DirStat (AsciiDir v)  : rest) pc = getWithPc rest (pc + fromIntegral (length v))
     getWithPc (DirStat (AsciizDir v) : rest) pc = getWithPc rest (pc + fromIntegral (length v + 1))
+    getWithPc (DirStat (SpaceDir s)  : rest) pc = getWithPc rest (pc + s)
     getWithPc (_                     : rest) pc = getWithPc rest pc
 
     extractLabelImm :: Inst -> Maybe Imm

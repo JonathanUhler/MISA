@@ -12,7 +12,7 @@ module Grammar (Program,
                 Dir(..)) where
 
 
-import Data.Word (Word8)
+import Data.Word (Word8, Word16)
 
 
 type Program = [Stat]
@@ -118,5 +118,6 @@ data Dir
   | ArrayDir [Word8]
   | AsciiDir String
   | AsciizDir String
+  | SpaceDir Word16
   | SectionDir String
   deriving (Show, Eq)
