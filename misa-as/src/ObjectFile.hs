@@ -13,20 +13,6 @@ module ObjectFile (BinaryObject,
                    RelocTable,
                    Reloc(..),
                    RelocType(..),
-                   packInst,
-                   packCode,
-                   packCodeElem,
-                   packSyms,
-                   packSym,
-                   packRelocs,
-                   packReloc,
-                   packSec,
-                   unpackCode,
-                   unpackSyms,
-                   unpackSym,
-                   unpackRelocs,
-                   unpackReloc,
-                   unpackSec,
                    packBinaryObject,
                    packNamedBinaryObject,
                    unpackBinaryObject,
@@ -39,6 +25,7 @@ import Packing
 
 import Data.Bits ((.|.), shiftR, shiftL)
 import qualified Data.ByteString as B
+import Data.List (elemIndex, nub, union)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
 import Data.Void
@@ -51,78 +38,69 @@ import Text.Megaparsec.Byte.Binary
 type Parser = Parsec Void B.ByteString
 
 
--- | The type of an object file, which is a list of zero or more sections.
 type BinaryObject = [Sec]
 
 
 data NamedBinaryObject = NamedBinaryObject Label BinaryObject
 
 
-{- |
-The description of a linker section, which is a named tuple of code (binary data to emit in the
-object file/final binary), symbols defined within the section and their section-relative addresses,
-and relocations used in the section with section-relative addresses to the "holes" in the code.
--}
 data Sec = Sec Label Code SymTable RelocTable
   deriving (Show, Eq)
 
 
--- | The type of a section's code, which is a list of instructions or binary literals.
+data IndexSec = IndexSec Label Code IndexSymTable IndexRelocTable
+
+
 type Code = [CodeElem]
 
 
--- | The type of a single unit in a section's code.
 data CodeElem
-  -- | An assembly instruction in the code of a section.
   = InstCode Inst
-  -- | Literal binary data in the code of a section (e.g. from .array/.word directives).
   | LiteralCode [Word8]
   deriving (Show, Eq)
 
 
--- | The type of a symbol table.
 type SymTable = [Sym]
 
 
--- | The type of a symbol in a section, which is a labeled section-relative address.
+type IndexSymTable = [IndexSym]
+
+
 data Sym = Sym Label Word16
   deriving (Show, Eq)
 
 
--- | The type of a relocation table.
+data IndexSym = IndexSym Word16 Word16
+  deriving (Show, Eq)
+
+
 type RelocTable = [Reloc]
 
 
-{- |
-The type of a relocation in a section, which points to a section-relative address where a "hole"/
-missing symbol existed in the assembly code. The relocation includes the name of the missing symbol
-and which part of the symbol (e.g. high or low word) should be used to fill the hole.
--}
+type IndexRelocTable = [IndexReloc]
+
+
 data Reloc = Reloc RelocType Word16 Label
   deriving (Show, Eq)
 
 
--- | How to fill a relocation.
+data IndexReloc = IndexReloc RelocType Word16 Word16
+  deriving (Show, Eq)
+
+
 data RelocType
-  -- | Use the lower half of the 16-bit word referred to by the relocation symbol to fill the hole.
   = LowReloc
-  -- | Use the upper half of the 16-bit word referred to by the relocation symbol to fill the hole.
   | HighReloc
   deriving (Show, Enum, Eq)
 
 
--- | A magic 8-byte string that appears at the start of every object file in little-endian order.
+type StringTable = [Label]
+
+
 magicHeader :: String
 magicHeader = "MISA_LF "
 
 
-{- |
-Packs an assembly instruction into bytes.
-
-The returned list is one or more instructions (2 bytes each in the ISA) in little-endian order.
-All base instructions will be 2-byte lists, and some pseudo-instructions may expand to more than
-one base instruction.
--}
 packInst :: Inst -> [Word8]
 packInst inst =
   case inst of
@@ -171,125 +149,70 @@ packInst inst =
       (LabelImm _ _)  -> 0x00
 
 
-{- |
-Packs the code portion of a section into bytes.
-
-The returned list of bytes begins with a 2-byte doubleword in little-endian order which is
-the number of bytes of the packed code, followed by the packed code.
-
-Note that interpreting the code once it's packed will be difficult. The linker only needs to
-know what bytes in the packed code correspond to relocations, but not which parts of the code
-are instructions vs. literal binary data.
--}
 packCode :: Code -> [Word8]
 packCode code = packDoubleWord (fromIntegral (length packedCode)) ++ packedCode
   where packedCode = concatMap packCodeElem code
 
 
-{- |
-Packs a single code element into binary.
-
-If the code element is an instruction, `packInst` is used, otherwise the literal binary
-byte array is returned.
--}
 packCodeElem :: CodeElem -> [Word8]
 packCodeElem (InstCode inst)     = packInst inst
 packCodeElem (LiteralCode bytes) = bytes
 
 
-{- |
-Packs a symbol table into binary.
-
-The returned list begins with a 2-byte doubleword in little-endian order which is the number of
-packed symbols present in the following binary. The list is followed by all of the packed
-symbols in order.
-
-Note carefully that the length field is the number of packed symbols, not the total number of
-bytes of all packed symbols. Thus to skip past the packed symbol table, each symbol's size
-(see `packSym`) must be read and skipped in O(n) time.
--}
-packSyms :: SymTable -> [Word8]
-packSyms [] = packDoubleWord 0
-packSyms syms = packDoubleWord (fromIntegral (length syms)) ++ packedSyms
-  where packedSyms = concatMap packSym syms
+packIndexSyms :: IndexSymTable -> [Word8]
+packIndexSyms [] = packDoubleWord 0
+packIndexSyms indexSyms
+  =  packDoubleWord (fromIntegral (length indexSyms))
+  ++ packedIndexSyms
+  where packedIndexSyms = concatMap packIndexSym indexSyms
 
 
-{- |
-Packs a single symbol into binary.
-
-The returned list begins with the address of the symbol as a 2-byte little-endian doubleword,
-followed by the packed name of the symbol (which starts with the size of the string).
--}
-packSym :: Sym -> [Word8]
-packSym (Sym name address)
-  = packDoubleWord address ++ packString name
+packIndexSym :: IndexSym -> [Word8]
+packIndexSym (IndexSym index address)
+  =  packDoubleWord address
+  ++ packDoubleWord index
 
 
-{- |
-Packs a relocation table into binary.
-
-The returned list begins with a 2-byte doubleword in little-endian order that is the number of
-relocations in the following binary, followed by all the packed relocations.
-
-Note carefully that the length field is the number of relocations, not the number of bytes in
-the packed relocations.
--}
-packRelocs :: RelocTable -> [Word8]
-packRelocs [] = packDoubleWord 0
-packRelocs relocs
-  = packDoubleWord (fromIntegral (length relocs)) ++ packedRelocs
-  where packedRelocs = concatMap packReloc relocs
+packIndexRelocs :: IndexRelocTable -> [Word8]
+packIndexRelocs [] = packDoubleWord 0
+packIndexRelocs indexRelocs
+  = packDoubleWord (fromIntegral (length indexRelocs))
+  ++ packedIndexRelocs
+  where packedIndexRelocs = concatMap packIndexReloc indexRelocs
 
 
-{- |
-Packs a single relocation into binary.
-
-The returned list begins with the address in the code of the byte requiring relocation/resolution
-as a 2-byte doubleword, followed by the packed name (which begins with the length of the name
-string).
--}
-packReloc :: Reloc -> [Word8]
-packReloc (Reloc kind address name)
+packIndexReloc :: IndexReloc -> [Word8]
+packIndexReloc (IndexReloc kind address index)
   =  [fromIntegral (fromEnum kind)]
   ++ packDoubleWord address
-  ++ packString name
+  ++ packDoubleWord index
 
 
-{- |
-Packs a single section into binary.
-
-The returned list is the packed sectoin name, packed code, packed symbols, and packed relocation.
-See other functions for more information on the format.
--}
-packSec :: Sec -> [Word8]
-packSec (Sec name code syms relocs)
+packIndexSec :: IndexSec -> [Word8]
+packIndexSec (IndexSec name code indexSyms indexRelocs)
   =  packString name
   ++ packCode code
-  ++ packSyms syms
-  ++ packRelocs relocs
+  ++ packIndexSyms indexSyms
+  ++ packIndexRelocs indexRelocs
   
 
-{- |
-Packs a binary object into a byte array.
-
-The returned byte array begins with the magic 8-byte header `magicHeader`, followed by a 2-byte
-doubleword in little-endian order which is the number of packed sections that follow, followed
-finally by all the packed sections.
-
-Note carefully that the length field it the number of sections, not the number of bytes of all
-sections. To navigate the object file, sub-components must be recursively visited (e.g. check
-the size of a section's code, number of symbols, size of each symbol, number of relocations, ...)
--}
 packBinaryObject :: BinaryObject -> [Word8]
 packBinaryObject secs
   =  B.unpack (E.encodeUtf8 (T.pack magicHeader))
-  ++ packDoubleWord (fromIntegral (length secs))
-  ++ packedSecs
-  where packedSecs = concatMap packSec secs
+  ++ packDoubleWord (fromIntegral (length indexSecs))
+  ++ packedIndexSecs
+  ++ packDoubleWord (fromIntegral (length strings))
+  ++ packedStrings
+  where strings         = createStringTable secs
+        indexSecs       = map (\sec -> applyIndexes sec strings) secs
+        packedIndexSecs = concatMap packIndexSec indexSecs
+        packedStrings   = concatMap packString strings
 
 
 packNamedBinaryObject :: NamedBinaryObject -> [Word8]
-packNamedBinaryObject (NamedBinaryObject name obj) = packString name ++ packBinaryObject obj
+packNamedBinaryObject (NamedBinaryObject name obj)
+  =  packString name
+  ++ packBinaryObject obj
 
 
 unpackCode :: Parser Code
@@ -299,44 +222,50 @@ unpackCode = do
   return [LiteralCode bytes]
 
 
-unpackSyms :: Parser SymTable
-unpackSyms = do
+unpackIndexSyms :: Parser IndexSymTable
+unpackIndexSyms = do
   num <- unpackDoubleWord
-  count (fromIntegral num) unpackSym
+  count (fromIntegral num) unpackIndexSym
 
 
-unpackSym :: Parser Sym
-unpackSym = do
-  addr <- unpackDoubleWord
-  name <- unpackString
-  return (Sym name addr)
+unpackIndexSym :: Parser IndexSym
+unpackIndexSym = do
+  address <- unpackDoubleWord
+  index   <- unpackDoubleWord
+  return (IndexSym index address)
 
 
-unpackRelocs :: Parser RelocTable
-unpackRelocs = do
+unpackIndexRelocs :: Parser IndexRelocTable
+unpackIndexRelocs = do
   num <- unpackDoubleWord
-  count (fromIntegral num) unpackReloc
+  count (fromIntegral num) unpackIndexReloc
 
 
-unpackReloc :: Parser Reloc
-unpackReloc = Reloc <$> (toEnum . fromIntegral <$> word8) <*> unpackDoubleWord <*> unpackString
+unpackIndexReloc :: Parser IndexReloc
+unpackIndexReloc = do
+  kind    <- word8
+  address <- unpackDoubleWord
+  index   <- unpackDoubleWord
+  return (IndexReloc (toEnum (fromIntegral kind)) address index)
 
 
-unpackSec :: Parser Sec
-unpackSec = do
-  name   <- unpackString
-  code   <- unpackCode
-  syms   <- unpackSyms
-  relocs <- unpackRelocs
-  return (Sec name code syms relocs)
+unpackIndexSec :: Parser IndexSec
+unpackIndexSec = do
+  name        <- unpackString
+  code        <- unpackCode
+  indexSyms   <- unpackIndexSyms
+  indexRelocs <- unpackIndexRelocs
+  return (IndexSec name code indexSyms indexRelocs)
 
 
 unpackBinaryObject :: Parser BinaryObject
 unpackBinaryObject = do
-  _       <- string (E.encodeUtf8 (T.pack magicHeader))
-  numSecs <- unpackDoubleWord
-  secs    <- count (fromIntegral numSecs) unpackSec
-  return secs
+  _            <- string (E.encodeUtf8 (T.pack magicHeader))
+  numIndexSecs <- unpackDoubleWord
+  indexSecs    <- count (fromIntegral numIndexSecs) unpackIndexSec
+  numStrings   <- unpackDoubleWord
+  strings      <- count (fromIntegral numStrings) unpackString
+  return (map (\indexSec -> resolveIndexes indexSec strings) indexSecs)
 
 
 unpackNamedBinaryObject :: Parser NamedBinaryObject
@@ -351,3 +280,30 @@ getSecSize (Sec _ code _ _) = fromIntegral (getCodeSize code)
   where getCodeSize []                          = 0
         getCodeSize (InstCode _ : elems)        = 2 + getCodeSize elems
         getCodeSize (LiteralCode array : elems) = length array + getCodeSize elems
+
+
+createStringTable :: [Sec] -> StringTable
+createStringTable secs = nub (concatMap getStrings secs)
+  where getStrings (Sec _ _ syms relocs) = union (map getFromSym syms) (map getFromReloc relocs)
+        getFromSym (Sym label _)         = label
+        getFromReloc (Reloc _ _ label)   = label
+
+
+applyIndexes :: Sec -> StringTable -> IndexSec
+applyIndexes (Sec name code syms relocs) strings
+  = IndexSec name code (map applyToSym syms) (map applyToReloc relocs)
+  where applyToSym (Sym label address) = case elemIndex label strings of
+          Just index -> IndexSym (fromIntegral index) address
+          Nothing    -> error "logic error: applyToSym called with malformed StringTable"
+        applyToReloc (Reloc kind address label) = case elemIndex label strings of
+          Just index -> IndexReloc kind address (fromIntegral index)
+          Nothing    -> error "logic error: applyToReloc called with malformed StringTable"
+
+
+resolveIndexes :: IndexSec -> StringTable -> Sec
+resolveIndexes (IndexSec name code indexSyms indexRelocs) strings
+  = Sec name code (map resolveInSym indexSyms) (map resolveInReloc indexRelocs)
+  where resolveInSym (IndexSym index address)
+          = Sym (strings !! (fromIntegral index)) address
+        resolveInReloc (IndexReloc kind address index)
+          = Reloc kind address (strings !! (fromIntegral index))

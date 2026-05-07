@@ -1,11 +1,4 @@
-module Encoder (splitSecs,
-                resolvePseudoInsts,
-                resolvePseudoInst,
-                extractCode,
-                extractSyms,
-                extractRelocs,
-                encoderCreateSec,
-                encodeProgram) where
+module Encoder (encodeProgram) where
 
 
 import Grammar

@@ -1,4 +1,4 @@
-module MemoryMap (MemMap, MemRegion(..), parseMemMap, isOrphaned, isDuplicated, getRegion) where
+module MemoryMap (MemMap, MemRegion(..), parseMemMap) where
 
 
 import Data.Void
@@ -55,25 +55,3 @@ parseMemRegion = do
 
 parseMemMap :: Parser MemMap
 parseMemMap = skip *> some parseMemRegion <* eof
-
-
-numMappings :: Label -> MemMap -> Int
-numMappings _ []    = 0
-numMappings name ((MemRegion _ _ names) : regions)
-  | elem name names = 1 + numMappings name regions
-  | otherwise       =     numMappings name regions
-
-
-isOrphaned :: Label -> MemMap -> Bool
-isOrphaned name memmap = numMappings name memmap == 0
-
-
-isDuplicated :: Label -> MemMap -> Bool
-isDuplicated name memmap = numMappings name memmap > 1
-
-
-getRegion :: Label -> MemMap -> Maybe MemRegion
-getRegion _ []      = Nothing
-getRegion name ((MemRegion start end names) : regions)
-  | elem name names = Just (MemRegion start end names)
-  | otherwise       = getRegion name regions

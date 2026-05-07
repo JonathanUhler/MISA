@@ -1,4 +1,4 @@
-module Relocator (applyRelocs, relocSec, relocSymInCode, getAllSyms) where
+module Relocator (applyRelocs, getAllSyms) where
 
 
 import Placer
