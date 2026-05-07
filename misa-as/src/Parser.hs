@@ -196,6 +196,8 @@ parseInst = choice
     (\f i -> JaliInst f i) <$> (parseThisIdent "jali" *> parseCmpFlag) <*> parseFullImm,
     (\f i -> JmpiInst f i) <$> (parseThisIdent "jmpi" *> parseCmpFlag) <*> parseFullImm,
     MovInst    <$> (parseThisIdent "mov" *> parseGpReg) <*> parseGpReg,
+    (\(rd1, rd2) (rs1, rs2) -> Mov2Inst rd1 rd2 rs1 rs2)
+               <$> (parseThisIdent "mov2" *> parseRegPair) <*> parseRegPair,
     NopInst    <$   parseThisIdent "nop",
     (\(rd1, rd2) (rs1, rs2) (rs3, rs4) -> Or2Inst rd1 rd2 rs1 rs2 rs3 rs4)
                <$> (parseThisIdent "or2" *> parseRegPair) <*> parseRegPair <*> parseRegPair,

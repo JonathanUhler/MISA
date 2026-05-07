@@ -64,6 +64,8 @@ resolvePseudoInst inst = case inst of
         JmpInst cmp RSCRATCH0 RSCRATCH1]
   MovInst rd rs1
     -> [OrInst rd rs1 R0]
+  Mov2Inst rd1 rd2 rs1 rs2
+    -> [OrInst rd2 rs2 R0, OrInst rd1 rs1 R0]
   NopInst
     -> [OrInst R0 R0 R0]
   Or2Inst rd1 rd2 rs1 rs2 rs3 rs4
