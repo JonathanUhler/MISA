@@ -38,35 +38,35 @@ resolvePseudoInsts (stat : stats) =
 
 resolvePseudoInst :: Inst -> [Inst]
 resolvePseudoInst inst = case inst of
-  NopInst              -> [OrInst R0 R0 R0]
-  MovInst  rd  rs1     -> [OrInst rd rs1 R0]
-  CmpInst  rs1 rs2     -> [SubInst R0 rs1 rs2]
-  Set2Inst rs1 rs2 imm -> [SetInst rs1 (highImm imm), SetInst rs2 (lowImm imm)]
-  JmpiInst cmp imm     -> [SetInst RSCRATCH0 (highImm imm),
-                           SetInst RSCRATCH1 (lowImm imm),
-                           JmpInst cmp RSCRATCH0 RSCRATCH1]
-  JaliInst cmp imm     -> [SetInst RSCRATCH0 (highImm imm),
-                           SetInst RSCRATCH1 (lowImm imm),
-                           JalInst cmp RSCRATCH0 RSCRATCH1]
-  GotoInst imm         -> [SetInst RSCRATCH0 (highImm imm),
-                           SetInst RSCRATCH1 (lowImm imm),
-                           JmpInst ALWAYS RSCRATCH0 RSCRATCH1]
   CallInst imm         -> [SetInst RSCRATCH0 (highImm imm),
                            SetInst RSCRATCH1 (lowImm imm),
                            JalInst ALWAYS RSCRATCH0 RSCRATCH1]
-  RetInst              -> [RsrInst RADDR RSCRATCH0 RSCRATCH1, JmpInst ALWAYS RSCRATCH0 RSCRATCH1]
   ClrInst              -> [WsrInst FLAGS R0 R0]
+  CmpInst  rs1 rs2     -> [SubInst R0 rs1 rs2]
+  GotoInst imm         -> [SetInst RSCRATCH0 (highImm imm),
+                           SetInst RSCRATCH1 (lowImm imm),
+                           JmpInst ALWAYS RSCRATCH0 RSCRATCH1]
+  JaliInst cmp imm     -> [SetInst RSCRATCH0 (highImm imm),
+                           SetInst RSCRATCH1 (lowImm imm),
+                           JalInst cmp RSCRATCH0 RSCRATCH1]
+  JmpiInst cmp imm     -> [SetInst RSCRATCH0 (highImm imm),
+                           SetInst RSCRATCH1 (lowImm imm),
+                           JmpInst cmp RSCRATCH0 RSCRATCH1]
+  MovInst  rd  rs1     -> [OrInst rd rs1 R0]
+  NopInst              -> [OrInst R0 R0 R0]
+  PopInst rd           -> [RsrInst SADDR RSCRATCH0 RSCRATCH1,
+                           SetInst rd (IntImm Low 0x01),
+                           AddInst RSCRATCH1 RSCRATCH1 rd,
+                           AdcInst RSCRATCH0 RSCRATCH0 R0,
+                           LdInst rd RSCRATCH0 RSCRATCH1]
   PushInst rs          -> [RsrInst SADDR RSCRATCH0 RSCRATCH1,
                            StInst rs RSCRATCH0 RSCRATCH1,
                            AddInst R0 R0 R0,  -- To set FLAGS.C = 0
                            SbbInst RSCRATCH1 RSCRATCH1 R0,
                            SbbInst RSCRATCH0 RSCRATCH0 R0,
                            WsrInst SADDR RSCRATCH0 RSCRATCH1]
-  PopInst rd           -> [RsrInst SADDR RSCRATCH0 RSCRATCH1,
-                           SetInst rd (IntImm Low 0x01),
-                           AddInst RSCRATCH1 RSCRATCH1 rd,
-                           AdcInst RSCRATCH0 RSCRATCH0 R0,
-                           LdInst rd RSCRATCH0 RSCRATCH1]
+  RetInst              -> [RsrInst RADDR RSCRATCH0 RSCRATCH1, JmpInst ALWAYS RSCRATCH0 RSCRATCH1]
+  Set2Inst rs1 rs2 imm -> [SetInst rs1 (highImm imm), SetInst rs2 (lowImm imm)]
   _                    -> [inst]
   where
     lowImm  (IntImm   _ n) = IntImm   Low  n
