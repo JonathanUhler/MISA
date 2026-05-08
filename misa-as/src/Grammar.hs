@@ -116,6 +116,7 @@ type Label = String
 data Dir
   = WordDir Word8
   | ArrayDir [Word8]
+  | AddrDir Label
   | AsciiDir String
   | AsciizDir String
   | SpaceDir Word16

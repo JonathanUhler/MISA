@@ -33,7 +33,7 @@ default_memmap: str = \
   section 0x0200 - 0x7FFF : data bss    ;  // RAM
   section 0x8000 - 0xBFFF :             ;  // Memory-mapped IO
   section 0xC000 - 0xFFEF : text rodata ;  // Program ROM
-  section 0xFFF0 - 0xFFFF : reset       ;  // Reset code
+  section 0xFFF0 - 0xFFFF : vectors     ;  // Vector table
 """
 
 

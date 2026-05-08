@@ -8,6 +8,10 @@ The MISA architecture is an 8-bit architecture with up to a 16-bit address bus t
 externally connected memory. Instructions are fixed-width 16-bit doublewords in little-endian byte
 order.
 
+The information presented in this chapter is referred to as the MISA core architecture. The last
+section of this chapter enumerates several optional extensions to the core architecture, although
+an implementation is considering conforming if it implements at least the core architecture.
+
 ## General Purpose Registers
 
 The general-purpose register file contains sixteen, 8-bit registers for general computation and
@@ -206,7 +210,7 @@ valid Type fields are:
 
 | Type                | Encoding | Commentary                                                                                      |
 |---------------------|----------|-------------------------------------------------------------------------------------------------|
-| Halt instruction    | 000      | The `HALT` instruction was executed. Extended status is the valid of the `RS` operand register. |
+| Halt instruction    | 000      | The `HALT` instruction was executed. Extended status is the value of the `RS` operand register. |
 | Illegal instruction | 001      | An ill-formed instruction failed to decode. Extended status is not used.                        |
 
 : {tbl-colwidths="[20, 15, 65]"}
@@ -258,8 +262,22 @@ which are required by all maps.
 
 ### Required Memory Regions
 
-The region 0xFFF0 - 0xFFFF is reserved for reset code. When the processor is taken out of reset,
-the program counter must be initialized to 0xFFF0 and begin execution there.
+The region 0xFFF0 - 0xFFFF is reserved for a reset vector table. When the processor is taken out of
+reset, the program counter must be initialized to the address stored in memory at 0xFFFE - 0xFFFF
+and begin execution there.
+
+The reset vector table contains the following functions:
+
+| Vector Address    | Purpose       |
+|-------------------|---------------|
+| `0xFFF0 - 0xFFF1` | Reserved      |
+| `0xFFF2 - 0xFFF3` | Reserved      |
+| `0xFFF4 - 0xFFF5` | Reserved      |
+| `0xFFF6 - 0xFFF7` | Reserved      |
+| `0xFFF8 - 0xFFF9` | Reserved      |
+| `0xFFFA - 0xFFFB` | Reserved      |
+| `0xFFFC - 0xFFFD` | Reserved      |
+| `0xFFFE - 0xFFFF` | Reset handler |
 
 ### Recommended Memory Map
 
@@ -280,20 +298,20 @@ SECTION 0x8000 - 0xBFFF : ;
 // Program ROM
 SECTION 0xC000 - 0xFFEF : text rodata ;
 
-// Reset code
-SECTION 0xFFF0 - 0xFFFF : reset ;
+// Vector table
+SECTION 0xFFF0 - 0xFFFF : vectors ;
 ```
 
 Which define the following sections by convention:
 
-| Section  | Commentary                                                                                                                                                                                         |
-|----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `direct` | Contents to place in the first 256-byte page. This page may support faster memory operations on certain hardware implementations, and thus may be a desirable target for frequently accessed data. |
-| `data`   | Initialized global data that is mutable.                                                                                                                                                           |
-| `bss`    | Declared but uninitialized global data that is mutable. Runtime/startup code should initialize `bss` symbols to zero.                                                                              |
-| `text`   | Executable and immutable program code.                                                                                                                                                             |
-| `rodata` | Initialized global constants.                                                                                                                                                                      |
-| `reset`  | A small region for code to execute when the processor resets.                                                                                                                                      |
+| Section   | Commentary                                                                                                                                                                                         |
+|-----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `direct`  | Contents to place in the first 256-byte page. This page may support faster memory operations on certain hardware implementations, and thus may be a desirable target for frequently accessed data. |
+| `data`    | Initialized global data that is mutable.                                                                                                                                                           |
+| `bss`     | Declared but uninitialized global data that is mutable. Runtime/startup code should initialize `bss` symbols to zero.                                                                              |
+| `text`    | Executable and immutable program code.                                                                                                                                                             |
+| `rodata`  | Initialized global constants.                                                                                                                                                                      |
+| `vectors` | A small region for reset vector function addresses.                                                                                                                                                |
 
 : {tbl-colwidths="[10, 90]"}
 
@@ -315,16 +333,19 @@ assembler macros.
 When the processor is taken out of the reset state, it is guaranteed by the ISA to initialize some
 internal state, including:
 
-- The program counter must be set to `0xFFF0` and begin program execution of an instruction placed
-  at addresses `0xFFF0` - `0xFFF1`
+- The reset vector address stored in memory at `0xFFFE - 0xFFFF` must be read and used to initialize
+  the program counter.
 
 The state of general purpose registers and control and status registers is implementation defined.
 
 ## Exceptions and Interrupts
 
 The core ISA defined in this chapter does not support traditional exceptions or interrupts. The
-`CAUSE` special register is intended for use as a diagnostic tool, and `HALT` is the only
-instruction that is required to update it.
+`CAUSE` special register is intended for use as a diagnostic tool in the core architecture, and
+`HALT` is the only instruction that is required to update it.
+
+A basic synchronous exception system is supported with the System Call Extension. This extension
+is not a requirement for a full implementation of the core architecture.
 
 ## Base Instructions
 
@@ -713,6 +734,22 @@ SVG(wavedrom.render(str({
 Because of the limitations of the core instruction set, this document also recommends a set of
 assembler macros whose functionality can be represented by one or more of the base 16 instructions.
 
+### `ADD2`
+Usage: `ADD2 RD1 RD2 RS1 RS2 RS3 RS4`
+
+Meaning: `ADD RD2 RS2 RS4`, `ADC RD1 RS1 RS3`
+
+Description: Add the 16-bit values `{RS1, RS2}` and `{RS3, RS4}` and store the result in
+`{RD1, RD2}`.
+
+### `AND2`
+Usage: `AND2 RD1 RD2 RS1 RS2 RS3 RS4`
+
+Meaning: `AND RD2 RS2 RS4`, `AND RD1 RS1 RS3`
+
+Description: Compute the bitwise AND of the contents of `{RS1, RS2}` and `{RS3, RS4}` and store
+the result in `{RD1, RD2}`
+
 ### `CALL`
 Usage: `CALL IMM`
 
@@ -765,6 +802,13 @@ Meaning: `OR RD RS1 R0`
 
 Description: Copy the contents of `RS1` into `RD`.
 
+### `MOV2`
+Usage: `MOV2 RD1 RD2 RS1 RS2`
+
+Meaning: `MOV RD2 RS2`, `MOV RD1 RS1`
+
+Description: Copy the contents of the 16-bit value `{RS1, RS2}` into `{RD1, RD2}`.
+
 ### `NOP`
 Usage: `NOP`
 
@@ -772,8 +816,16 @@ Meaning: `OR R0 R0 R0`
 
 Description: Do nothing.
 
+### `OR2`
+Usage: `OR2 RD1 RD2 RS1 RS2 RS3 RS4`
+
+Meaning: `OR RD2 RS2 RS4`, `OR RD1 RS1 RS3`
+
+Description: Compute the bitwise OR of the contents of `{RS1, RS2}` and `{RS3, RS4}` and store
+the result in `{RD1, RD2}`.
+
 ### `POP`
-Usage: `POP RD
+Usage: `POP RD`
 
 Meaning:
 ```
@@ -786,6 +838,13 @@ WSR SADDR RSCRATCH
 ```
 
 Description: Increment `SADDR` by 1 byte and then load the byte at the new stack address into `RD`.
+
+### `POP2`
+Usage: `POP2 RD1 RD2`
+
+Meaning: `POP RD1`, `POP RD2`
+
+Description: Pop a 16-bit value off the stack and into `{RD1, RD2}`.
 
 ### `PUSH`
 Usage: `PUSH RS`
@@ -802,12 +861,27 @@ WSR SADDR RSCRATCH
 
 Description: Write `RS` onto the stack at `SADDR`, and then decrement `SADDR` by 1 byte.
 
+### `PUSH2`
+Usage: `PUSH2 RS1 RS2`
+
+Meaning: `PUSH RS2`, `PUSH RS1`
+
+Description: Push a 16-bit value onto the stack from `{RS1, RS2}`.
+
 ### `RET`
 Usage: `RET`
 
 Meaning: `RSR RADDR RSCRATCH`, `JMP ALWAYS RSCRATCH`
 
 Description: Return to the address in `RADDR`.
+
+### `RRC2`
+Usage: `RRC2 RD1 RD2 RS1 RS2`
+
+Meaning: `RRC RD1 RS1`, `RRC RD2 RS2`
+
+Description: Shift the 17-bit integer formed by `{C, RS1, RS2}` right by one bit. Store the shifted
+result in `{RD1, RD2}` and the LSB of `RS2` into `C`.
 
 ### `SET2`
 Usage: `SET2 RS1 RS2 IMM`
@@ -816,3 +890,60 @@ Meaning: `SET RS1 (IMM >> 8)`, `SET RS2 (IMM & 0xFF)`
 
 Description: Set both the `RS1` and `RS2` registers from the high and low halves of a 16-bit
 immediate value.
+
+### `SUB2`
+Usage: `SUB2 RD1 RD2 RS1 RS2 RS3 RS4`
+
+Meaning: `SUB RD2 RS2 RS4`, `SBB RD1 RS1 RS3`
+
+Description: Subtract the 16-bit value `{RS3, RS4}` from `{RS1, RS2}` and store the result in
+`{RD1, RD2}`.
+
+### `XOR2`
+Usage: `XOR2 RD1 RD2 RS1 RS2 RS3 RS4`
+
+Meaning: `XOR RD2 RS2 RS4`, `XOR RD1 RS1 RS3`
+
+Description: Compute the bitwise XOR of the contents of `{RS1, RS2}` and `{RS3, RS4}` and store
+the result in `{RD1, RD2}`
+
+## Architecture Extensions
+
+The content in this chapter until this point is the MISA core architecture. This section provides
+a description of several optional extensions to that architecture which enable additional
+functionalities.
+
+<!--
+### System Call Extension
+
+The System Call Extention extends the `HALT` instruction in the core architecture to support basic
+synchronous exceptions that may be used to enable system calls or other similar features.
+
+#### `SYSCALL`
+The `SYSCALL` instruction replaces the `HALT` instruction in the assembler under the System Call
+Extension.
+
+Usage: `SYSCALL RS`
+
+Meaning: `if (H) { exit(RS) } else { MARK }`
+
+Encoding:
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        *[{"name": bit, "bits": 1} for bit in reversed("0000")],
+        {"name": "RS", "bits": 4},
+        {"name": "Unused", "bits": 8}
+    ],
+    "config": {"bits": 16}
+})).tostring())
+```
+
+#### `HALT`
+`HALT` functionality as defined in the core architecture is supported under the System Call
+Extension by setting the `H` bit to `0`. In that case, the processor must adhere to the core
+architecture behavior for `HALT`, including stopping the clock and setting the `CAUSE` register.
+-->

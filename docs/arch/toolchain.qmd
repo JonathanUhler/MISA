@@ -123,7 +123,7 @@ object file contains the following information:
 
 | Length   | Type               | Content                                                                                                           |
 |----------|--------------------|-------------------------------------------------------------------------------------------------------------------|
-| 8        | String             | The string `MISA_LF `, where `M` is the least significant byte and ` ` is the most significant byte.              |
+| 8        | String             | The string `MISA_LF␣`, where `M` is the least significant byte and `␣` is the most significant byte.              |
 | 2        | Word16             | The number of sections present in the object file.                                                                |
 | Variable | [Sec]              | The content of each section, repeated as many times as specified in the length field.                             |
 | 2        | Word16             | The number of strings present in the string able.                                                                 |
@@ -196,6 +196,24 @@ Each entry in the relocation table contains the following information:
 | 2      | Word16 | The 0-aligned index into the object file's string table where the symbol's name can be found.                                        |
 
 : {tbl-colwidths="[10, 15, 75]"}
+
+#### Object File Example
+
+Consider the following code stub that has code, exported symbols, and required relocations:
+
+```asm
+    .section text
+_start:                   // _start is a symbol
+    SET2 RSCRATCH 0x01FF
+    WSR SADDR RSCRATCH
+    CALL main             // main is a relocation
+    HALT RT
+```
+
+Assembling this code to an object file with `misa-as -a start.S -o start.o` will produce the
+following object code:
+
+![](figures/start.png)
 
 ## Linker
 

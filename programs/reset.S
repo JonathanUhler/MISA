@@ -1,6 +1,10 @@
-        .section reset
+        .section vectors
 
-reset:
-        set2 rscratch _start
-        jmp always rscratch
-        halt r0
+        .array 0x00 0x00
+        .array 0x00 0x00
+        .array 0x00 0x00
+        .array 0x00 0x00
+        .array 0x00 0x00
+        .array 0x00 0x00
+        .array 0x00 0x00
+        .addr  _start     // Reset

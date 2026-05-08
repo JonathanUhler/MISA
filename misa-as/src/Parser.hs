@@ -31,7 +31,7 @@ reservedCmpFlags :: [(String, CmpFlag)]
 reservedCmpFlags = [(map toLower (show f), f) | f <- [minBound..maxBound :: CmpFlag]]
 
 reservedDirs :: [String]
-reservedDirs = ["word", "array", "ascii", "asciiz", "space", "section"]
+reservedDirs = ["word", "array", "addr", "ascii", "asciiz", "space", "section"]
 
 reservedIdentifiers :: Set.Set String
 reservedIdentifiers = Set.fromList (concat [map fst reservedOps,
@@ -121,6 +121,7 @@ parseDir = do
   _   <- char '.' <?> "directive"
   choice [WordDir    <$> (parseString "word"    *> parseWord),
           ArrayDir   <$> (parseString "array"   *> some parseWord),
+          AddrDir    <$> (parseString "addr"    *> parseUnreservedIdentifier),
           AsciizDir  <$> (parseString "asciiz"  *> parseQuotedString),
           AsciiDir   <$> (parseString "ascii"   *> parseQuotedString),
           SpaceDir   <$> (parseString "space"   *> parseDoubleWord),
