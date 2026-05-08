@@ -86,6 +86,9 @@ The following directives are currently supported by `misa-as`:
 - `.array <Word8> [Word8...]`: Emits the raw bytes `<Word8> [Word8...]` in the generated code at the
   location of the directive. Earlier bytes in the array definition will be placed at lower
   addresses. `.array` is equivalent to many consecutive `.word` directives
+- `.addr <Label>`: Emits the two-byte address of the label `<Label>` after linking at the location
+  of the directive. If the linker places `<Label>` at `<HiByte> - <LoByte>`, this directive is
+  equivalent to `.word <LoByte>  .word <HiByte>`.
 - `.ascii "<String>"`: Emits the bytes of the string `<String>` using the ASCII encoding at the
   location of the directive. The first letter of the string is placed at a lower address. The
   string is not null-terminated. Escape characters are not supported.
