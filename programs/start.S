@@ -1,6 +1,6 @@
         .section text
 _start:
-        set2 rscratch 0xABCD
+        set2 rscratch 0x01FF
         wsr saddr rscratch
 
         set2 rscratch main
