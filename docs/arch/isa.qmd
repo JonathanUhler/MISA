@@ -68,6 +68,7 @@ When used as operands for instructions, the special registers are encoded as fol
 | `RADDR`  | 0010     |
 | `FLAGS`  | 0011     |
 | `CAUSE`  | 0100     |
+| `EXTNS`  | 0101     |
 
 The following sub-sections describe the purpose and layout of each special register.
 
@@ -226,6 +227,27 @@ are:
 
 : {tbl-colwidths="[20, 15, 65]"}
 
+### `EXTNS`
+
+The `EXTNS` special register is a flags register that holds information about which (if any)
+architectural extensions are supported by the hardware. All implementations of the MISA
+architecture must include the `EXTNS` register, even those which only implement the core
+architecture. A core-only implementation can be identified by `EXTNS == 0x0000`.
+
+Unlike most special registers, writes to `EXTNS` may be ignored (i.e. the register may have a
+hard-coded value). For more information on writes to `EXTNS`, see the Dynamic Hardware Extension.
+Note that bit 0 (the Dynamic Hardware Extension) *must* ignore writes regardless of its state,
+preventing the Dynamic Hardware Extension from disabling itself.
+
+`EXTNS` must support at least the following bits. A recommended width is 16-bits (with unsupported
+extensions being forced to `0`), but the actual register width is implementation-defined. Unused
+bits must always be read as zero and ignored on writes (if supported):
+
+| Bit | Extension                  |
+|-----|----------------------------|
+| 0   | Dynamic Hardware Extension |
+| 1   | System Call Extension      |
+
 ## Data Formats and Alignments
 
 The MISA architecture defined in this chapter only supports 8-bit signed integers using two's
@@ -268,16 +290,16 @@ and begin execution there.
 
 The reset vector table contains the following functions:
 
-| Vector Address    | Purpose       |
-|-------------------|---------------|
-| `0xFFF0 - 0xFFF1` | Reserved      |
-| `0xFFF2 - 0xFFF3` | Reserved      |
-| `0xFFF4 - 0xFFF5` | Reserved      |
-| `0xFFF6 - 0xFFF7` | Reserved      |
-| `0xFFF8 - 0xFFF9` | Reserved      |
-| `0xFFFA - 0xFFFB` | Reserved      |
-| `0xFFFC - 0xFFFD` | Reserved      |
-| `0xFFFE - 0xFFFF` | Reset handler |
+| Vector Address    | Purpose                                       |
+|-------------------|-----------------------------------------------|
+| `0xFFF0 - 0xFFF1` | Reserved                                      |
+| `0xFFF2 - 0xFFF3` | Reserved                                      |
+| `0xFFF4 - 0xFFF5` | Reserved                                      |
+| `0xFFF6 - 0xFFF7` | Reserved                                      |
+| `0xFFF8 - 0xFFF9` | Reserved                                      |
+| `0xFFFA - 0xFFFB` | Reserved                                      |
+| `0xFFFC - 0xFFFD` | Syscall handler (under System Call Exception) |
+| `0xFFFE - 0xFFFF` | Reset handler                                 |
 
 ### Recommended Memory Map
 
@@ -357,7 +379,7 @@ and their behavior on the microprocessor's state.
 ### `HALT`
 Usage: `HALT RS`
 
-Meaning: `exit(RS)`
+Meaning: `CAUSE = RS << 8 | 0x01 ; exit(RS)`
 
 Description: Halt the processor and emit the contents of `RS` for debug.
 
@@ -913,19 +935,38 @@ The content in this chapter until this point is the MISA core architecture. This
 a description of several optional extensions to that architecture which enable additional
 functionalities.
 
-<!--
+### Dynamic Hardware Extension
+
+The Dynamic Hardware Extension enables writes to the `EXTNS` special register and thus dynamic
+support for the architecture extensions discussed in this section.
+
+**Note:** If the Dynamic Hardware Extension is supported, writes to the Dynamic Hardware Extension
+bit of the `EXTNS` special register must always be ignored. The extension cannot be used to disable
+itself at runtime.
+
+If the Dynamic Hardware Extension is not supported, writes to any bit of `EXTNS` are ignored. The
+list of supported extensions is static and a property of the hardware itself. If supported, writes
+must take affect on the instruction following the `WSR`.
+
 ### System Call Extension
 
-The System Call Extention extends the `HALT` instruction in the core architecture to support basic
-synchronous exceptions that may be used to enable system calls or other similar features.
+The System Call Extension extends the `HALT` instruction in the core architecture to support basic
+synchronous exceptions that may be used for system calls and other similar features.
 
 #### `SYSCALL`
 The `SYSCALL` instruction replaces the `HALT` instruction in the assembler under the System Call
-Extension.
+Extension. It's usage is similar to `HALT`, but with a conditional "exception" bit that controls
+the terminal behavior of the processor.
 
 Usage: `SYSCALL RS`
 
-Meaning: `if (H) { exit(RS) } else { MARK }`
+Meaning:
+```
+CAUSE = RS << 8 | 0x01
+if (E == 0) { exit(RS) } else { PC = Memory[0xFFFD] << 8 | Memory[0xFFFC] }
+```
+
+MARK: Need to save RADDR somewhere for when the handler returns
 
 Encoding:
 ```{python}
@@ -936,7 +977,8 @@ SVG(wavedrom.render(str({
     "reg": [
         *[{"name": bit, "bits": 1} for bit in reversed("0000")],
         {"name": "RS", "bits": 4},
-        {"name": "Unused", "bits": 8}
+        {"name": "Unused", "bits": 7},
+        {"name": "E", "bits": 1}
     ],
     "config": {"bits": 16}
 })).tostring())
@@ -944,6 +986,14 @@ SVG(wavedrom.render(str({
 
 #### `HALT`
 `HALT` functionality as defined in the core architecture is supported under the System Call
-Extension by setting the `H` bit to `0`. In that case, the processor must adhere to the core
+Extension by setting the `E` bit to `0`. In that case, the processor must adhere to the core
 architecture behavior for `HALT`, including stopping the clock and setting the `CAUSE` register.
--->
+
+#### Calling Conventions and Stack Frame
+When a `SYSCALL` instruction is executed, the contents of the `RS` register are used as the syscall
+code, stored in the `CAUSE` special register. The syscall handler address at `0xFFFC - 0xFFFD` is
+responsible for reading the `CAUSE` register, understanding that a syscall was executed, and
+using the extended status value to branch to different handler code for each type of call.
+
+All registers in the context of the system call handler are saved registers, except `RSCRATCH0` and
+`RSCRATCH1`.

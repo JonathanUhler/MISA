@@ -16,7 +16,7 @@ build-toolchain:
 
 
 docs:
-	cd docs/arch && quarto render --to pdf
+	cd docs/arch && quarto render --to pdf && cp _book/*.pdf ..
 
 
 CLI_SCRIPTS := $(wildcard cli/misa-*.py)
