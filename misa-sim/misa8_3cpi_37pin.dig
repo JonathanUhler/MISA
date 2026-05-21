@@ -1781,20 +1781,6 @@
           <int>16</int>
         </entry>
       </elementAttributes>
-      <pos x="-260" y="1140"/>
-    </visualElement>
-    <visualElement>
-      <elementName>Const</elementName>
-      <elementAttributes>
-        <entry>
-          <string>Value</string>
-          <long>0</long>
-        </entry>
-        <entry>
-          <string>Bits</string>
-          <int>16</int>
-        </entry>
-      </elementAttributes>
       <pos x="-260" y="1160"/>
     </visualElement>
     <visualElement>
@@ -4654,12 +4640,12 @@
       <p2 x="380" y="1140"/>
     </wire>
     <wire>
-      <p1 x="-260" y="1140"/>
-      <p2 x="-240" y="1140"/>
-    </wire>
-    <wire>
       <p1 x="-860" y="1140"/>
       <p2 x="-640" y="1140"/>
+    </wire>
+    <wire>
+      <p1 x="-340" y="1140"/>
+      <p2 x="-240" y="1140"/>
     </wire>
     <wire>
       <p1 x="320" y="-120"/>
