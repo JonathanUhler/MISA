@@ -2,13 +2,16 @@
         set2 rcd 0xCCDD
         set2 ref 0xEEFF
         set2 ruv 0x1122
+        ser2 rwx 0x3344
 
         wsr saddr rab
         wsr raddr rcd
         wsr flags ref
         wsr cause ruv
+        wsr extns rwx
 
-        rsr saddr ruv
-        rsr raddr ruv
-        rsr flags ruv
-        rsr cause ruv
+        rsr saddr ryz
+        rsr raddr ryz
+        rsr flags ryz
+        rsr cause ryz
+        rsr extns ryz

@@ -64,7 +64,6 @@ test-suite misa-ld-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      RelocatorSpec
       Paths_misa_ld
   autogen-modules:
       Paths_misa_ld

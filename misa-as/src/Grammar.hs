@@ -89,7 +89,7 @@ data WideReg = RAB | RCD | REF | RUV | RWX | RYZ | RSCRATCH
   deriving (Show, Enum, Bounded)
 
 
-data CsrReg = SADDR | RADDR | FLAGS | CAUSE
+data CsrReg = SADDR | RADDR | FLAGS | CAUSE | EXTNS
   deriving (Show, Enum, Bounded, Eq)
 
 
