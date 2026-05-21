@@ -2,7 +2,7 @@
         set2 rcd 0xCCDD
         set2 ref 0xEEFF
         set2 ruv 0x1122
-        ser2 rwx 0x3344
+        set2 rwx 0x3344
 
         wsr saddr rab
         wsr raddr rcd
