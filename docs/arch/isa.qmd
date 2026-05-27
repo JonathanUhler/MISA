@@ -62,14 +62,15 @@ instructions.
 
 When used as operands for instructions, the special registers are encoded as follows:
 
-| ABI Name | Encoding                         |
-|----------|----------------------------------|
-| `SADDR`  | 0001                             |
-| `RADDR`  | 0010                             |
-| `FLAGS`  | 0011                             |
-| `CAUSE`  | 0100                             |
-| `EXTNS`  | 0101                             |
-| `PRIVS`  | 1000 (under Privilege Extension) |
+| ABI Name | Encoding                           |
+|----------|------------------------------------|
+| `SADDR`  | 0001                               |
+| `RADDR`  | 0010                               |
+| `FLAGS`  | 0011                               |
+| `CAUSE`  | 0100                               |
+| `EXTNS`  | 0101                               |
+| `RETSC`  | 1000 (under System Call Extension) |
+| `PRIVS`  | 1010 (under Privilege Extension)   |
 
 The following sub-sections describe the purpose and layout of each special register.
 
@@ -985,8 +986,6 @@ CAUSE = RS << 8 | 0x01
 if (E == 0) { exit(RS) } else { PC = Memory[0xFFFB] << 8 | Memory[0xFFFA] }
 ```
 
-MARK: Need to save RADDR somewhere for when the handler returns
-
 Encoding:
 ```{python}
 #| echo: false
@@ -1014,8 +1013,50 @@ code, stored in the `CAUSE` special register. The syscall handler address at `0x
 responsible for reading the `CAUSE` register, understanding that a syscall was executed, and
 using the extended status value to branch to different handler code for each type of call.
 
-All registers in the context of the system call handler are saved registers, except `RSCRATCH0` and
-`RSCRATCH1`.
+General purpose registers follow the same caller-callee conventions as standard subroutine/function
+calls in the MISA ABI. This includes which registers are used as arguments to the system call, and
+which registers are used as return values from the system call. All special registers must be
+saved and restored by the system call routine.
+
+#### Nested System Calls
+The `SYSCALL` instruction may not be executed within a system call context. The processor is
+cannonically in a system call context under the following formal definition:
+
+- Let the initial `SYSCALL` instruction be at `PC = N`
+- Let the return address of the `SYSCALL` be at `PC = N + 2`
+- The processor is in a system call context for all instructions between the `SYSCALL` at `PC = N`
+  (exclusive) and the return instruction at `PC = N + 2` (exclusive)
+  
+If a secondary `SYSCALL` is performed in a system call context, a fault must occur with the
+`CAUSE` Reason "Instruction usage" and the `CAUSE` Type "Illegal instruction".
+
+#### `RETS`
+No instruction is explicitly reserved for returning from a system call-based exception, and the
+exact return process is implementation-defined provided it adheres to the conventions described
+above.
+
+The cannonical implementation defines and uses the `RETSC` special register. When a `SYSCALL`
+instruction is executed, the return address of the system call is stored in `RETSC`.
+
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        {"name": "RETSC", "bits": 16},
+    ],
+    "config": {"bits": 16}
+})).tostring())
+```
+
+The following pseudo-instruction is defined to return to this address:
+
+Usage: `RETS`
+
+Meaning: `RSR RETSC RSCRATCH`, `JMP ALWAYS RSCRATCH`
+
+Description: Return from a system call to the address in `RETSC`.
 
 ### Privilege Extension
 
@@ -1072,5 +1113,7 @@ occur:
   User Mode privilege error), the processor must first set `PRIVS.R` to 0.
 - Under the System Call Extension, when the `SYSCALL` instruction is executed and the exception
   bit is 1, `PRIVS.R` must be set to 0 before the system call handler is entered.
+- Under the System Call Extension, when the processor is returned from a system call context, the
+  `PRIVS.R` bit must be restored to it's initial value before the `SYSCALL`.
 - When `WSR` is executed on the `PRIVS` special register from Machine Mode, the updated ring
   bit must take affect for the next instruction.
