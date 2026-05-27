@@ -62,13 +62,14 @@ instructions.
 
 When used as operands for instructions, the special registers are encoded as follows:
 
-| ABI Name | Encoding |
-|----------|----------|
-| `SADDR`  | 0001     |
-| `RADDR`  | 0010     |
-| `FLAGS`  | 0011     |
-| `CAUSE`  | 0100     |
-| `EXTNS`  | 0101     |
+| ABI Name | Encoding                         |
+|----------|----------------------------------|
+| `SADDR`  | 0001                             |
+| `RADDR`  | 0010                             |
+| `FLAGS`  | 0011                             |
+| `CAUSE`  | 0100                             |
+| `EXTNS`  | 0101                             |
+| `PRIVS`  | 1000 (under Privilege Extension) |
 
 The following sub-sections describe the purpose and layout of each special register.
 
@@ -174,9 +175,10 @@ appropriately for deciding `RS1 ? RS2` where `?` is a comparison operator.
 
 ### `CAUSE`
 
-The `CAUSE` special register holds information about the termination status of the processor. It
-is primarily set when the `HALT` instruction is executed, and may also be used for basic
-interrupt or hardware exception handling in future versions of the instruction set architecture.
+The `CAUSE` special register holds information about the status of the processor during exceptions,
+faults, and termination. It is set when the `HALT` instruction is executed, when syscalls are made
+under the System Call Extension, and when fault behavior (such as a malformed instruction decode)
+occurs during execution.
 
 `CAUSE` is a 16-bit register with the following fields:
 
@@ -209,10 +211,11 @@ without a reason. If the reason is 000, the Type and Extended status fields have
 The exception cause is related to the use of a specific instruction or class of instructions. The
 valid Type fields are:
 
-| Type                | Encoding | Commentary                                                                                      |
-|---------------------|----------|-------------------------------------------------------------------------------------------------|
-| Halt instruction    | 000      | The `HALT` instruction was executed. Extended status is the value of the `RS` operand register. |
-| Illegal instruction | 001      | An ill-formed instruction failed to decode. Extended status is not used.                        |
+| Type                   | Encoding | Commentary                                                                                                                                                                                          |
+|------------------------|----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Halt instruction       | 000      | The `HALT` instruction was executed. Extended status is the value of the `RS` operand register. Under the System Call Extension, this reason indicates that the `SYSCALL` instruction was executed. |
+| Illegal instruction    | 001      | An ill-formed instruction failed to decode. Extended status is not used.                                                                                                                            |
+| Privileged instruction | 010      | A privileged instruction was executed while in User Mode (under Privilege Extension).                                                                                                               |
 
 : {tbl-colwidths="[20, 15, 65]"}
 
@@ -220,10 +223,11 @@ valid Type fields are:
 The exception cause is related to the use of an address or memory operation. The valid Type fields
 are:
 
-| Type             | Encoding | Commentary                                                                                  |
-|------------------|----------|---------------------------------------------------------------------------------------------|
-| Address overflow | 000      | A memory operation attempted to access an address which is outside the mapped memory space. |
-| PC overflow      | 001      | The program counter overflowed an unsigned 16-bit value.                                    |
+| Type              | Encoding | Commentary                                                                                   |
+|-------------------|----------|----------------------------------------------------------------------------------------------|
+| Address overflow  | 000      | A memory operation attempted to access an address which is outside the mapped memory space.  |
+| PC overflow       | 001      | The program counter overflowed an unsigned 16-bit value.                                     |
+| Privileged access | 010      | An access to privileged memory was attempted while in User Mode (under Privilege Extension). |
 
 : {tbl-colwidths="[20, 15, 65]"}
 
@@ -247,6 +251,7 @@ bits must always be read as zero and ignored on writes (if supported):
 |-----|----------------------------|
 | 0   | Dynamic Hardware Extension |
 | 1   | System Call Extension      |
+| 2   | Privilege Extension        |
 
 ## Data Formats and Alignments
 
@@ -297,8 +302,8 @@ The reset vector table contains the following functions:
 | `0xFFF4 - 0xFFF5` | Reserved                                      |
 | `0xFFF6 - 0xFFF7` | Reserved                                      |
 | `0xFFF8 - 0xFFF9` | Reserved                                      |
-| `0xFFFA - 0xFFFB` | Reserved                                      |
-| `0xFFFC - 0xFFFD` | Syscall handler (under System Call Exception) |
+| `0xFFFA - 0xFFFB` | Syscall handler (under System Call Extension) |
+| `0xFFFC - 0xFFFD` | Fault handler                                 |
 | `0xFFFE - 0xFFFF` | Reset handler                                 |
 
 ### Recommended Memory Map
@@ -360,14 +365,28 @@ internal state, including:
 
 The state of general purpose registers and control and status registers is implementation defined.
 
+## Faults
+
+Fault conditions occur when something goes wrong program execution in the processor. This includes:
+
+- Bad instruction decodes
+- Overflow of the program counter
+- Etc.
+
+When a fault is detected, the processor must set the `CAUSE` register based on the type of fault
+and then set the program counter to the fault vector address stored in memory at `0xFFFC - 0xFFFD`.
+Execution must then continue in the fault handler, which is software-defined and may attempt
+recovery, dump diagnostic information, or simply halt.
+
 ## Exceptions and Interrupts
 
 The core ISA defined in this chapter does not support traditional exceptions or interrupts. The
 `CAUSE` special register is intended for use as a diagnostic tool in the core architecture, and
 `HALT` is the only instruction that is required to update it.
 
-A basic synchronous exception system is supported with the System Call Extension. This extension
-is not a requirement for a full implementation of the core architecture.
+A basic synchronous exception system is supported under the System Call Extension which, when
+combined with the Privilege Extension, can be used to invoke privileged routines from the
+unprivileged user mode.
 
 ## Base Instructions
 
@@ -963,7 +982,7 @@ Usage: `SYSCALL RS`
 Meaning:
 ```
 CAUSE = RS << 8 | 0x01
-if (E == 0) { exit(RS) } else { PC = Memory[0xFFFD] << 8 | Memory[0xFFFC] }
+if (E == 0) { exit(RS) } else { PC = Memory[0xFFFB] << 8 | Memory[0xFFFA] }
 ```
 
 MARK: Need to save RADDR somewhere for when the handler returns
@@ -991,9 +1010,67 @@ architecture behavior for `HALT`, including stopping the clock and setting the `
 
 #### Calling Conventions and Stack Frame
 When a `SYSCALL` instruction is executed, the contents of the `RS` register are used as the syscall
-code, stored in the `CAUSE` special register. The syscall handler address at `0xFFFC - 0xFFFD` is
+code, stored in the `CAUSE` special register. The syscall handler address at `0xFFFA - 0xFFFB` is
 responsible for reading the `CAUSE` register, understanding that a syscall was executed, and
 using the extended status value to branch to different handler code for each type of call.
 
 All registers in the context of the system call handler are saved registers, except `RSCRATCH0` and
 `RSCRATCH1`.
+
+### Privilege Extension
+
+The Privilege Extension segments the capabilities of the processor into two distinct levels of
+privilege, which can be used to limit the actions taken by untrusted software.
+
+Machine Mode grants access to all functionality of the processor, and is similar in scope to the
+core architecture without the Privilege Extension. User Mode restricts access to certain features
+of the core architecture, and provides a way to manage memory I/O at a more cautious level of
+privilege.
+
+#### `PRIVS`
+
+Privilege is tracked and controlled using the `PRIVS` special register, which is defined as part of
+the Privilege Extension. It is a flags register with the following fields:
+
+| Flag | Bit | Commentary                                                   |
+|------|-----|--------------------------------------------------------------|
+| `R`  | 0   | The privilege ring bit. 0 for Machine Mode, 1 for User Mode. |
+
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        {"name": "R", "bits": 1},
+        {"name": "Reserved (optional)", "bits": 15}
+    ],
+    "config": {"bits": 16}
+})).tostring())
+```
+
+#### User Mode Restrictions
+
+When the processor is in User Mode, the following actions must cause a privilege-related fault:
+
+- Execution of `HALT`
+- Execution of `RSR` except on `SADDR`, `RADDR`, and `FLAGS`
+- Execution of `WSR` except on `SADDR`, `RADDR`, and `FLAGS`
+- Access to privileged memory, if a memory protection unit is used to manage access based on the
+  ring bit
+
+If a privilege error is detected, the processor must preempt the instruction which caused the error,
+discard any partial result of the instruction, and jump to the fault handler. The `CAUSE` special
+register must be set to indicate the privilege error for the instruction use or memory access.
+
+#### Points of Privilege Change
+
+Under normal operation, the processor is expected to change privilege modes when the following
+occur:
+
+- When any fault occurs which requires the processor to jump to the fault handler (including an
+  User Mode privilege error), the processor must first set `PRIVS.R` to 0.
+- Under the System Call Extension, when the `SYSCALL` instruction is executed and the exception
+  bit is 1, `PRIVS.R` must be set to 0 before the system call handler is entered.
+- When `WSR` is executed on the `PRIVS` special register from Machine Mode, the updated ring
+  bit must take affect for the next instruction.
