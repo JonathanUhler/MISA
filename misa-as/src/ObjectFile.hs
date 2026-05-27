@@ -120,6 +120,8 @@ packInst inst =
     WsrInst  csr  rs1 rs2 -> packFormatRRC 0xD rs1 rs2 csr
     JalInst  flag rs1 rs2 -> packFormatRRF 0xE rs1 rs2 flag
     JmpInst  flag rs1 rs2 -> packFormatRRF 0xF rs1 rs2 flag
+    -- System call extension
+    SyscallInst rs        -> [0x0 .|. shiftL (fromReg rs) 4, 0x80]
     _                     -> error ("cannot pack pseudo-instruction " ++ show inst)
   where
     packFormatR   op r1       = [op .|. shiftL (fromReg r1) 4, 0x00]
@@ -135,6 +137,8 @@ packInst inst =
       FLAGS -> 0x3
       CAUSE -> 0x4
       EXTNS -> 0x5
+      RETSC -> 0x8
+      PRIVS -> 0xA
     fromFlag f = case f of
       ALWAYS        -> 0x0
       EQUAL         -> 0x1

@@ -1,4 +1,6 @@
-module Grammar (Program,
+module Grammar (Extn(..),
+                allExtns,
+                Program,
                 Stat(..),
                 Inst(..),
                 Op(..),
@@ -13,6 +15,14 @@ module Grammar (Program,
 
 
 import Data.Word (Word8, Word16)
+
+
+data Extn = DynamicHardwareExtn | SystemCallExtn | PrivilegeExtn
+  deriving (Show, Enum, Bounded, Eq)
+
+
+allExtns :: [Extn]
+allExtns = [minBound..maxBound :: Extn]
 
 
 type Program = [Stat]
@@ -67,6 +77,9 @@ data Inst
   | St2Inst   GpReg   GpReg GpReg GpReg
   | Sub2Inst  GpReg   GpReg GpReg GpReg GpReg GpReg
   | Xor2Inst  GpReg   GpReg GpReg GpReg GpReg GpReg
+  -- Syscall call extension
+  | SyscallInst GpReg
+  | RetsInst
   deriving (Show, Eq)
 
 
@@ -76,6 +89,8 @@ data Op
   -- Pseudo instructions
   | ADD2 | AND2 | CALL | CLR | CMP | GOTO | JALI | JMPI | MOV | MOV2 | NOP | OR2 | POP | POP2
   | PUSH | PUSH2 | RET | RRC2 | SET2 | SUB2 | XOR2
+  -- System call extension
+  | SYSCALL | RETS
   deriving (Show, Enum, Bounded)
 
 
@@ -89,7 +104,13 @@ data WideReg = RAB | RCD | REF | RUV | RWX | RYZ | RSCRATCH
   deriving (Show, Enum, Bounded)
 
 
-data CsrReg = SADDR | RADDR | FLAGS | CAUSE | EXTNS
+data CsrReg
+  -- Core architecture
+  = SADDR | RADDR | FLAGS | CAUSE | EXTNS
+  -- System call extension
+  | RETSC
+  -- Privilege extension
+  | PRIVS
   deriving (Show, Enum, Bounded, Eq)
 
 

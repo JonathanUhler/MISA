@@ -15,8 +15,20 @@ import qualified Text.Megaparsec.Char.Lexer as L
 type Parser = Parsec Void String
 
 
-reservedOps :: [(String, Op)]
-reservedOps = [(map toLower (show o), o) | o <- [minBound..maxBound :: Op]]
+extnForOp :: Op -> Maybe Extn
+extnForOp SYSCALL = Just SystemCallExtn
+extnForOp RETS    = Just SystemCallExtn
+extnForOp _       = Nothing
+
+extnForCsr :: CsrReg -> Maybe Extn
+extnForCsr RETSC = Just SystemCallExtn
+extnForCsr PRIVS = Just PrivilegeExtn
+extnForCsr _     = Nothing
+
+
+reservedOps :: [Extn] -> [(String, Op)]
+reservedOps extns = [(map toLower (show o), o) | o <- [minBound..maxBound :: Op],
+                                                 maybe True (`elem` extns) (extnForOp o)]
 
 reservedGpRegs :: [(String, GpReg)]
 reservedGpRegs = [(map toLower (show r), r) | r <- [minBound..maxBound :: GpReg]]
@@ -24,8 +36,9 @@ reservedGpRegs = [(map toLower (show r), r) | r <- [minBound..maxBound :: GpReg]
 reservedWideRegs :: [(String, WideReg)]
 reservedWideRegs = [(map toLower (show w), w) | w <- [minBound..maxBound :: WideReg]]
 
-reservedCsrRegs :: [(String, CsrReg)]
-reservedCsrRegs = [(map toLower (show c), c) | c <- [minBound..maxBound :: CsrReg]]
+reservedCsrRegs :: [Extn] -> [(String, CsrReg)]
+reservedCsrRegs extns = [(map toLower (show c), c) | c <- [minBound..maxBound :: CsrReg],
+                                                     maybe True (`elem` extns) (extnForCsr c)]
 
 reservedCmpFlags :: [(String, CmpFlag)]
 reservedCmpFlags = [(map toLower (show f), f) | f <- [minBound..maxBound :: CmpFlag]]
@@ -33,13 +46,13 @@ reservedCmpFlags = [(map toLower (show f), f) | f <- [minBound..maxBound :: CmpF
 reservedDirs :: [String]
 reservedDirs = ["word", "array", "addr", "ascii", "asciiz", "space", "section"]
 
-reservedIdentifiers :: Set.Set String
-reservedIdentifiers = Set.fromList (concat [map fst reservedOps,
-                                            map fst reservedGpRegs,
-                                            map fst reservedWideRegs,
-                                            map fst reservedCsrRegs,
-                                            map fst reservedCmpFlags,
-                                            reservedDirs])
+reservedIdentifiers :: [Extn] -> Set.Set String
+reservedIdentifiers extns = Set.fromList (concat [map fst (reservedOps extns),
+                                                  map fst reservedGpRegs,
+                                                  map fst reservedWideRegs,
+                                                  map fst (reservedCsrRegs extns),
+                                                  map fst reservedCmpFlags,
+                                                  reservedDirs])
 
 
 skip :: Parser ()
@@ -103,17 +116,21 @@ parseThisIdent expected = try $ do
     fail ("unexpected identifier")
 
 
-parseUnreservedIdentifier :: Parser String
-parseUnreservedIdentifier = do
+parseUnreservedIdentifier :: [Extn] -> Parser String
+parseUnreservedIdentifier extns = do
   ident <- parseIdentifier <?> "identifier"
-  if Set.member (map toLower ident) reservedIdentifiers then
+  if Set.member (map toLower ident) (reservedIdentifiers extns) then
     fail ("reserved identifier '" ++ ident ++ "' cannot be used in this context")
   else
     return ident
 
 
+parseNeverReservedIdentifier :: Parser String
+parseNeverReservedIdentifier = parseUnreservedIdentifier allExtns
+
+
 parseLabel :: Parser Label
-parseLabel = (parseUnreservedIdentifier <?> "label") <* char ':'
+parseLabel = (parseNeverReservedIdentifier <?> "label") <* char ':'
 
 
 parseDir :: Parser Dir
@@ -121,11 +138,11 @@ parseDir = do
   _   <- char '.' <?> "directive"
   choice [WordDir    <$> (parseString "word"    *> parseWord),
           ArrayDir   <$> (parseString "array"   *> some parseWord),
-          AddrDir    <$> (parseString "addr"    *> parseUnreservedIdentifier),
+          AddrDir    <$> (parseString "addr"    *> parseNeverReservedIdentifier),
           AsciizDir  <$> (parseString "asciiz"  *> parseQuotedString),
           AsciiDir   <$> (parseString "ascii"   *> parseQuotedString),
           SpaceDir   <$> (parseString "space"   *> parseDoubleWord),
-          SectionDir <$> (parseString "section" *> parseUnreservedIdentifier)]
+          SectionDir <$> (parseString "section" *> parseNeverReservedIdentifier)]
 
 
 parseLookup :: [(String, a)] -> String -> Parser a
@@ -153,27 +170,32 @@ parseWideReg = do
 parseRegPair :: Parser (GpReg, GpReg)
 parseRegPair = choice [try parseWideReg, (,) <$> parseGpReg <*> parseGpReg]
 
-parseCsrReg :: Parser CsrReg
-parseCsrReg = parseLookup reservedCsrRegs "special register"
+parseCsrReg :: [Extn] -> Parser CsrReg
+parseCsrReg extns = parseLookup (reservedCsrRegs extns) "special register"
 
 parseCmpFlag :: Parser CmpFlag
 parseCmpFlag = parseLookup reservedCmpFlags "comparison flag"
 
 
 parseLowImm :: Parser Imm
-parseLowImm =
-  choice [IntImm   Low . fromIntegral <$> parseWord <?> "integer literal",
-          LabelImm Low                <$> parseUnreservedIdentifier <?> "label name"]
+parseLowImm = choice
+  [
+    IntImm   Low . fromIntegral <$> parseWord <?> "integer literal",
+    LabelImm Low                <$> parseNeverReservedIdentifier <?> "label name"
+  ]
 
 
 parseFullImm :: Parser Imm
-parseFullImm =
-  choice [IntImm   Full . fromIntegral <$> parseDoubleWord <?> "integer literal",
-          LabelImm Full                <$> parseUnreservedIdentifier <?> "label name"]
+parseFullImm = choice
+  [
+    IntImm   Full . fromIntegral <$> parseDoubleWord <?> "integer literal",
+    LabelImm Full                <$> parseNeverReservedIdentifier <?> "label name"
+  ]
 
 
-parseInst :: Parser Inst
-parseInst = choice
+
+coreInsts :: [Extn] -> [Parser Inst]
+coreInsts extns =
   [
     -- Base instructions
     HaltInst <$> (parseThisIdent "halt" *> parseGpReg),
@@ -188,8 +210,8 @@ parseInst = choice
     SetInst  <$> (parseThisIdent "set"  *> parseGpReg)   <*> parseLowImm,
     (\rd (r1, r2) -> LdInst rd r1 r2) <$> (parseThisIdent "ld"   *> parseGpReg)   <*> parseRegPair,
     (\rd (r1, r2) -> StInst rd r1 r2) <$> (parseThisIdent "st"   *> parseGpReg)   <*> parseRegPair,
-    (\c (r1, r2) -> RsrInst c r1 r2)  <$> (parseThisIdent "rsr"  *> parseCsrReg)  <*> parseRegPair,
-    (\c (r1, r2) -> WsrInst c r1 r2)  <$> (parseThisIdent "wsr"  *> parseCsrReg)  <*> parseRegPair,
+    (\c (r1, r2) -> RsrInst c r1 r2)  <$> (parseThisIdent "rsr"  *> (parseCsrReg extns)) <*> parseRegPair,
+    (\c (r1, r2) -> WsrInst c r1 r2)  <$> (parseThisIdent "wsr"  *> (parseCsrReg extns)) <*> parseRegPair,
     (\f (r1, r2) -> JalInst f r1 r2)  <$> (parseThisIdent "jal"  *> parseCmpFlag) <*> parseRegPair,
     (\f (r1, r2) -> JmpInst f r1 r2)  <$> (parseThisIdent "jmp"  *> parseCmpFlag) <*> parseRegPair,
     -- Pseudo instructions
@@ -221,15 +243,28 @@ parseInst = choice
                <$> (parseThisIdent "sub2" *> parseRegPair) <*> parseRegPair <*> parseRegPair,
     (\(rd1, rd2) (rs1, rs2) (rs3, rs4) -> Xor2Inst rd1 rd2 rs1 rs2 rs3 rs4)
                <$> (parseThisIdent "xor2" *> parseRegPair) <*> parseRegPair <*> parseRegPair
-  ] <?> "instruction"
+  ]
 
 
-parseStat :: Parser Stat
-parseStat =
-  choice [InstStat  <$> parseInst,
+systemCallInsts :: [Parser Inst]
+systemCallInsts =
+  [
+    SyscallInst <$> (parseThisIdent "syscall" *> parseGpReg),
+    RetsInst    <$   parseThisIdent "rets"
+  ]
+
+
+parseInst :: [Extn] -> Parser Inst
+parseInst extns = choice ((coreInsts extns) <> systemCallParsers) <?> "instruction"
+  where systemCallParsers = if elem SystemCallExtn extns then systemCallInsts else []
+
+
+parseStat :: [Extn] -> Parser Stat
+parseStat extns =
+  choice [InstStat  <$> (parseInst extns),
           DirStat   <$> parseDir,
           LabelStat <$> parseLabel]
 
 
-parseProgram :: Parser Program
-parseProgram = (some (skip *> parseStat <* skip)) <* eof
+parseProgram :: [Extn] -> Parser Program
+parseProgram extns = (some (skip *> (parseStat extns) <* skip)) <* eof

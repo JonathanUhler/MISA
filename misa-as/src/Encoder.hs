@@ -32,6 +32,7 @@ resolvePseudoInsts (stat : stats) =
 
 resolvePseudoInst :: Inst -> [Inst]
 resolvePseudoInst inst = case inst of
+  -- Core pseudo instructions
   Add2Inst rd1 rd2 rs1 rs2 rs3 rs4
     -> [AddInst rd2 rs2 rs4, AdcInst rd1 rs1 rs3]
   And2Inst rd1 rd2 rs1 rs2 rs3 rs4
@@ -109,6 +110,10 @@ resolvePseudoInst inst = case inst of
     -> [SubInst rd2 rs2 rs4, SbbInst rd1 rs1 rs3]
   Xor2Inst rd1 rd2 rs1 rs2 rs3 rs4
     -> [XorInst rd2 rs2 rs4, XorInst rd1 rs1 rs3]
+  -- Syscall call extension
+  RetsInst
+    -> [RsrInst RETSC RSCRATCH0 RSCRATCH1, JmpInst ALWAYS RSCRATCH0 RSCRATCH1]
+  -- Base instructions
   _ -> [inst]
   where
     lowImm  (IntImm   _ n) = IntImm   Low  n

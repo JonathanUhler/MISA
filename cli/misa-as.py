@@ -59,6 +59,9 @@ help_text: str = (
     "files will be assembled, generated object files will not be deleted, and non-source files "
     "provided to misa-as will be ignored. The -o flag cannot be specified with the -a flag when "
     "more than one source file is provided."
+    "\n\n"
+    "Architecture extensions defined in the MISA ISA manual may be enabled with the -e flag. By "
+    "default, no extensions are enabled and the assembler only recognizes the core architecture."
 )
 
 
@@ -113,7 +116,29 @@ def preprocess_all(src_paths: list, macros: list) -> list:
     return processed_files
 
 
-def assemble(src_path: Path, out_path: Path) -> (bool, str):
+def get_extn_bits(extensions: list) -> int:
+    """
+    Converts a list of extension names from the -e option to the integer value of the EXTNS register
+    that enables those specific extensions.
+
+    Args:
+      extensions (list): List of string extension names from the -e option.
+
+    Returns:
+      int: EXTNS register value for the enabled extensions.
+    """
+
+    extn_bits: int = 0
+    if ("dynamichw" in extensions):
+        extn_bits |= 0x0001
+    if ("syscall" in extensions):
+        extn_bits |= 0x0002
+    if ("privilege" in extensions):
+        extn_bits |= 0x0004
+    return extn_bits
+
+
+def assemble(src_path: Path, out_path: Path, extn_bits: int) -> (bool, str):
     """
     Calls the misa-as-exe Haskell assembler on a single source file.
 
@@ -123,8 +148,9 @@ def assemble(src_path: Path, out_path: Path) -> (bool, str):
       misa-as-exe ${src_path} ${out_path}
 
     Arguments:
-      src_path (Path): Path to the assembly source file to assemble, which must exist.
-      out_path (Path): Path to write the output object file, which will be overwritten if it exists.
+      src_path (Path):  Path to the assembly source file to assemble, which must exist.
+      out_path (Path):  Path to write the output object file, which will be overwritten if exists.
+      extn_bits (list): Integer value respenting the enabled extensions in the EXTNS register.
 
     Returns:
       bool: True if the assembly was successful and out_path contains the object file contents.
@@ -134,24 +160,26 @@ def assemble(src_path: Path, out_path: Path) -> (bool, str):
     """
 
     result: CompletedProcess = \
-        subprocess.run(["misa-as-exe", str(src_path), str(out_path)], capture_output = True)
+        subprocess.run(["misa-as-exe", str(src_path), str(out_path), str(extn_bits)],
+                       capture_output = True)
     assembled: bool = result.returncode == 0
     return assembled, format_subprocess_output(result)
 
 
-def assemble_all(src_paths: list) -> list:
+def assemble_all(src_paths: list, extn_bits: int) -> list:
     """
     Assembles a list of source files by calling assemble() on each one in order.
 
     See the assemble(str, str) function for more information. This function takes each src_path
     in src_paths, creates a temporary file for the output object file, and calls:
 
-      assemble(src_path, temp_obj_file)
+      assemble(src_path, temp_obj_file, extn_bits)
 
     The first assembler error will terminate this CLI wrapper.
 
     Arguments:
       src_paths (list): List of all source assembly files to assemble.
+      extn_bits (list): Integer value respenting the enabled extensions in the EXTNS register.
 
     Returns:
       list: A list of NamedTemporaryFile objects which each correspond to one of the assembled
@@ -163,7 +191,7 @@ def assemble_all(src_paths: list) -> list:
     for src_path in src_paths:
         out_file: NamedTemporaryFile = NamedTemporaryFile()  # pylint:disable=consider-using-with
         out_path: Path = Path(out_file.name)
-        assembled, errors = assemble(src_path, out_path)
+        assembled, errors = assemble(src_path, out_path, extn_bits)
         if (not assembled):
             error(program_name, errors)
         artifact_files.append(out_file)
@@ -262,6 +290,9 @@ def main() -> None:
 
     parser.add_argument("-a", "--assemble", action = "store_true",
                         help = "assemble but do not link")
+    parser.add_argument("-e", "--extension", nargs = "*", metavar = "<extension>", default = [],
+                        choices = {"dynamichw", "syscall", "privilege"},
+                        help = "enable architecture extension <extension> in the assembler")
     parser.add_argument("-p", "--preprocess", action = "store_true",
                         help = "preprocess but do not assemble or link")
     parser.add_argument("-D", "--define", action = "append", metavar = "<key>=<val>", default = [],
@@ -283,7 +314,7 @@ def main() -> None:
         return
 
     processed_paths: list = [processed_file.name for processed_file in processed_files]
-    artifact_files: list = assemble_all(processed_paths)
+    artifact_files: list = assemble_all(processed_paths, get_extn_bits(args.extension))
     if (args.assemble):
         if (len(artifact_files) > 1 and args.output is not None):
             emit_archive_file(artifact_files, args.output)
