@@ -95,7 +95,7 @@ class CauseTypeMemory(IntEnum):
 
 class Simulator:
 
-    def _FaultSignal(Exception):
+    class _FaultSignal(Exception):
         pass
 
 
@@ -115,10 +115,10 @@ class Simulator:
                cause_type: CauseTypeInstruction | CauseTypeMemory,
                cause_reason: CauseReason) -> None:
         self._set_cause(extended_status, cause_type, cause_reason)
-        self._set_csr(Csr.PRIVS, 0x0000)
+        self.set_csr(Csr.PRIVS, 0x0000)
         self.in_syscall = False
-        self.pc = (self._read_mem(Vector.FAULT + 1) << WORD_SIZE) | self._read_mem(Vector.FAULT)
-        raise _FaultSignal()
+        self.pc = (self.read_mem(Vector.FAULT + 1) << WORD_SIZE) | self.read_mem(Vector.FAULT)
+        raise self._FaultSignal()
 
 
     def _compare(self, cmp: Cmp | int) -> bool:
@@ -128,7 +128,7 @@ class Simulator:
             except ValueError:
                 self._fault(0x00, CauseTypeInstruction.ILLEGAL, CauseReason.INSTRUCTION)
 
-        flags: int = self._get_csr(Csr.FLAGS)
+        flags: int = self.get_csr(Csr.FLAGS)
         z: bool = bool(flags & 0b0001)
         n: bool = bool(flags & 0b0100)
         v: bool = bool(flags & 0b1000)
@@ -154,7 +154,7 @@ class Simulator:
                    cause_type: CauseTypeInstruction | CauseTypeMemory,
                    cause_reason: CauseReason) -> None:
         cause: int = (extended_status << WORD_SIZE) | (cause_type << 3) | (cause_reason)
-        self._set_csr(Csr.CAUSE, cause)
+        self.set_csr(Csr.CAUSE, cause)
 
 
     def _set_flags(self, a: int, b: int, y: int) -> None:
@@ -166,14 +166,14 @@ class Simulator:
         c: bool = bool(y & (WORD_MASK + 1))
         n: bool = y_sign
         v: bool = (not (a_sign ^ b_sign)) and (b_sign ^ y_sign)
-        self._set_csr(Csr.FLAGS, (v << 3) | (n << 2) | (c << 1) | (z << 0))
+        self.set_csr(Csr.FLAGS, (v << 3) | (n << 2) | (c << 1) | (z << 0))
 
 
     def _is_privileged(self) -> bool:
-        return bool(self._get_csr(Csr.PRIVS) & 0b0001 == 0)
+        return bool(self.get_csr(Csr.PRIVS) & 0b0001 == 0)
 
 
-    def _get_csr(self, csr: Csr | int) -> int:
+    def get_csr(self, csr: Csr | int) -> int:
         if (not isinstance(csr, Csr)):
             try:
                 csr = Csr(csr)
@@ -182,7 +182,7 @@ class Simulator:
         return self.csr[csr]
 
 
-    def _set_csr(self, csr: Csr | int, value: int) -> None:
+    def set_csr(self, csr: Csr | int, value: int) -> None:
         if (not isinstance(csr, Csr)):
             try:
                 csr = Csr(csr)
@@ -193,7 +193,7 @@ class Simulator:
         self.csr[csr] = value % (CSR_MASK + 1)
 
 
-    def _get_reg(self, reg: Reg | int) -> int:
+    def get_reg(self, reg: Reg | int) -> int:
         if (not isinstance(reg, Reg)):
             try:
                 reg = Reg(reg)
@@ -202,7 +202,7 @@ class Simulator:
         return self.reg[reg]
 
 
-    def _set_reg(self, reg: Reg | int, value: int) -> None:
+    def set_reg(self, reg: Reg | int, value: int) -> None:
         if (not isinstance(reg, Reg)):
             try:
                 reg = Reg(reg)
@@ -213,24 +213,38 @@ class Simulator:
         self.reg[reg] = value % (WORD_MASK + 1)
 
 
-    def _read_mem(self, address: int) -> int:
+    def read_mem(self, address: int) -> int:
         return self.mem[address]
 
 
-    def _write_mem(self, address: int, value: int) -> None:
+    def write_mem(self, address: int, value: int) -> None:
         self.mem[address] = value % (WORD_MASK + 1)
+
+
+    def load_mem(self, binary_file: str, offset: int = 0x0000) -> None:
+        try:
+            with open(binary_file, "rb") as f:
+                binary: bytes = f.read()
+        except OSError as e:
+            raise ValueError(f"Could not load binary file: {e}") from e
+
+        for i, byte in enumerate(binary):
+            if (i + offset >= len(self.mem)):
+                break
+            self.mem[i + offset] = byte
+        self.reset()
 
 
     def reset(self) -> None:
         self.in_reset = False
         self.in_syscall = False
         self._saved_privs = 0x0000
-        self.pc = (self._read_mem(Vector.RESET + 1) << WORD_SIZE) | self._read_mem(Vector.RESET)
+        self.pc = (self.read_mem(Vector.RESET + 1) << WORD_SIZE) | self.read_mem(Vector.RESET)
 
 
     def step(self):
         try:
-            inst: int = (self._read_mem(self.pc + 1) << WORD_SIZE) | self._read_mem(self.pc)
+            inst: int = (self.read_mem(self.pc + 1) << WORD_SIZE) | self.read_mem(self.pc)
             nib0: int = (inst & 0x000F) >> (0 * NIB_SIZE)
             nib1: int = (inst & 0x00F0) >> (1 * NIB_SIZE)
             nib2: int = (inst & 0x0F00) >> (2 * NIB_SIZE)
@@ -256,10 +270,10 @@ class Simulator:
                 case Op.JAL:     self._jal(nib1, nib2, nib3)
                 case Op.JMP:     self._jmp(nib1, nib2, nib3)
 
-            if (self.in_syscall and self.pc == self._get_csr(Csr.RETSC)):
+            if (self.in_syscall and self.pc == self.get_csr(Csr.RETSC)):
                 self.in_syscall = False
-                self._set_csr(Csr.PRIVS, self._saved_privs)
-        except _FaultSignal:
+                self.set_csr(Csr.PRIVS, self._saved_privs)
+        except self._FaultSignal:
             pass
 
 
@@ -270,116 +284,116 @@ class Simulator:
         if (not e and not self._is_privileged()):
             self._fault(0x00, CauseTypeInstruction.PRIVILEGED, CauseReason.INSTRUCTION)
 
-        self._set_cause(self._get_reg(rs), CauseTypeInstruction.HALT, CauseReason.INSTRUCTION)
+        self._set_cause(self.get_reg(rs), CauseTypeInstruction.HALT, CauseReason.INSTRUCTION)
         if (not e):
             self.in_reset = True
         else:
             self.in_syscall = True
-            self._saved_privs = self._get_csr(Csr.PRIVS)
-            self._set_csr(Csr.PRIVS, 0x0000)
-            self._set_csr(Csr.RETSC, self.pc)
+            self._saved_privs = self.get_csr(Csr.PRIVS)
+            self.set_csr(Csr.PRIVS, 0x0000)
+            self.set_csr(Csr.RETSC, self.pc)
             self.pc = \
-                (self._read_mem(Vector.SYSCALL + 1) << WORD_SIZE) | self._read_mem(Vector.SYSCALL)
+                (self.read_mem(Vector.SYSCALL + 1) << WORD_SIZE) | self.read_mem(Vector.SYSCALL)
 
 
     def _add(self, rd: int, rs1: int, rs2: int) -> None:
-        a: int = self._get_reg(rs1)
-        b: int = self._get_reg(rs2)
+        a: int = self.get_reg(rs1)
+        b: int = self.get_reg(rs2)
         y: int = a + b
         self._set_flags(a, b, y)
-        self._set_reg(rd, y)
+        self.set_reg(rd, y)
 
 
     def _adc(self, rd: int, rs1: int, rs2: int) -> None:
-        a: int = self._get_reg(rs1)
-        b: int = self._get_reg(rs2)
-        c: bool = bool(self._get_csr(Csr.FLAGS) & 0b0010)
+        a: int = self.get_reg(rs1)
+        b: int = self.get_reg(rs2)
+        c: bool = bool(self.get_csr(Csr.FLAGS) & 0b0010)
         y: int = a + b + c
         self._set_flags(a, b, y)
-        self._set_reg(rd, y)
+        self.set_reg(rd, y)
 
 
     def _sub(self, rd: int, rs1: int, rs2: int) -> None:
-        a: int = self._get_reg(rs1)
-        b: int = self._get_reg(rs2)
+        a: int = self.get_reg(rs1)
+        b: int = self.get_reg(rs2)
         y: int = a - b
         self._set_flags(a, ~b & WORD_MASK, y)
-        self._set_reg(rd, y)
+        self.set_reg(rd, y)
 
 
     def _sbb(self, rd: int, rs1: int, rs2: int) -> None:
-        a: int = self._get_reg(rs1)
-        b: int = self._get_reg(rs2)
-        c: bool = bool(self._get_csr(Csr.FLAGS) & 0b0010)
+        a: int = self.get_reg(rs1)
+        b: int = self.get_reg(rs2)
+        c: bool = bool(self.get_csr(Csr.FLAGS) & 0b0010)
         y: int = a - (b + c)
         self._set_flags(a, ~b & WORD_MASK, y)
-        self._set_reg(rd, y)
+        self.set_reg(rd, y)
 
 
     def _and(self, rd: int, rs1: int, rs2: int) -> None:
-        a: int = self._get_reg(rs1)
-        b: int = self._get_reg(rs2)
+        a: int = self.get_reg(rs1)
+        b: int = self.get_reg(rs2)
         y: int = a & b
-        self._set_reg(rd, y)
+        self.set_reg(rd, y)
 
 
     def _or(self, rd: int, rs1: int, rs2: int) -> None:
-        a: int = self._get_reg(rs1)
-        b: int = self._get_reg(rs2)
+        a: int = self.get_reg(rs1)
+        b: int = self.get_reg(rs2)
         y: int = a | b
-        self._set_reg(rd, y)
+        self.set_reg(rd, y)
 
 
     def _xor(self, rd: int, rs1: int, rs2: int) -> None:
-        a: int = self._get_reg(rs1)
-        b: int = self._get_reg(rs2)
+        a: int = self.get_reg(rs1)
+        b: int = self.get_reg(rs2)
         y: int = a ^ b
-        self._set_reg(rd, y)
+        self.set_reg(rd, y)
 
 
     def _rrc(self, rd: int, rs: int) -> None:
-        a: int = self._get_reg(rs)
-        c: bool = bool(self._get_csr(Csr.FLAGS) & 0b0010)
+        a: int = self.get_reg(rs)
+        c: bool = bool(self.get_csr(Csr.FLAGS) & 0b0010)
         y: int = (c << (WORD_SIZE - 1)) | (a >> 1)
         self._set_flags(0, 0, a << WORD_SIZE)
-        self._set_reg(rd, y)
+        self.set_reg(rd, y)
 
 
     def _set(self, rd: int, imm: int) -> None:
-        self._set_reg(rd, imm)
+        self.set_reg(rd, imm)
 
 
     def _ld(self, rd: int, rs1: int, rs2: int) -> None:
-        address: int = (self._get_reg(rs1) << WORD_SIZE) | self._get_reg(rs2)
-        self._set_reg(rd, self._read_mem(address))
+        address: int = (self.get_reg(rs1) << WORD_SIZE) | self.get_reg(rs2)
+        self.set_reg(rd, self.read_mem(address))
 
 
     def _st(self, rd: int, rs1: int, rs2: int) -> None:
-        address: int = (self._get_reg(rs1) << WORD_SIZE) | self._get_reg(rs2)
-        self._write_mem(address, self._get_reg(rd))
+        address: int = (self.get_reg(rs1) << WORD_SIZE) | self.get_reg(rs2)
+        self.write_mem(address, self.get_reg(rd))
 
 
     def _rsr(self, rs1: int, rs2: int, csr: int) -> None:
         if (not self._is_privileged() and csr not in {Csr.SADDR, Csr.RADDR, Csr.FLAGS}):
             self._fault(0x00, CauseTypeInstruction.PRIVILEGED, CauseReason.INSTRUCTION)
-        value: int = self._get_csr(csr)
-        self._set_reg(rs1, value >> WORD_SIZE)
-        self._set_reg(rs2, value & WORD_MASK)
+        value: int = self.get_csr(csr)
+        self.set_reg(rs1, value >> WORD_SIZE)
+        self.set_reg(rs2, value & WORD_MASK)
 
 
     def _wsr(self, rs1: int, rs2: int, csr: int) -> None:
         if (not self._is_privileged() and csr not in {Csr.SADDR, Csr.RADDR, Csr.FLAGS}):
             self._fault(0x00, CauseTypeInstruction.PRIVILEGED, CauseReason.INSTRUCTION)
-        value: int = (self._get_reg(rs1) << WORD_SIZE) | self._get_reg(rs2)
-        self._set_csr(csr, value)
+        value: int = (self.get_reg(rs1) << WORD_SIZE) | self.get_reg(rs2)
+        self.set_csr(csr, value)
 
 
     def _jal(self, rs1: int, rs2: int, cmp: int) -> None:
         if (self._compare(cmp)):
-            self._set_csr(Csr.RADDR, self.pc)
-            self.pc = (self._get_reg(rs1) << WORD_SIZE) | self._get_reg(rs2)
+            self.set_csr(Csr.RADDR, self.pc)
+            self.pc = (self.get_reg(rs1) << WORD_SIZE) | self.get_reg(rs2)
 
 
     def _jmp(self, rs1: int, rs2: int, cmp: int) -> None:
         if (self._compare(cmp)):
-            self.pc = (self._get_reg(rs1) << WORD_SIZE) | self._get_reg(rs2)
+            self.pc = (self.get_reg(rs1) << WORD_SIZE) | self.get_reg(rs2)
