@@ -6,10 +6,11 @@ import cmd
 import inspect
 import os
 import readline
+from typing import Any
 from simulator import Simulator, Reg, Csr
 
 
-HISTORY_FILE = os.path.expanduser("~/.misa_history")
+HISTORY_FILE: str = os.path.expanduser("~/.misa_history")
 
 
 class Shell(cmd.Cmd):
@@ -18,7 +19,7 @@ class Shell(cmd.Cmd):
     prompt: str = "(misa) "
 
 
-    def print_topics(self, header, cmds, cmdlen, maxcol):
+    def print_topics(self, header, cmds, cmdlen, maxcol):  # MARK: clean this up
         if (not cmds):
             return
 
@@ -34,15 +35,13 @@ class Shell(cmd.Cmd):
         self.stdout.write("\n")
 
 
-    def __init__(self, binary: str | None = None):
+    def __init__(self, binary_file: str | None = None):
         super().__init__()
         self.sim = Simulator()
-        self._last_cmd: str = ""
-        self._breakpoints: set[int] = set()
-        self._running: bool = True
+        self._breakpoints: set = set()
 
-        if (binary):
-            self._load(binary)
+        if (binary_file is not None):
+            self._load_memory(binary_file, 0x0000)
 
         try:
             readline.read_history_file(HISTORY_FILE)
@@ -51,69 +50,79 @@ class Shell(cmd.Cmd):
         readline.set_history_length(1000)
 
 
-    def _load(self, path: str) -> None:
+    def _load_memory(self, binary_file: str, offset: int) -> None:
         try:
-            with open(path, "rb") as f:
-                data: bytes = f.read()
-            for i, byte in enumerate(data):
-                self.sim.mem[i] = byte
+            with open(binary_file, "rb") as f:
+                binary: bytes = f.read()
+            if (len(binary) - offset > len(self.sim.mem)):
+                self.stdout.write(f"Binary file ({len(binary)} bytes) is too large\n")
+
+            for i, byte in enumerate(binary):
+                self.sim.mem[i + offset] = byte
             self.sim.reset()
-            print(f"Loaded {len(data)} bytes from '{path}', PC = {self.sim.pc:#06x}")
+            self.stdout.write(f"Loaded {len(binary)} bytes, PC = {self.sim.pc:#06x}\n")
         except OSError as e:
-            print(f"Error loading file: {e}")
+            self.stdout.write(f"Error loading file: {e}\n")
 
 
-    def _resolve_addr(self, arg: str) -> int | None:
-        try:
-            return int(arg, 0)
-        except ValueError:
-            print(f"Invalid address: {arg!r}")
+    def _parse_args(self,
+                    arg_str: str,
+                    types: list,
+                    last_optional: bool = False,
+                    last_default: Any = None) -> list:
+        if (arg_str is None):
+            self.stdout.write("Incorrect number of arguments\n")
+            return None
+
+        args: list = arg_str.split()
+        values: list = []
+
+        for i, arg in enumerate(args):
+            try:
+                values.append(types[i](arg))
+            except ValueError:
+                self.stdout.write(f"Incorrect type for argument '{arg}'\n")
+                return None
+
+        if (len(types) == len(args)):
+            return values
+        elif (len(types) == len(args) + 1 and last_optional):
+            values.append(last_default)
+            return values
+        else:
+            self.stdout.write("Incorrect number of arguments\n")
             return None
 
 
-    def default(self, line: str) -> None:
-        if (line == "" and self._last_cmd is not None):
-            self.onecmd(self._last_cmd)
-        else:
-            print(f"Unknown command: {line!r}. Try 'help'.")
-
-
-    def postcmd(self, stop: bool, line: str) -> bool:
-        if (line.strip() != ""):
-            self._last_cmd = line.strip()
-        return stop
-
-
-    def do_load(self, arg: str) -> None:
-        """load <file> -- Load a binary image and reset the simulator."""
-        if (arg is None):
-            print("Usage: load <file>")
+    def do_load(self, arg_str: str) -> None:
+        """load <file> [offset] -- Load a binary image and reset the simulator."""
+        args: list = self._parse_args(arg_str, [str, lambda x: int(x, 0)],
+                                      last_optional = True, last_default = 0x0000)
+        if (args is None):
             return
-        self._load(arg.strip())
+
+        self._load_memory(args[0], args[1])
 
 
     def do_reset(self, _: str) -> None:
         """reset -- Toggle the reset pin of the simulator."""
         self.sim.reset()
-        print(f"Reset. PC = {self.sim.pc:#06x}")
+        self.stdout.write(f"Reset. PC = {self.sim.pc:#06x}\n")
 
 
-    def do_step(self, arg: str) -> None:
+    def do_step(self, arg_str: str) -> None:
         """step [n] -- Execute n instructions (default 1)."""
-        n: int = 1
-        if (arg is not None):
-            try:
-                n = int(arg, 0)
-            except ValueError:
-                print("Usage: step [count]")
-                return
+        args: list = self._parse_args(arg_str, [lambda x: int(x, 0)],
+                                      last_optional = True, last_default = 1)
+        if (args is None):
+            return
 
-        for _ in range(n):
+        for _ in range(args[0]):
             if (self.sim.in_reset):
-                print("Simulator is halted.")
+                self.stdout.write("Simulator is halted.\n")
                 break
             self.sim.step()
-            print(f"PC = {self.sim.pc:#06x}")
+            self.stdout.write(f"PC = {self.sim.pc:#06x}\n")
 
     do_s = do_step
 
@@ -121,7 +130,7 @@ class Shell(cmd.Cmd):
     def do_continue(self, _: str) -> None:
         """continue -- Run until a breakpoint or halt."""
         if (self.sim.in_reset):
-            print("Simulator is halted.")
+            self.stdout.write("Simulator is halted.\n")
             return
 
         steps: int = 0
@@ -129,90 +138,90 @@ class Shell(cmd.Cmd):
             self.sim.step()
             steps += 1
             if (self.sim.pc in self._breakpoints):
-                print(f"Breakpoint hit at {self.sim.pc:#06x} after {steps} steps.")
+                self.stdout.write(f"Breakpoint hit at {self.sim.pc:#06x} after {steps} steps.\n")
                 return
-        print(f"Halted after {steps} steps. PC = {self.sim.pc:#06x}")
+        self.stdout.write(f"Halted after {steps} steps. PC = {self.sim.pc:#06x}\n")
 
     do_c = do_continue
 
 
-    def do_break(self, arg: str) -> None:
+    def do_break(self, arg_str: str) -> None:
         """break <addr> -- Set a breakpoint at address."""
-        addr: int = self._resolve_addr(arg)
-        if (addr is None):
+        args: list = self._parse_args(arg_str, [lambda x: int(x, 0)])
+        if (args is None):
             return
-        self._breakpoints.add(addr)
-        print(f"Breakpoint set at {addr:#06x}")
+
+        self._breakpoints.add(args[0])
+        self.stdout.write(f"Breakpoint set at {args[0]:#06x}\n")
 
     do_b = do_break
 
 
-    def do_delete(self, arg: str) -> None:
+    def do_delete(self, arg_str: str) -> None:
         """delete <addr> -- Remove a breakpoint. 'delete all' clears all."""
-        if (arg.strip() == "all"):
+        args: list = self._parse_args(arg_str, [lambda x: int(x, 0)],
+                                      last_optional = True, last_default = "all")
+        if (args is None):
+            return
+
+        if (args[0] == "all"):
             self._breakpoints.clear()
-            print("All breakpoints cleared.")
-            return
-
-        addr: int = self._resolve_addr(arg)
-        if addr is None:
-            return
-
-        self._breakpoints.discard(addr)
-        print(f"Breakpoint at {addr:#06x} removed.")
+            self.stdout.write("All breakpoints cleared.\n")
+        else:
+            self._breakpoints.discard(args[0])
+            self.stdout.write(f"Breakpoint at {args[0]:#06x} removed.\n")
 
     do_d = do_delete
 
 
-    def do_info(self, arg: str) -> None:
+    def do_info(self, arg_str: str) -> None:
         """info registers | breakpoints -- Display simulator state."""
-        sub: str = arg.strip().lower()
-        if (sub in ("registers", "reg", "r")):
+        args: list = self._parse_args(arg_str, [str])
+
+        if (args[0] in ("registers", "reg", "r")):
             self._print_registers()
-        elif (sub in ("breakpoints", "break", "b")):
-            if (self._breakpoints is not None):
-                for addr in sorted(self._breakpoints):
-                    print(f"  {addr:#06x}")
-            else:
-                print("No breakpoints set.")
+        elif (args[1] in ("breakpoints", "break", "b")):
+            self._print_breakpoints()
         else:
-            print("Usage: info registers | info breakpoints")
+            self.stdout.write(f"No info for '{args[0]}'\n")
 
     do_i = do_info
 
 
     def _print_registers(self) -> None:
         for reg in Reg:
-            val = self.sim.reg[reg]
-            print(f"  {reg.name:<12} {val:#04x}  ({val:3d})", end="")
+            val: int = self.sim.reg[reg]
+            self.stdout.write(f"  {reg.name:<12} {val:#04x}  ({val:3d})")
             if ((reg + 1) % 2 == 0):
-                print()
+                self.stdout.write("\n")
 
-        print()
+        self.stdout.write("\n")
 
         for csr in Csr:
             val = self.sim.csr[csr]
-            print(f"  {csr.name:<8} {val:#06x}  ({val:5d})")
+            self.stdout.write(f"  {csr.name:<8} {val:#06x}  ({val:5d})\n")
 
-        print(f"  {'PC':<8} {self.sim.pc:#06x}  ({self.sim.pc:5d})")
+        self.stdout.write(f"  {'PC':<8} {self.sim.pc:#06x}  ({self.sim.pc:5d})\n")
 
 
-    def do_examine(self, arg: str) -> None:
+    def _print_breakpoints(self) -> None:
+        if (len(self._breakpoints) == 0):
+            self.stdout.write("No breakpoints set.\n")
+            return
+
+        for addr in self._breakpoints:
+            self.stdout.write(f"  {addr:#06x}\n")
+
+
+    def do_examine(self, arg_str: str) -> None:
         """examine <addr> [count] -- Dump memory as hex bytes."""
-        parts: list = arg.split()
-        if (not parts):
-            print("Usage: examine <addr> [count]")
-            return
+        args: list = self._parse_args(arg_str, [lambda x: int(x, 0), int],
+                                      last_optional = True, last_default = 16)
 
-        addr: int = self._resolve_addr(parts[0])
-        if (addr is None):
-            return
-
-        count: int = int(parts[1], 0) if len(parts) > 1 else 16
-        for i in range(0, count, 8):
-            chunk: list = self.sim.mem[addr + i : addr + i + 8]
+        for i in range(0, args[1], 8):
+            chunk: list = self.sim.mem[args[0] + i : args[0] + i + 8]
             hex_part: str = " ".join(f"{b:02x}" for b in chunk)
-            print(f"  {addr + i:#06x}:  {hex_part}")
+            self.stdout.write(f"  {args[0] + i:#06x}:  {hex_part}\n")
 
     do_x = do_examine
 
@@ -220,7 +229,7 @@ class Shell(cmd.Cmd):
     def do_quit(self, _: str) -> bool:
         """quit  --  Exit the simulator."""
         readline.write_history_file(HISTORY_FILE)
-        print("Goodbye.")
+        self.stdout.write("Goodbye.\n")
         return True
 
     do_q = do_quit
@@ -231,7 +240,7 @@ def main() -> None:
     parser.add_argument("binary", nargs = "?", help = "Binary image to load at startup")
     args: Namespace = parser.parse_args()
 
-    shell: Shell = Shell(binary = args.binary)
+    shell: Shell = Shell(args.binary)
     try:
         shell.cmdloop()
     except KeyboardInterrupt:
