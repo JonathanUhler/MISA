@@ -5,7 +5,10 @@ from argparse import ArgumentParser, Namespace
 import cmd
 from dataclasses import dataclass, field
 import os
+import re
 import readline
+import subprocess
+from subprocess import CompletedProcess
 from typing import Any, Callable, Final
 from simulator import Simulator, Reg, Csr
 
@@ -26,7 +29,8 @@ class CommandSpec:
     last_default: Any = None
 
 
-def parse_args(arg_str: str,
+def parse_args(shell: "Shell",
+               arg_str: str,
                types: list,
                last_optional: bool = False,
                last_default: Any = None) -> (bool, list | str):
@@ -39,7 +43,7 @@ def parse_args(arg_str: str,
 
     for i, arg in enumerate(args):
         try:
-            values.append(types[i](arg))
+            values.append(types[i](shell, arg))
         except ValueError as e:
             return (False, f"Incorrect type for argument '{arg}' ({e})")
     if (len(args) < len(types) and last_optional):
@@ -55,6 +59,7 @@ def register_commands(cls: type, commands: list) -> None:
         def make_do(s: CommandSpec) -> Callable:
             def do_fn(self, arg_str: str):
                 parsed, args = parse_args(
+                    self,
                     arg_str,
                     s.arg_types,
                     last_optional = s.last_optional,
@@ -93,6 +98,18 @@ class Callbacks:
     @staticmethod
     def callback_load(shell: "Shell", args: list) -> None:
         shell.sim.load_mem(args[0], offset = args[1])
+
+
+    @staticmethod
+    def callback_symbol_file(shell: "Shell", args: list) -> None:
+        result: CompletedProcess = subprocess.run(["misa-nm", args[0]], capture_output = True)
+        stdout: str = result.stdout.decode() if result.stdout is not None else ""
+        new_symbols: dict = {
+            sym: Types.integer(shell, f"0x{addr}")
+            for addr, sym in re.findall(r"<- ([0-9a-fA-F]{4}) ([a-zA-Z0-9_]+)", stdout)
+        }
+        shell.symbols.update(new_symbols)
+        shell.stdout.write(f"Imported {len(new_symbols)} new symbols\n")
 
 
     @staticmethod
@@ -173,7 +190,11 @@ class Callbacks:
             return
 
         for addr in shell.breakpoints:
-            shell.stdout.write(f"  {addr:#06x}\n")
+            shell.stdout.write(f"  {addr:#06x}")
+            sym: str = next((k for k, v in shell.symbols.items() if v == addr), None)
+            if (sym is not None):
+                shell.stdout.write(f" ({sym})")
+            shell.stdout.write("\n")
 
 
     @staticmethod
@@ -193,6 +214,30 @@ class Callbacks:
         return True
 
 
+class Types:
+
+    @staticmethod
+    def integer(_: "Shell", string: str) -> int:
+        return int(string, 0)
+
+
+    @staticmethod
+    def string(_: "Shell", string: str) -> str:
+        return string
+
+
+    @staticmethod
+    def symbol(shell: "Shell", string: str) -> int:
+        try:
+            return Types.integer(shell, string)
+        except ValueError:
+            pass
+
+        if (string not in shell.symbols):
+            raise ValueError(f"Symbol '{string}' is not defined")
+        return shell.symbols[string]
+
+
 COMMANDS: Final = [
     CommandSpec(
         name          = "load",
@@ -200,9 +245,18 @@ COMMANDS: Final = [
         usage         = "load <file> [offset]",
         short_desc    = "Load a binary image into memory and reset the simulator.",
         long_desc     = (""),
-        arg_types     = [str, lambda x: int(x, 0)],
+        arg_types     = [Types.string, Types.integer],
         last_optional = True,
         last_default  = 0x0000
+    ),
+    CommandSpec(
+        name       = "symbol-file",
+        aliases    = ["symbol", "sym"],
+        callback   = Callbacks.callback_symbol_file,
+        usage      = "symbol-file <file>",
+        short_desc = "Load the symbol table from an object file.",
+        long_desc  = (""),
+        arg_types  = [Types.string]
     ),
     CommandSpec(
         name       = "reset",
@@ -218,7 +272,7 @@ COMMANDS: Final = [
         usage         = "step [n]",
         short_desc    = "Single-step by a certain number of instructions.",
         long_desc     = (""),
-        arg_types     = [lambda x: int(x, 0)],
+        arg_types     = [Types.integer],
         last_optional = True,
         last_default  = 1
     ),
@@ -237,7 +291,7 @@ COMMANDS: Final = [
         usage      = "breakpoint <addr|sym>",
         short_desc = "Set a breakpoint at an address or imported symbol.",
         long_desc  = (""),
-        arg_types  = [lambda x: int(x, 0)]  # MARK: add symbol support
+        arg_types  = [Types.symbol]
     ),
     CommandSpec(
         name          = "delete",
@@ -246,7 +300,7 @@ COMMANDS: Final = [
         usage         = "delete [addr|sym]",
         short_desc    = "Remove a breakpoint.",
         long_desc     = (""),
-        arg_types     = [lambda x: int(x, 0)],  # MARK: add symbol support
+        arg_types     = [Types.symbol],
         last_optional = True
     ),
     CommandSpec(
@@ -256,7 +310,7 @@ COMMANDS: Final = [
         usage      = "info <topic>",
         short_desc = "Display simulator state.",
         long_desc  = (""),
-        arg_types  = [str]
+        arg_types  = [Types.string]
     ),
     CommandSpec(
         name          = "examine",
@@ -265,7 +319,7 @@ COMMANDS: Final = [
         usage         = "examine <addr> [count]",
         short_desc    = "Dump memory as hex bytes.",
         long_desc     = (""),
-        arg_types     = [lambda x: int(x, 0), lambda x: int(x, 0)],
+        arg_types     = [Types.integer, Types.integer],
         last_optional = True,
         last_default  = 16
     ),
@@ -300,6 +354,7 @@ class Shell(cmd.Cmd):
     def __init__(self, binary_file: str | None = None):
         super().__init__()
         self.sim = Simulator()
+        self.symbols: dict = {}
         self.breakpoints: set = set()
 
         if (binary_file is not None):
