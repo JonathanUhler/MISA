@@ -86,17 +86,18 @@ padTo64K bytes = bytes ++ padding
   where padding = replicate (max (65536 - length bytes) 0) (0x00 :: Word8)
 
 
-linkBinaryObjectsSafe :: [BinaryObject] -> MemMap -> Either LinkError BinaryExe
+linkBinaryObjectsSafe :: [BinaryObject] -> MemMap -> Either LinkError (BinaryExe, BinaryObject)
 linkBinaryObjectsSafe objs memmap
   | overflowedSecs /= [] = Left (CodeTooLarge overflowedSecs)
-  | otherwise            = Right (padTo64K (joinLinkedSecs relocdSecs []))
+  | otherwise            = Right (padTo64K (joinLinkedSecs relocdSecs []), debugObj)
   where placedSecs     = placeSecs objs memmap
         overflowedSecs = getOverflowedSecs placedSecs memmap
         allSyms        = getAllSyms placedSecs
         relocdSecs     = applyRelocs placedSecs allSyms
+        debugObj       = [Sec "debug" [] (getPlacedSyms placedSecs) []]
 
 
-linkBinaryObjects :: [BinaryObject] -> MemMap -> Either LinkError BinaryExe
+linkBinaryObjects :: [BinaryObject] -> MemMap -> Either LinkError (BinaryExe, BinaryObject)
 linkBinaryObjects objs memmap
   | duplicateSyms /= []   = Left (DuplicateSyms duplicateSyms)
   | missingSyms /= []     = Left (MissingSyms missingSyms)

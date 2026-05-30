@@ -293,15 +293,15 @@ def main() -> None:
     parser.add_argument("-e", "--extension", nargs = "*", metavar = "<extension>", default = [],
                         choices = {"dynamichw", "syscall", "privilege"},
                         help = "enable architecture extension <extension> in the assembler")
-    parser.add_argument("-p", "--preprocess", action = "store_true",
-                        help = "preprocess but do not assemble or link")
-    parser.add_argument("-D", "--define", action = "append", metavar = "<key>=<val>", default = [],
-                        help = "define the macro <key> to be replaced with <val>")
     parser.add_argument("-l", "--linker-options",
                         action = "append", metavar = "<options>", default = [],
                         help = "string of command-line options to pass to misa-ld")
     parser.add_argument("-o", "--output", metavar = "<file>",
                         help = "place the output into <file>")
+    parser.add_argument("-p", "--preprocess", action = "store_true",
+                        help = "preprocess but do not assemble or link")
+    parser.add_argument("-D", "--define", action = "append", metavar = "<key>=<val>", default = [],
+                        help = "define the macro <key> to be replaced with <val>")
     parser.add_argument("-V", "--version", action = "version", version = f"%(prog)s {version_text}")
     parser.add_argument("asmfile", nargs = "+", type = Path, metavar = "<asmfile ...>",
                         help = "assemble source files <asmfile ...>")

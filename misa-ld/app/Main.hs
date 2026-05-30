@@ -12,8 +12,8 @@ import System.IO
 import Text.Megaparsec
 
 
-link :: FilePath -> [FilePath] -> FilePath -> IO ()
-link scriptPath objPaths outputPath = do
+link :: FilePath -> [FilePath] -> FilePath -> FilePath -> IO ()
+link scriptPath objPaths outputPath debugPath = do
   rawObjs <- mapM B.readFile objPaths
   let objResult = traverse (\(p, c) -> runParser unpackBinaryObject p c) (zip objPaths rawObjs)
     
@@ -33,10 +33,12 @@ link scriptPath objPaths outputPath = do
     Right m  -> return m
 
   case linkBinaryObjects binObjects memMap of
-    Left err    -> do
+    Left err            -> do
       hPutStrLn stderr (show err)
       exitWith (ExitFailure 1)
-    Right bytes -> B.writeFile outputPath (B.pack bytes)
+    Right (bytes, debugObj) -> do
+      B.writeFile outputPath (B.pack bytes)
+      B.writeFile debugPath  (B.pack (packBinaryObject debugObj))
 
 
 main :: IO ()
@@ -44,7 +46,8 @@ main = do
   args <- getArgs
   case args of
     (scriptPath : rest) | not (null rest) -> do
-          let objPaths = init rest
-          let outputPath = last rest
-          link scriptPath objPaths outputPath
+          let objPaths   = init (init rest)
+          let outputPath = last (init rest)
+          let debugPath  = last rest
+          link scriptPath objPaths outputPath debugPath
     _                                     -> exitWith (ExitFailure 1)

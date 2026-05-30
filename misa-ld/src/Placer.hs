@@ -1,4 +1,4 @@
-module Placer (PlacedSec(..), placeSecs) where
+module Placer (PlacedSec(..), placeSecs, getPlacedSyms) where
 
 
 import MemoryMap
@@ -13,6 +13,10 @@ data PlacedSec = PlacedSec Sec Word16
 
 placeSecs :: [BinaryObject] -> MemMap -> [PlacedSec]
 placeSecs objs memmap = concatMap (placeObjsInRegion objs) memmap
+
+
+getPlacedSyms :: [PlacedSec] -> SymTable
+getPlacedSyms placedSecs = concatMap (\(PlacedSec (Sec _ _ syms _) _) -> syms) placedSecs
 
 
 placeObjsInRegion :: [BinaryObject] -> MemRegion -> [PlacedSec]
@@ -33,4 +37,4 @@ placeSecsInRegion (sec : secs) start = placedSec : placeSecsInRegion secs (start
 
 placeSecAt :: Sec -> Word16 -> PlacedSec
 placeSecAt (Sec name code syms relocs) place = PlacedSec (Sec name code newSyms relocs) place
-  where newSyms   = map (\(Sym label addr)        -> Sym label (addr + place)) syms
+  where newSyms = map (\(Sym label addr) -> Sym label (addr + place)) syms

@@ -66,6 +66,10 @@ help_text: str = (
     "misa-ld will always produce a flat binary, and not a new linkable object file. The binary "
     "represents the entire 64kB address space allowed by the MISA instruction set architecture. "
     "This file can be loaded directly into memory of a MISA processor to run."
+    "\n\n"
+    "If the -g option is specified, misa-ld will additionally emit an object file with only a "
+    "symbol table containing the absolute address of all placed symbols in the emitted flat binary "
+    "file. This object file can be fed to debuggers to get access to symbol addresses."
 )
 
 
@@ -84,20 +88,21 @@ def get_default_memmap() -> NamedTemporaryFile:
     return memmap_file
 
 
-def link(memmap_path: Path, obj_paths: list, out_path: Path) -> (bool, str):
+def link(memmap_path: Path, obj_paths: list, out_path: Path, dbg_path: Path) -> (bool, str):
     """
     Links several object files together with a memory map file to produce a final executable.
 
     This function is a wrapper for the following Haskell linker call, which must be in the user's
     PATH:
 
-      misa-ld-exe ${memmap_path}, ${obj_paths} ${out_path}
+      misa-ld-exe ${memmap_path}, ${obj_paths} ${out_path} ${dbg_path}
 
     Arguments:
       memmap_path (Path): Path to the memory map file to use. This can be a temporary file obtained
                           by creating the default memmap.
       obj_paths (list):   A list of Path objects to the object files that are being linked.
       out_path (Path):    Path to write the output flat binary.
+      dbg_path (Path):    Optional path to write debug symbols object file, may be None.
 
     Returns:
       bool: True if linking was successful, False if any error occured. out_path will only be
@@ -106,8 +111,12 @@ def link(memmap_path: Path, obj_paths: list, out_path: Path) -> (bool, str):
             debug information if linking failed.
     """
 
+    if (dbg_path is None):
+        dbg_file: NamedTemporaryFile = NamedTemporaryFile()
+        dbg_path = Path(dbg_file.name)
+
     result: CompletedProcess = \
-        subprocess.run(["misa-ld-exe", str(memmap_path), *obj_paths, str(out_path)],
+        subprocess.run(["misa-ld-exe", str(memmap_path), *obj_paths, str(out_path), str(dbg_path)],
                        capture_output = True)
     linked: bool = result.returncode == 0
     return linked, format_subprocess_output(result)
@@ -124,6 +133,8 @@ def main() -> None:
         description = help_text
     )
 
+    parser.add_argument("-g", "--debug", metavar = "<file>",
+                        help = "generate an object file <file> with all placed symbols")
     parser.add_argument("-o", "--output", metavar = "<file>", default = "memory.bin",
                         help = "place the output into <file>")
     parser.add_argument("-M", "--memmap", metavar = "<path>",
@@ -146,7 +157,7 @@ def main() -> None:
     if (not extracted):
         error(program_name, errors)
 
-    linked, errors = link(memmap_path, obj_paths + extracted_paths, args.output)
+    linked, errors = link(memmap_path, obj_paths + extracted_paths, args.output, args.debug)
     if (not linked):
         error(program_name, errors)
 
