@@ -24,7 +24,7 @@ parseInclude = do
   _    <- hspace
   _    <- string "#include"
   _    <- hspace1
-  path <- someTill anySingle (eol <|> (eof >> return ""))
+  path <- char '"' *> someTill anySingle (char '"')
   return (Include path)
 
 
