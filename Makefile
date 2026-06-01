@@ -19,17 +19,23 @@ docs:
 	cd docs/arch && quarto render --to pdf && cp _book/*.pdf ..
 
 
+vpath %.py cli misa-sim
+
 CLI_SCRIPTS := $(wildcard cli/misa-*.py)
 CLI_TARGETS := $(patsubst cli/misa-%.py, $(INSTALL_DIR)/misa-%, $(CLI_SCRIPTS))
 
+SIM_SCRIPTS := $(wildcard misa-sim/misa-*.py)
+SIM_TARGETS := $(patsubst misa-sim/misa-%.py, $(INSTALL_DIR)/misa-%, $(SIM_SCRIPTS))
 
-install: $(CLI_TARGETS)
+
+install: $(CLI_TARGETS) $(SIM_TARGETS)
 	@mkdir -p $(INSTALL_DIR)
 	cp cli/helpers.py $(INSTALL_DIR)
+	cp misa-sim/simulator.py $(INSTALL_DIR)
 	stack install --work-dir $(BUILD_DIR) --local-bin-path $(INSTALL_DIR)
 
 
-$(INSTALL_DIR)/%: cli/%.py
+$(INSTALL_DIR)/%: %.py
 	@mkdir -p $(INSTALL_DIR)
 	cp $< $@
 	chmod +x $@

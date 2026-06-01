@@ -12,7 +12,7 @@ class SmartHelpFormatter(HelpFormatter):
     def _fill_text(self, text: str, width: int, indent: int):
         lines: list = text.splitlines()
         wrapped: list = [
-            textwrap.fill(line, width,  initial_indent = indent, subsequent_indent = indent)
+            textwrap.fill(line, width, initial_indent = indent, subsequent_indent = indent)
             for line in lines
         ]
         return "\n".join(wrapped)
