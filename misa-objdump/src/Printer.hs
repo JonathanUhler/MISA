@@ -3,13 +3,16 @@ module Printer (printProgram) where
 
 import Grammar
 
+import Data.Char (toUpper)
+import Numeric (showHex)
+
 
 printProgram :: Program -> String
 printProgram stats = unlines (map printStat stats)
 
 
 printStat :: Stat -> String
-printStat (InstStat inst)   = instStr
+printStat (InstStat inst)   = "\t" ++ instStr
   where instStr = case inst of
           HaltInst rs          -> unwords ["HALT", show rs]
           AddInst  rd  rs1 rs2 -> unwords ["ADD",  show rd,  show rs1, show rs2]
@@ -65,7 +68,7 @@ printStat (InstStat inst)   = instStr
           SyscallInst rs       -> unwords ["SYSCALL", show rs]
           RetsInst             -> "RETS"
 printStat (LabelStat label) = labelStr
-  where labelStr = show label ++ ":"
+  where labelStr = label ++ ":"
 printStat (DirStat dir)     = dirStr
   where dirStr = "." ++ name ++ " " ++ operands
         (name, operands) = case dir of
@@ -79,5 +82,5 @@ printStat (DirStat dir)     = dirStr
 
 
 showImm :: Imm -> String
-showImm (IntImm _ int)     = show int
+showImm (IntImm _ int)     = "0x" ++ map toUpper (showHex int "")
 showImm (LabelImm _ label) = label

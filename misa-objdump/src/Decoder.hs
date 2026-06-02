@@ -1,7 +1,6 @@
-module Decoder (decodeBinaryObject) where
+module Decoder (decodeFlatBinary, decodeBinaryObject) where
 
 
-import Control.Monad (when)
 import Data.Bits ((.&.), shiftR)
 import Data.List (sortBy, partition)
 import Data.Ord (comparing)
@@ -9,12 +8,18 @@ import Data.Word (Word8, Word16)
 import Grammar
 import ObjectFile
 
-import Debug.Trace
+
+decodeFlatBinary :: [Word8] -> SymTable -> RelocTable -> Program
+decodeFlatBinary binary syms relocs = decodeSec sec
+  where sec = Sec "literal" [LiteralCode binary] syms relocs
 
 
 decodeBinaryObject :: BinaryObject -> Bool -> Program
-decodeBinaryObject secs decodeAll = concatMap decodeSec secsToDecode
+decodeBinaryObject secs decodeAll
+  = concatMap (\(Sec name _ _ _, stats) -> DirStat (SectionDir name) : stats) namedSecs
   where secsToDecode = filter (\(Sec name _ _ _) -> name == "text" || decodeAll) secs
+        decodedSecs  = map decodeSec secsToDecode
+        namedSecs    = zip secsToDecode decodedSecs
 
 
 decodeSec :: Sec -> Program
@@ -43,28 +48,28 @@ handled at each step in priority order are:
 After the byte array is exhausted, trailing symbols become labels preceded by .space padding, and
 trailing relocations are paired into .addr directives the same way as in the loop.
 -}
-decodeBytes :: [Word8] -> [Sym] -> [Reloc] -> Program
-decodeBytes bytes syms relocs = reverse (decodeAndAcc bytes syms relocs 0 [])
+decodeBytes :: [Word8] -> SymTable -> RelocTable -> Program
+decodeBytes bytes symsToAdd relocsToAdd = reverse (decodeAndAcc bytes symsToAdd relocsToAdd 0 [])
   where decodeAndAcc []  syms relocs addr stats = addTrailing syms relocs addr stats
         decodeAndAcc [b] syms relocs addr stats = decodeAndAcc [] syms1 relocs (addr + 1) stats2
           where (stats1, syms1) = addCurrentSyms syms addr stats
                 stats2          = DirStat (WordDir b) : stats1
         decodeAndAcc (lo : hi : rest) syms relocs addr stats =
           let
-            (stats1, syms1) = addCurrentSyms syms addr stats
+            (symStats, newSyms) = addCurrentSyms syms addr stats
           in
             if hasUnalignedSyms syms addr then
-              decodeAndAcc (hi : rest) syms1 relocs (addr + 1) (DirStat (WordDir lo) : stats1)
+              decodeAndAcc (hi : rest) newSyms relocs (addr + 1) (DirStat (WordDir lo) : symStats)
             else
-              let
-                (stats2,    relocs1) = addAddressRelocs relocs addr stats1
-                (instStats, relocs2) = decodeInstWithReloc lo hi relocs addr
-              in
-                decodeAndAcc rest syms1 relocs2 (addr + 2) (prependAll instStats stats2)
+              if hasAddressRelocs relocs addr then
+                let (relocStats, newRelocs) = addAddressRelocs relocs addr symStats
+                in  decodeAndAcc rest newSyms newRelocs (addr + 2) relocStats
+              else
+                let (instStats, newRelocs) = decodeInstWithReloc lo hi relocs addr
+                in  decodeAndAcc rest newSyms newRelocs (addr + 2) (prependAll instStats symStats)
 
 
 addTrailing :: SymTable -> RelocTable -> Word16 -> Program -> Program
-addTrailing [] [] addr stats = stats
 addTrailing (sym : syms) [] addr stats
   = addTrailing syms [] newAddr newStats
   where (newStats, newAddr) = addTrailingSym sym addr stats
@@ -83,6 +88,7 @@ addTrailing (sym : syms) (loReloc : hiReloc : relocs) addr stats
         (Reloc _ relocAddr _) = loReloc
         (stats1, addr1)       = addTrailingReloc loReloc hiReloc addr  stats
         (stats2, addr2)       = addTrailingSym sym addr1 stats1
+addTrailing _ _ _ stats = stats
 
 
 addTrailingSym :: Sym -> Word16 -> Program -> (Program, Word16)
@@ -98,6 +104,7 @@ addTrailingReloc (Reloc LowReloc loAddr loLabel) (Reloc HighReloc hiAddr hiLabel
   where spaceCount = loAddr - addr
         space      = DirStat (SpaceDir spaceCount)
         newStats   = DirStat (AddrDir loLabel) : (if spaceCount > 0 then space : stats else stats)
+addTrailingReloc _ _ addr stats = (stats, addr)
 
 
 addCurrentSyms :: SymTable -> Word16 -> Program -> (Program, SymTable)
@@ -117,6 +124,12 @@ addAddressRelocs (Reloc LowReloc loAddr loLabel : Reloc HighReloc hiAddr hiLabel
 addAddressRelocs relocs _ stats = (stats, relocs)
 
 
+hasAddressRelocs :: RelocTable -> Word16 -> Bool
+hasAddressRelocs (Reloc LowReloc loAddr loLabel : Reloc HighReloc hiAddr hiLabel : _) addr
+  | loAddr == addr && hiAddr == loAddr + 1 && loLabel == hiLabel = True
+hasAddressRelocs _ _                                             = False
+
+
 prependAll :: [Stat] -> Program -> Program
 prependAll stats prog = foldl (flip (:)) prog stats
 
@@ -131,11 +144,6 @@ symsAt :: Word16 -> SymTable -> ([Stat], SymTable)
 symsAt addr syms = (symLabels, symsLeft)
   where (symsAtAddr, symsLeft) = partition (\(Sym _ a) -> a == addr) syms
         symLabels              = map (\(Sym l _) -> LabelStat l) symsAtAddr
-
-
-{- | Gets the address field of a Sym. -}
-symAddr :: Sym -> Word16
-symAddr (Sym _ a) = a
 
 
 -- | Decode two bytes as an instruction, attaching a label immediate when a
