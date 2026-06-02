@@ -217,7 +217,7 @@ not supported by RelocType.
 data RelocType
   = LowReloc
   | HighReloc
-  deriving (Show, Enum, Eq)
+  deriving (Show, Enum, Eq, Ord)
 
 
 {- |
