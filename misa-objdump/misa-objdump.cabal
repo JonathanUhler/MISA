@@ -23,6 +23,7 @@ library
   exposed-modules:
       Decoder
       Printer
+      Rewriter
   other-modules:
       Paths_misa_objdump
   autogen-modules:
