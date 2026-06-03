@@ -1,4 +1,4 @@
-module Encoder (encodeProgram) where
+module Encoder (encodeProgram, resolvePseudoInst) where
 
 
 import Grammar
@@ -110,7 +110,7 @@ resolvePseudoInst inst = case inst of
     -> [SubInst rd2 rs2 rs4, SbbInst rd1 rs1 rs3]
   Xor2Inst rd1 rd2 rs1 rs2 rs3 rs4
     -> [XorInst rd2 rs2 rs4, XorInst rd1 rs1 rs3]
-  -- Syscall call extension
+  -- System call extension
   RetsInst
     -> [RsrInst RETSC RSCRATCH0 RSCRATCH1, JmpInst ALWAYS RSCRATCH0 RSCRATCH1]
   -- Base instructions

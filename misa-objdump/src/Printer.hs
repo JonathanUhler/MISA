@@ -4,15 +4,29 @@ module Printer (printProgram) where
 import Grammar
 
 import Data.Char (toUpper)
+import Data.List (intercalate)
+import Data.Word (Word8)
+import Encoder (resolvePseudoInst)
 import Numeric (showHex)
+import Text.Printf (printf)
 
 
-printProgram :: Program -> String
-printProgram stats = unlines (map printStat stats)
+printProgram :: [Word8] -> Program -> String
+printProgram binary stats = unlines (map printTuple (zip3 printedAddrs printedBinary printedStats))
+  where printedStats  = printStats stats
+        printedBinary = printBinary binary stats
+        printedAddrs  = printAddrs stats
+        widestBinary  = maximum (map length printedBinary)
+        printTuple    =
+          \(a, b, s) -> intercalate "  " [a, b, replicate (widestBinary - length b) ' ', s]
+
+
+printStats :: Program -> [String]
+printStats stats = map printStat stats
 
 
 printStat :: Stat -> String
-printStat (InstStat inst)   = "\t" ++ instStr
+printStat (InstStat inst)   = "    " ++ instStr
   where instStr = case inst of
           HaltInst rs          -> unwords ["HALT", show rs]
           AddInst  rd  rs1 rs2 -> unwords ["ADD",  show rd,  show rs1, show rs2]
@@ -88,3 +102,33 @@ showImm (LabelImm _ label) = label
 
 showHexInt :: Integral a => a -> String
 showHexInt int = "0x" ++ map toUpper (showHex int "")
+
+
+printBinary :: [Word8] -> [Stat] -> [String]
+printBinary []    _              = []
+printBinary _     []             = []
+printBinary bytes (stat : stats) = strBytes : printBinary otherBytes stats
+  where takenBytes = take (statSize stat) bytes
+        otherBytes = drop (statSize stat) bytes
+        strBytes   = intercalate " " (map (printf "%02X") takenBytes)
+
+
+statSize :: Stat -> Int
+statSize (InstStat inst) = 2 * length (resolvePseudoInst inst)
+statSize (LabelStat _)   = 0
+statSize (DirStat dir)   = dirSize dir
+  where dirSize (WordDir _)        = 1
+        dirSize (ArrayDir array)   = length array
+        dirSize (AddrDir _)        = 2
+        dirSize (AsciiDir string)  = length string
+        dirSize (AsciizDir string) = length string + 1
+        dirSize (SpaceDir count)   = fromIntegral count
+        dirSize (SectionDir _)     = 0
+
+
+printAddrs :: [Stat] -> [String]
+printAddrs stats = printWithPc stats 0
+  where printWithPc []             _                   = []
+        printWithPc (DirStat (SectionDir _) : rest) _  = "      " : printWithPc rest 0
+        printWithPc (LabelStat _ : rest)            pc = "      " : printWithPc rest pc
+        printWithPc (stat : rest) pc = printf "0x%04X" pc : printWithPc rest (pc + statSize stat)

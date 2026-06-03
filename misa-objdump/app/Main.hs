@@ -23,9 +23,10 @@ decodeObject objPath decodeAll = do
       exitWith (ExitFailure 1)
     Right obj -> return obj
 
-  let rawProg = decodeBinaryObject binObject decodeAll
-  let prog    = rewriteProgram rawProg
-  let strProg = printProgram prog
+  let rawBinary = concatMap (\(Sec _ [LiteralCode binary] _ _) -> binary) binObject
+  let rawProg   = decodeBinaryObject binObject decodeAll
+  let prog      = rewriteProgram rawProg
+  let strProg   = printProgram rawBinary prog
 
   putStrLn strProg
 
@@ -48,7 +49,7 @@ decodeBinary binPath symsObjPath = do
 
   let rawProg = decodeFlatBinary rawBinary syms relocs
   let prog    = rewriteProgram rawProg
-  let strProg = printProgram prog
+  let strProg = printProgram rawBinary prog
 
   putStrLn strProg
 
