@@ -72,15 +72,19 @@ printStat (LabelStat label) = labelStr
 printStat (DirStat dir)     = dirStr
   where dirStr = "." ++ name ++ " " ++ operands
         (name, operands) = case dir of
-          WordDir word     -> ("word",    show word)
-          ArrayDir array   -> ("array",   show array)
+          WordDir word     -> ("word",    showHexInt word)
+          ArrayDir array   -> ("array",   unwords (map showHexInt array))
           AddrDir label    -> ("addr",    label)
           AsciiDir string  -> ("ascii",   string)
           AsciizDir string -> ("asciiz",  string)
-          SpaceDir count   -> ("space",   show count)
+          SpaceDir count   -> ("space",   showHexInt count)
           SectionDir label -> ("section", label)
 
 
 showImm :: Imm -> String
-showImm (IntImm _ int)     = "0x" ++ map toUpper (showHex int "")
+showImm (IntImm _ int)     = showHexInt int
 showImm (LabelImm _ label) = label
+
+
+showHexInt :: Integral a => a -> String
+showHexInt int = "0x" ++ map toUpper (showHex int "")

@@ -1,4 +1,4 @@
-module Placer (PlacedSec(..), placeSecs, getPlacedSyms) where
+module Placer (PlacedSec(..), placeSecs, getPlacedSyms, getPlacedRelocs) where
 
 
 import MemoryMap
@@ -17,6 +17,12 @@ placeSecs objs memmap = concatMap (placeObjsInRegion objs) memmap
 
 getPlacedSyms :: [PlacedSec] -> SymTable
 getPlacedSyms placedSecs = concatMap (\(PlacedSec (Sec _ _ syms _) _) -> syms) placedSecs
+
+
+getPlacedRelocs :: [PlacedSec] -> RelocTable
+getPlacedRelocs placedSecs = concatMap getAbsoluteRelocs placedSecs
+  where getAbsoluteRelocs (PlacedSec (Sec _ _ _ relocs) place) = map (getAbsoluteReloc place) relocs
+        getAbsoluteReloc place (Reloc kind addr label)         = Reloc kind (addr + place) label
 
 
 placeObjsInRegion :: [BinaryObject] -> MemRegion -> [PlacedSec]

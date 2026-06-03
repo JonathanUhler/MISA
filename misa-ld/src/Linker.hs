@@ -94,7 +94,7 @@ linkBinaryObjectsSafe objs memmap
         overflowedSecs = getOverflowedSecs placedSecs memmap
         allSyms        = getAllSyms placedSecs
         relocdSecs     = applyRelocs placedSecs allSyms
-        debugObj       = [Sec "debug" [] (getPlacedSyms placedSecs) []]
+        debugObj       = [Sec "debug" [] (getPlacedSyms placedSecs) (getPlacedRelocs placedSecs)]
 
 
 linkBinaryObjects :: [BinaryObject] -> MemMap -> Either LinkError (BinaryExe, BinaryObject)
