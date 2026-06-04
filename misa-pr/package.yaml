@@ -19,6 +19,7 @@ dependencies:
 - base >= 4.7 && < 5
 - megaparsec
 - text
+- split
 - filepath
 
 ghc-options:

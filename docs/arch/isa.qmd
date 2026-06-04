@@ -1095,7 +1095,7 @@ SVG(wavedrom.render(str({
 When the processor is in User Mode, the following actions must cause a privilege-related fault:
 
 - Execution of `HALT`
-- Execution of `RSR` except on `SADDR`, `RADDR`, and `FLAGS`
+- Execution of `RSR` except on `SADDR`, `RADDR`, `FLAGS`, and `PRIVS`
 - Execution of `WSR` except on `SADDR`, `RADDR`, and `FLAGS`
 - Access to privileged memory, if a memory protection unit is used to manage access based on the
   ring bit
