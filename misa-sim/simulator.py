@@ -316,7 +316,7 @@ class Simulator:
     def _sub(self, rd: int, rs1: int, rs2: int) -> None:
         a: int = self.get_reg(rs1)
         b: int = self.get_reg(rs2)
-        y: int = a - b
+        y: int = a + ((~b & WORD_MASK) + 1)
         self._set_flags(a, ~b & WORD_MASK, y)
         self.set_reg(rd, y)
 
@@ -325,7 +325,7 @@ class Simulator:
         a: int = self.get_reg(rs1)
         b: int = self.get_reg(rs2)
         c: bool = bool(self.get_csr(Csr.FLAGS) & 0b0010)
-        y: int = a - (b + c)
+        y: int = a + ((~b & WORD_MASK) + c)
         self._set_flags(a, ~b & WORD_MASK, y)
         self.set_reg(rd, y)
 

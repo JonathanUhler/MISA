@@ -41,6 +41,8 @@ def parse_args(shell: "Shell",
 
     args: list = arg_str.split()
     values: list = []
+    if (len(args) > len(types)):
+        return (False, f"Incorrect number of arguments, expected {num_args}, found {len(args)}")
 
     for i, arg in enumerate(args):
         try:
@@ -181,7 +183,7 @@ class Callbacks:
             if (shell.sim.pc in shell.breakpoints):
                 shell.stdout.write(f"Breakpoint hit at {shell.sim.pc:#06x} after {steps} steps.\n")
                 return
-        shell.stdout.write("Simulator is halted.\n")
+        shell.stdout.write(f"Simulator is halted (after {steps} steps).\n")
         shell.stdout.write(f"PC = {shell.sim.pc:#06x}\n")
 
 
