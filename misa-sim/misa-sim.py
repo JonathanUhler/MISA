@@ -107,6 +107,7 @@ class Callbacks:
     def callback_load(shell: "Shell", args: list) -> None:
         try:
             shell.sim.load_mem(args[0], offset = args[1])
+            shell.memory_file = args[0]
         except ValueError as e:
             shell.stdout.write(f"{e}\n")
 

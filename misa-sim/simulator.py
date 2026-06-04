@@ -162,7 +162,7 @@ class Simulator:
         b_sign: bool = bool(b & SIGN_MASK)
         y_sign: bool = bool(y & SIGN_MASK)
 
-        z: bool = y == 0
+        z: bool = (y & WORD_MASK) == 0
         c: bool = bool(y & (WORD_MASK + 1))
         n: bool = y_sign
         v: bool = (not (a_sign ^ b_sign)) and (b_sign ^ y_sign)
