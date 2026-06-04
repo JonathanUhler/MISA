@@ -82,7 +82,7 @@ def main() -> None:
     )
     parser.add_argument("-V", "--version", action = "version", version = f"%(prog)s {version_text}")
     parser.add_argument("objfile", nargs = "*", type = Path, metavar = "<objfile ...>",
-                        help = "prints symbols used in object/archive files <objfile ...>")
+                        help = "print symbols used in object/archive files <objfile ...>")
 
     args: Namespace = parser.parse_args()
 

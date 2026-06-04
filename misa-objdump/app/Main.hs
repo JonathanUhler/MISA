@@ -36,12 +36,16 @@ decodeBinary binPath symsObjPath = do
   rawBytes <- B.readFile binPath
   let rawBinary = B.unpack rawBytes
 
-  rawSymsObj <- B.readFile symsObjPath
-  symsObject <- case runParser unpackBinaryObject symsObjPath rawSymsObj of
-    Left err  -> do
-      hPutStrLn stderr (errorBundlePretty err)
-      exitWith (ExitFailure 1)
-    Right obj -> return obj
+  symsObject <-
+    if symsObjPath /= "" then do
+      rawSymsObj <- B.readFile symsObjPath
+      case runParser unpackBinaryObject symsObjPath rawSymsObj of
+        Left err  -> do
+          hPutStrLn stderr (errorBundlePretty err)
+          exitWith (ExitFailure 1)
+        Right obj -> return obj
+    else
+      return []
 
   (syms, relocs) <- case symsObject of
     []                          -> return ([], [])
@@ -60,4 +64,5 @@ main = do
   case args of
     ["misa_lf", objPath, decodeAll]   -> decodeObject objPath (read decodeAll)
     ["binary",  binPath, symsObjPath] -> decodeBinary binPath symsObjPath
+    ["binary",  binPath]              -> decodeBinary binPath ""
     _                                 -> exitWith (ExitFailure 1)
