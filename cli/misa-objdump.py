@@ -4,7 +4,7 @@
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
 import re
-from re import Match
+from re import Match, Pattern
 import subprocess
 from subprocess import CompletedProcess
 from helpers import (SmartHelpFormatter,
@@ -46,12 +46,16 @@ def disassemble(bin_path: Path, format: str, decode_all: bool, sym_file: Path) -
     return disassembled, format_subprocess_output(result)
 
 
+addr_re: Pattern = re.compile(r"^(0x[0-9A-Fa-f]{4})\s")
+section_re: Pattern = re.compile(r"^\s*\.section\b")
+
+
 def split_sections(lines: list) -> list:
     sections: list = []
     current: list = []
 
     for line in lines:
-        if (re.match(r"^\s*\.section\b", line) and current):
+        if (section_re.match(line) and current):
             sections.append(current)
             current = [line]
         else:
@@ -71,7 +75,7 @@ def split_blocks(lines: list) -> list:
     current: list = []
 
     for line in lines:
-        addr_match: Match = re.match(r"^(0x[0-9A-Fa-f]{4})\s", line)
+        addr_match: Match = addr_re.match(line)
         current.append(line)
         if (addr_match):
             blocks.append((int(addr_match.group(1), 16), current))
