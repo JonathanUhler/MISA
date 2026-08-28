@@ -1,7 +1,84 @@
-# Hardware Reference Architecture
+# Simulator And Hardware Reference
 
-The ultimate goal of the MISA project is to design, verify, and manufacture an ASIC running a
-complete implementation of the architecture. Tape out shuttle programs that offer such a service
-often have very restrictive area and pinout requirements. This chapter discusses several
-implementations of MISA architectures as digital circuits, including one architecture intended for
-tapeout.
+This chapter covers the reference simulator for the MISA architecture and the planned hardware
+implementation.
+
+## Functional Simulator
+
+`misa-sim` is the functional reference implementation of the MISA instruction set. It executes the
+flat binaries produced by the linker and models the processor as a single-cycle machine. The
+simulator is intended to match Chapter 1 exactly, so it serves as an executable reference for the
+behavior of every instruction and how those instructions interact with memory, processor state, etc.
+
+The simulator comes with an interactive GDB-style debugger for loading, inspecting, and executing
+programs. The debugger is documented in the next section.
+
+### Loading And Reset
+
+A program is loaded into memory as a flat binary starting at a byte offset, which defaults to
+`0x0000`. Loading copies bytes from the file into memory until either the file ends or the top of
+memory is reached. The linker emits an image that spans the whole address space including the vector
+table, so a linked binary is normally loaded at offset `0x0000`.
+
+The simulator resets after a binary is loaded. Reset reads the reset vector stored in little-endian
+at `0xFFFE - 0xFFFF` and initializes the program counter to that address. The processor is then
+ready to execute instructions.
+
+### Instruction Execution
+
+Each step fetches the 16-bit little-endian instruction at the program counter, and advances the
+program counter by two bytes before executing. Execution of each instruction follows the semantics
+in Chapter 1. When the program halts, the simulator returns to its reset state and stops.
+
+A faulting instruction discards its partial result, records the reason and type in the `CAUSE`
+register, and sets the program counter to the fault handler address stored at `0xFFFC - 0xFFFD`.
+Execution then continues in the fault handler. This matches the fault behavior defined in Chapter 1.
+
+### Address Space
+
+The reference simulator implements the entire 16-bit address space. All 65536 bytes are mapped, and
+memory accesses wrap at `0xFFFF`, so an access past the top of memory returns to the bottom. Because
+no region is unmapped, the simulator never raises the "Address overflow" memory usage fault from
+Chapter 1. That fault is reserved for implementations with a narrower bus or a memory protection
+unit. The simulator does still raise the "PC overflow" fault when the program counter would leave
+the 16-bit range during an increment.
+
+## Interactive Debugger
+
+The simulator is driven by an interactive debugger, started with `misa-sim [binary]`. The optional
+binary is loaded at startup as though passed to the `load` command. The debugger presents a `(misa)`
+prompt and reads one command per line. Command history is saved between sessions.
+
+Type `help` to list the available commands, or `help <command>` for the detailed help of a single
+command. Most commands accept short aliases, listed below. Arguments in angle brackets are required,
+and arguments in square brackets are optional.
+
+| Command       | Aliases            | Usage                                | Description                                                                                           |
+|---------------|--------------------|--------------------------------------|-------------------------------------------------------------------------------------------------------|
+| `load`        |                    | `load <file> [offset]`               | Load a binary image into memory at `[offset]` (default `0x0000`) and reset the simulator.             |
+| `symbol-file` | `symbol`, `sym`    | `symbol-file <file>`                 | Import a symbol table from an object file for use by later commands.                                  |
+| `disassemble` | `disass`           | `disassemble [start,[stop\|+count]]` | Disassemble memory, defaulting to a window from 8 bytes before to 16 bytes after the program counter. |
+| `reset`       |                    | `reset`                              | Reset the processor and jump to the reset vector.                                                     |
+| `step`        | `si`, `s`          | `step [n]`                           | Execute at most `[n]` instructions (default `1`), stopping early on a halt or breakpoint.             |
+| `continue`    | `cont`, `c`        | `continue`                           | Run until a breakpoint or a halt.                                                                     |
+| `breakpoint`  | `break`, `br`, `b` | `breakpoint <addr\|sym>`             | Set a breakpoint at an address or an imported symbol.                                                 |
+| `delete`      | `del`, `d`         | `delete [addr\|sym]`                 | Remove one breakpoint, or all breakpoints when given no argument.                                     |
+| `info`        | `i`                | `info <topic>`                       | Show simulator state. The topics are `registers` and `breakpoints`.                                   |
+| `examine`     | `exam`, `x`        | `examine <addr> [count]`             | Dump `[count]` bytes of memory (default `16`) starting at `<addr>`.                                   |
+| `quit`        | `q`                | `quit`                               | Save history and exit the simulator.                                                                  |
+
+: {tbl-colwidths="[12, 16, 30, 42]"}
+
+Breakpoints must be placed at the lower byte of an instruction to be hit. A symbol argument to
+`breakpoint`, `delete`, or `disassemble` is resolved to an address immediately using the most
+recently imported symbol file, so later imports do not move an existing breakpoint. Disassembly and
+symbol import both require the referenced files to still exist on disk.
+
+## Hardware Reference
+
+The ultimate goal of the MISA project is to design, verify, and manufacture an ASIC that runs a
+complete implementation of the architecture. Tapeout shuttle programs that offer such a service
+often carry restrictive area and pinout requirements, so the intended design is a single-cycle
+processor sized for those constraints.
+
+The hardware reference is planned work.

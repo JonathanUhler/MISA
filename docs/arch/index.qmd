@@ -23,8 +23,8 @@ The MISA project also includes a toolchain for creating programs to run on the M
 This includes an assembler, linker, and some object dumping/analysis tools. Some notes on the
 software design of these tools, in addition to their usage, are available in Chapter 2.
 
-A software simulator is also available for the proposed chip design. The intent of the simulator
-is to 1) provide a full reference implementation for the fuctionality of the MISA instructions, and
-2) provide a cycle-accurate (as far as possible) simulation of the intended silicon design. The
-MISA microprocessor architecture, and notes about the simulator's implementation specifically, are
-in Chapter 3.
+A software simulator is also available as the functional reference for the architecture. The intent
+of the simulator is to provide a full reference implementation for the functionality of the MISA
+instructions, so it defines how a conforming processor executes a program. Notes on the simulator
+and its interactive debugger are in Chapter 3. That chapter also holds a placeholder for the planned
+hardware reference, which will document the intended silicon design.
