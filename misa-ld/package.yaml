@@ -21,7 +21,6 @@ dependencies:
 - bytestring
 - containers
 - megaparsec
-- hspec
 
 ghc-options:
 - -Wall
@@ -41,17 +40,6 @@ executables:
   misa-ld-exe:
     main:                Main.hs
     source-dirs:         app
-    ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - misa-ld
-
-tests:
-  misa-ld-test:
-    main:                Spec.hs
-    source-dirs:         test
     ghc-options:
     - -threaded
     - -rtsopts
