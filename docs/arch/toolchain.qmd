@@ -39,6 +39,24 @@ pipeline:
 3) The generated object files, as well as any non-source files originally passed to `misa-as`, are
    passed to the MISA linker to produce the final flat binary.
 
+### Assembler Command Line
+
+`misa-as` classifies its inputs by extension. Source files end with the case-insensitive extensions
+`.asm`, `.s`, or `.src`, and are preprocessed and assembled. Any other input is treated as a
+pre-assembled object file or library and is passed straight to the linker.
+
+The following flags control how far the pipeline runs and how it behaves:
+
+- `-p` stops after preprocessing and emits the preprocessed source.
+- `-a` stops after assembling. Object files are kept, and non-source inputs are ignored. When `-o`
+  and more than one source file are given together, the resulting objects are bundled into an
+  archive at the output path.
+- `-e <extension ...>` enables architecture extensions in the assembler, chosen from `dynamichw`,
+  `syscall`, and `privilege`. No extensions are enabled by default.
+- `-D <key>=<val>` defines a preprocessor macro before assembling.
+- `-o <file>` sets the output path.
+- `-l <options>` passes a string of extra options through to the linker.
+
 ### Assembler Semantics
 
 #### Instructions
@@ -220,8 +238,182 @@ following object code:
 
 ## Linker
 
-`misa-ld` is the reference linker for the MISA_LF linkable format of object files. It uses memory
-map files to place the code sections of one or more object files into a flat binary, resolving
-symbol positions along the way.
+`misa-ld` is the reference linker for the `MISA_LF` linkable format of object files. It places the
+code sections of one or more object files into a flat binary, resolving symbol positions and
+applying relocations along the way. Archive files produced by `misa-ar` are recognized by the
+case-insensitive `.a` extension. The linker extracts them first and links the object files they
+contain.
+
+The linker always emits a flat binary rather than a new object file. The binary spans the entire
+64 KiB address space of the MISA architecture, so it can be loaded directly into the memory of a
+MISA processor. The output path defaults to `memory.bin` and is set with `-o`.
+
+When `-g <file>` is given, the linker also emits an object file that holds only a symbol table with
+the absolute address of every placed symbol. This debug object is meant for tools that resolve
+symbol names to addresses, such as the simulator described in Chapter 3.
+
+### Memory Map Files
+
+A memory map file is a small linker script that tells the linker where to place each section in the
+address space. Each entry gives an address range and the sections that belong in it. The grammar is:
+
+```
+memmap  ::= ("section" number "-" number ":" (section)* ";")+
+number  ::= 0x(0-9a-fA-F)+
+section ::= (_a-zA-Z)(_a-zA-Z0-9)*
+```
+
+A memory map file is selected with `-M <path>`. When none is given, the linker uses the following
+default map:
+
+```
+section 0x0000 - 0x00FF : direct      ;  // Zero pages
+section 0x0100 - 0x01FF :             ;  // Stack
+section 0x0200 - 0x7FFF : data bss    ;  // RAM
+section 0x8000 - 0xBFFF :             ;  // Memory-mapped IO
+section 0xC000 - 0xFFEF : text rodata ;  // Program ROM
+section 0xFFF0 - 0xFFFF : vectors     ;  // Vector table
+```
 
 ## Other Tools
+
+The toolchain includes several smaller tools for preprocessing source, bundling objects, and
+inspecting binaries.
+
+### Preprocessor
+
+`misa-pr` is the source-agnostic preprocessor that runs before the assembler. It resolves `#`
+directives and emits a file with the directives removed. A file with no directives passes through
+unchanged. Preprocessing runs in two passes. Inclusions are resolved first, then macros are expanded
+over the combined content from top to bottom.
+
+#### Includes
+
+The `#include` directive pastes the contents of another file in place of the directive:
+
+```
+#include "<path>"
+```
+
+Inclusions are resolved recursively, so an included file may include further files. The preprocessor
+looks for `<path>` first relative to the current directory, then in each directory listed in the
+`MISA_PR_INCLUDE_PATH` environment variable. That variable is a colon-separated list of directories,
+searched in order.
+
+#### Macros
+
+An object-like macro replaces every later token that matches its name with a body:
+
+```
+#macro <name> <body> #endm
+```
+
+A function-like macro takes a parenthesized list of space-separated arguments and substitutes them
+into its body at each call:
+
+```
+#macro <name>(<arg> ...) <body> #endm
+```
+
+Such a macro is called as `<name>(<arg> ...)` with space-separated arguments, and is expanded only
+when the number of arguments matches the definition. Macros may be redefined, and the most recent
+definition above a use takes effect. A macro can also be defined for the whole file on the command
+line with `-D <key>=<val>`, which behaves like an object-like macro.
+
+### Archiver
+
+`misa-ar` bundles several `MISA_LF` object files into a single archive, and extracts them again.
+Archives are used to distribute libraries of object files that the linker consumes directly. Only
+the object file contents are preserved, so other filesystem metadata is not restored on extraction.
+
+`misa-ar` takes one of two mutually exclusive subcommands:
+
+- `misa-ar c <objfile ...> [-o <file>]` creates an archive from the given objects. The output
+  defaults to `library.a`.
+- `misa-ar x <archive> [-o <dir>]` extracts the objects from an archive into a directory, which
+  defaults to the current directory.
+
+The linker and `misa-nm` accept archives directly and extract them on their own.
+
+#### Archive File Description
+
+Archive files use the `MISA_AR` container format. As with the object format, all fields are encoded
+with little endian byte order. Each archive contains the following information:
+
+| Length   | Type          | Content                                                                                              |
+|----------|---------------|------------------------------------------------------------------------------------------------------|
+| 8        | String        | The string `MISA_AR␣`, where `M` is the least significant byte and `␣` is the most significant byte. |
+| 2        | Word16        | The number of objects present in the archive.                                                        |
+| Variable | [NamedObject] | The named objects, repeated as many times as specified in the count field.                           |
+
+: {tbl-colwidths="[10, 20, 70]"}
+
+Each named object pairs an object file with the name it is restored under:
+
+| Length   | Type   | Content                                                    |
+|----------|--------|------------------------------------------------------------|
+| 2        | Word16 | The length in bytes of the object name string.             |
+| Variable | String | The object file name, used as the file name on extraction. |
+| Variable | Object | A full MISA_LF object file, laid out as described above.   |
+
+: {tbl-colwidths="[10, 15, 75]"}
+
+### Name Lister
+
+`misa-nm` lists the symbols in `MISA_LF` object files and `MISA_AR` archives. With no file arguments it
+prints nothing. Archives are extracted first, and the symbols of each archived object are listed in
+turn.
+
+The listing begins with a `File "<path>"` line, then one `Section <name>:` header for each section
+in the object. Within a section, a defined symbol that the object exports is marked `<-`, and a
+required symbol that the object imports is marked `->`. Each line shows the symbol or relocation
+address within the object in hexadecimal, followed by the symbol name.
+
+A required symbol also carries a relocation marker. `(hi)` means the relocation fills bits 15:8 of
+the symbol value, and `(lo)` means it fills bits 7:0. Single-byte relocations default to `(lo)`.
+
+For the object file from the earlier example, `misa-nm start.o` prints:
+
+```
+File "start.o"
+
+  Section text:
+
+    <- 0000 _start
+    -> 0007 main (hi)
+    -> 0009 main (lo)
+```
+
+Here `_start` is defined at the start of the code, and the two `main` entries are the high and low
+relocation holes left by the `CALL main` expansion.
+
+### Object Dumper
+
+`misa-objdump` disassembles flat binaries and `MISA_LF` object files back into MISA assembly. The file
+format is inferred from the `MISA_LF` magic header, and any other file is treated as a flat binary.
+The format can be forced with `-f <format>`, either `misa_lf` or `binary`.
+
+Disassembly is requested with one of two flags. `-d` disassembles the sections expected to hold
+code, which applies to object files. `-D` disassembles the whole file and is required for a flat
+binary, since a flat binary has no section structure. The `--start-address` and `--stop-address`
+options restrict the output to a range.
+
+Each disassembled line shows the address, the raw instruction bytes, and the decoded instruction. An
+object file carries its own symbol and relocation tables, so labels and relocated immediates appear
+directly in its disassembly. For a flat binary, a debug object file passed with `-g <file>` supplies
+those same annotations.
+
+Disassembling the earlier object file with `misa-objdump -d start.o` prints:
+
+```
+                       .section text
+                       _start:
+0x0000  E9 01 F9 FF        SET2 RSCRATCH0 RSCRATCH1 0x1FF
+0x0004  ED 1F              WSR SADDR RSCRATCH0 RSCRATCH1
+0x0006  E9 00 F9 00        SET2 RSCRATCH0 RSCRATCH1 main
+0x000A  EE 0F              JAL ALWAYS RSCRATCH0 RSCRATCH1
+0x000C  D0 00              HALT RT
+```
+
+The `CALL main` pseudo instruction expands into a `SET2` and `JAL` pair, and the unresolved `main`
+relocation is shown by name in the `SET2` immediate.
