@@ -45,7 +45,7 @@ which operate on registers.
 Argument and return registers are `RA` - `RF` and `RT`. The `RT` register should be used as the
 first return register, if the value being returned logically fits in a single (not wide) register.
 Otherwise, the register pair `RAB` should be preferred as the first return register. Argument
-registers are also temporary registers (caller-saved). `RG` through `RX` are saved registers
+registers are also temporary registers (caller-saved). `RU` through `RZ` are saved registers
 (callee-saved).
 
 The `RSCRATCH` wide register is reserved as a "scratch" 16-bit register for the assembler. Certain

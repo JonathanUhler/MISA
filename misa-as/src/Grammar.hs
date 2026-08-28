@@ -62,7 +62,6 @@ data Inst
   | GotoInst  Imm
   | JaliInst  CmpFlag Imm
   | JmpiInst  CmpFlag Imm
-  | Ld2Inst   GpReg   GpReg GpReg GpReg
   | MovInst   GpReg   GpReg
   | Mov2Inst  GpReg   GpReg GpReg GpReg
   | NopInst
@@ -74,7 +73,6 @@ data Inst
   | RetInst
   | Rrc2Inst  GpReg   GpReg GpReg GpReg
   | Set2Inst  GpReg   GpReg Imm
-  | St2Inst   GpReg   GpReg GpReg GpReg
   | Sub2Inst  GpReg   GpReg GpReg GpReg GpReg GpReg
   | Xor2Inst  GpReg   GpReg GpReg GpReg GpReg GpReg
   -- Syscall call extension

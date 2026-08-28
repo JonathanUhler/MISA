@@ -55,8 +55,6 @@ printStat (InstStat inst)   = "    " ++ instStr
           GotoInst imm         -> unwords ["GOTO",  showImm imm]
           JaliInst cmp imm     -> unwords ["JALI",  show cmp, showImm imm]
           JmpiInst cmp imm     -> unwords ["JMPI",  show cmp, showImm imm]
-          Ld2Inst  rd1 rd2 rs1 rs2
-            -> unwords ["LD2", show rd1, show rd2,  show rs1, show rs2]
           MovInst   rd  rs     -> unwords ["MOV",   show rd,  show rs]
           Mov2Inst  rd1 rd2 rs1 rs2
             -> unwords ["MOV2", show rd1, show rd2, show rs1, show rs2]
@@ -72,8 +70,6 @@ printStat (InstStat inst)   = "    " ++ instStr
             -> unwords ["RRC2", show rd1, show rd2, show rs1, show rs2]
           Set2Inst  rd1 rd2 imm
             -> unwords ["SET2", show rd1, show rd2, showImm imm]
-          St2Inst   rd1 rd2 rs1 rs2
-            -> unwords ["ST2", show rd1, show rd2, show rs1, show rs2]
           Sub2Inst  rd1 rd2 rs1 rs2 rs3 rs4
             -> unwords ["SUB2", show rd1, show rd2, show rs1, show rs2, show rs3, show rs4]
           Xor2Inst  rd1 rd2 rs1 rs2 rs3 rs4
