@@ -3,10 +3,12 @@ from enum import IntEnum
 
 INST_SIZE: int = 16
 CSR_SIZE: int  = 16
+ADDR_SIZE: int = 16
 WORD_SIZE: int =  8
 NIB_SIZE: int  =  4
 
 CSR_MASK: int  = 2 ** CSR_SIZE - 1
+ADDR_MASK: int = 2 ** ADDR_SIZE - 1
 WORD_MASK: int = 2 ** WORD_SIZE - 1
 SIGN_MASK: int = 2 ** (WORD_SIZE - 1)
 
@@ -214,11 +216,11 @@ class Simulator:
 
 
     def read_mem(self, address: int) -> int:
-        return self.mem[address]
+        return self.mem[address & ADDR_MASK]
 
 
     def write_mem(self, address: int, value: int) -> None:
-        self.mem[address] = value % (WORD_MASK + 1)
+        self.mem[address & ADDR_MASK] = value % (WORD_MASK + 1)
 
 
     def load_mem(self, binary_file: str, offset: int = 0x0000) -> None:
@@ -269,6 +271,9 @@ class Simulator:
                 case Op.WSR:     self._wsr(nib1, nib2, nib3)
                 case Op.JAL:     self._jal(nib1, nib2, nib3)
                 case Op.JMP:     self._jmp(nib1, nib2, nib3)
+
+            if (self.pc > ADDR_MASK):
+                self._fault(0x00, CauseTypeMemory.PC, CauseReason.MEMORY)
 
             if (self.in_syscall and self.pc == self.get_csr(Csr.RETSC)):
                 self.in_syscall = False
@@ -353,9 +358,14 @@ class Simulator:
 
     def _rrc(self, rd: int, rs: int) -> None:
         a: int = self.get_reg(rs)
-        c: bool = bool(self.get_csr(Csr.FLAGS) & 0b0010)
-        y: int = (c << (WORD_SIZE - 1)) | (a >> 1)
-        self._set_flags(0, 0, a << WORD_SIZE)
+        carry_in: bool = bool(self.get_csr(Csr.FLAGS) & 0b0010)
+        y: int = (carry_in << (WORD_SIZE - 1)) | (a >> 1)
+
+        z: bool = (y & WORD_MASK) == 0
+        c: bool = bool(a & 0b0001)
+        n: bool = bool(y & SIGN_MASK)
+        v: bool = False
+        self.set_csr(Csr.FLAGS, (v << 3) | (n << 2) | (c << 1) | (z << 0))
         self.set_reg(rd, y)
 
 
@@ -374,7 +384,7 @@ class Simulator:
 
 
     def _rsr(self, rs1: int, rs2: int, csr: int) -> None:
-        if (not self._is_privileged() and csr not in {Csr.SADDR, Csr.RADDR, Csr.FLAGS}):
+        if (not self._is_privileged() and csr not in {Csr.SADDR, Csr.RADDR, Csr.FLAGS, Csr.PRIVS}):
             self._fault(0x00, CauseTypeInstruction.PRIVILEGED, CauseReason.INSTRUCTION)
         value: int = self.get_csr(csr)
         self.set_reg(rs1, value >> WORD_SIZE)

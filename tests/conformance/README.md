@@ -32,9 +32,10 @@ fails the test.
 
 ## Layout
 
-The suite has four parts.
+The suite has these parts.
 
 - `harness.py` builds and runs programs and exposes the simulator state.
 - `conftest.py` skips the suite with a clear message when the toolchain is not built.
 - `programs` holds the assembly fixtures.
 - `test_baseline.py` covers arithmetic, memory access, and a subroutine call.
+- `test_privilege.py`, `test_pc_overflow.py`, and `test_rrc.py` cover specific simulator fixes.

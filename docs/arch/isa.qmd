@@ -589,7 +589,9 @@ Usage: `RRC RD RS`
 Meaning: `RD = (C << 7) | (RS >> 1) ; C = RS & 1`
 
 Description: Shift the 9-bit integer formed by `{C, RS}` right by one bit. Store the shifted
-result in `RD` and the LSB of `RS` into `C`.
+result in `RD` and the LSB of `RS` into `C`. The ALU flags are updated from the 8-bit result. `Z`
+is set when the result is zero, `N` takes the most significant bit of the result, and `V` is
+cleared. `C` receives the shifted-out LSB of `RS` as described above.
 
 Encoding:
 ```{python}

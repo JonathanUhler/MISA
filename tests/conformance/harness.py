@@ -30,7 +30,7 @@ PROGRAMS_DIR: Final = Path(__file__).resolve().parent / "programs"
 # The simulator is imported from the source tree so tests check the live implementation rather than
 # the copy placed in the install directory during a build.
 sys.path.insert(0, str(SIM_DIR))
-from simulator import Simulator, Reg, Csr, Cmp  # noqa: E402
+from simulator import Simulator, Reg, Csr, Cmp, CauseReason, CauseTypeMemory  # noqa: E402
 
 
 def _toolchain_env() -> dict:
@@ -47,7 +47,7 @@ def _toolchain_env() -> dict:
     return env
 
 
-def assemble(source: str, workdir: str) -> Path:
+def assemble(source: str, workdir: str, extensions: list = None) -> Path:
     """
     Assembles and links MISA source into a flat binary.
 
@@ -56,8 +56,10 @@ def assemble(source: str, workdir: str) -> Path:
     returned.
 
     Arguments:
-      source (str):  The MISA assembly source to build.
-      workdir (str): A writable directory for intermediate and output files.
+      source (str):      The MISA assembly source to build.
+      workdir (str):     A writable directory for intermediate and output files.
+      extensions (list): Architecture extensions to enable in the assembler, such as ["privilege"].
+                         These map to the -e flag of misa-as.
 
     Returns:
       Path: The path to the linked flat binary.
@@ -67,8 +69,12 @@ def assemble(source: str, workdir: str) -> Path:
     src_path.write_text(source)
     bin_path: Path = Path(workdir) / "program.bin"
 
+    command: list = ["misa-as", str(src_path), "-o", str(bin_path)]
+    if (extensions):
+        command += ["-e", *extensions]
+
     result: CompletedProcess = subprocess.run(
-        ["misa-as", str(src_path), "-o", str(bin_path)],
+        command,
         cwd = workdir,
         env = _toolchain_env(),
         capture_output = True,
@@ -79,7 +85,7 @@ def assemble(source: str, workdir: str) -> Path:
     return bin_path
 
 
-def run_source(source: str, max_steps: int = 1000) -> Simulator:
+def run_source(source: str, max_steps: int = 1000, extensions: list = None) -> Simulator:
     """
     Assembles, loads, and runs MISA source in the reference simulator.
 
@@ -87,15 +93,16 @@ def run_source(source: str, max_steps: int = 1000) -> Simulator:
     or until max_steps instructions have run. A program that does not halt in time fails the test.
 
     Arguments:
-      source (str):    The MISA assembly source to run.
-      max_steps (int): The maximum number of instructions to simulate before giving up.
+      source (str):      The MISA assembly source to run.
+      max_steps (int):   The maximum number of instructions to simulate before giving up.
+      extensions (list): Architecture extensions to enable in the assembler.
 
     Returns:
       Simulator: The halted simulator, ready for state inspection.
     """
 
     with tempfile.TemporaryDirectory() as workdir:
-        bin_path: Path = assemble(source, workdir)
+        bin_path: Path = assemble(source, workdir, extensions)
         sim: Simulator = Simulator()
         sim.load_mem(str(bin_path))
 
@@ -108,18 +115,19 @@ def run_source(source: str, max_steps: int = 1000) -> Simulator:
         return sim
 
 
-def run_program(name: str, max_steps: int = 1000) -> Simulator:
+def run_program(name: str, max_steps: int = 1000, extensions: list = None) -> Simulator:
     """
     Runs a named program fixture from the programs directory.
 
     Arguments:
-      name (str):      The file name of the fixture in the programs directory, such as
-                       "arithmetic.S".
-      max_steps (int): The maximum number of instructions to simulate before giving up.
+      name (str):        The file name of the fixture in the programs directory, such as
+                         "arithmetic.S".
+      max_steps (int):   The maximum number of instructions to simulate before giving up.
+      extensions (list): Architecture extensions to enable in the assembler.
 
     Returns:
       Simulator: The halted simulator, ready for state inspection.
     """
 
     source: str = (PROGRAMS_DIR / name).read_text()
-    return run_source(source, max_steps)
+    return run_source(source, max_steps, extensions)
