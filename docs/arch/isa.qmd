@@ -491,10 +491,12 @@ SVG(wavedrom.render(str({
 ### `SBB`
 Usage: `SBB RD RS1 RS2`
 
-Meaning: `RD = RS1 - (RS2 + C)`
+Meaning: `RD = RS1 + ~RS2 + C`
 
-Description: Subtract the contents of `RS2` and the `C` field of the `FLAGS` register, as one
-partial sum, from the contents of `RS1`, and store the result in `RD`.
+Description: Add the contents of `RS1`, the bitwise complement of `RS2`, and the `C` field of the
+`FLAGS` register, and store the result in `RD`. Because `C` is the adder carry out, this equals
+`RS1 - RS2 - (1 - C)`, so chaining `SUB` then `SBB` subtracts a multi-byte value with the borrow
+carried through `C`.
 
 Encoding:
 ```{python}
@@ -678,7 +680,7 @@ SVG(wavedrom.render(str({
 ```
 
 ### `RSR`
-Usage: `RSR RS1 RS2 CSR`
+Usage: `RSR CSR RS1 RS2`
 
 Meaning: `RS1 = CSR >> 8 ; RS2 = CSR & 0xFF`
 
@@ -702,7 +704,7 @@ SVG(wavedrom.render(str({
 ```
 
 ### `WSR`
-Usage: `WSR RS1 RS2 CSR`
+Usage: `WSR CSR RS1 RS2`
 
 Meaning: `CSR = RS1 << 8 | RS2`
 
