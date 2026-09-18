@@ -1,18 +1,17 @@
+import os
+import sys
 from enum import IntEnum
 
+_HARNESS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "misa-harness")
+if (_HARNESS not in sys.path):
+    sys.path.insert(0, _HARNESS)
 
-INST_SIZE: int = 16
-CSR_SIZE: int  = 16
-ADDR_SIZE: int = 16
-WORD_SIZE: int =  8
-NIB_SIZE: int  =  4
-
-CSR_MASK: int  = 2 ** CSR_SIZE - 1
-ADDR_MASK: int = 2 ** ADDR_SIZE - 1
-WORD_MASK: int = 2 ** WORD_SIZE - 1
-SIGN_MASK: int = 2 ** (WORD_SIZE - 1)
-
-IRQ_BASE: int  = 0x8000
+from constants import (
+    INST_SIZE, CSR_SIZE, ADDR_SIZE, WORD_SIZE, NIB_SIZE,
+    CSR_MASK, ADDR_MASK, WORD_MASK, SIGN_MASK, IRQ_BASE,
+)
+from clock import VirtualClock
+from machine import Machine
 
 
 class Op(IntEnum):
@@ -121,15 +120,12 @@ class Simulator:
         self._shadow_rscratch0 = 0x00
         self._shadow_rscratch1 = 0x00
         self._shadow_flags = 0x0000
-        self._irq_pin = False
-        self._irq_fifo = []
-        self._irq_pop_ack = 0
-        self._irq_prev_pop = 0
         self.pc = 0x0000
         self.reg = [0] * 16
         self.csr = [0] * 16
         self.csr[Csr.EXTNS] = 0b1110
-        self.mem = [0] * 0x10000
+        self.machine = Machine(VirtualClock())
+        self.mem = self.machine.ram.data
         self.reset()
 
 
@@ -236,11 +232,11 @@ class Simulator:
 
 
     def read_mem(self, address: int) -> int:
-        return self.mem[address & ADDR_MASK]
+        return self.machine.bus.read(address & ADDR_MASK)
 
 
     def write_mem(self, address: int, value: int) -> None:
-        self.mem[address & ADDR_MASK] = value % (WORD_MASK + 1)
+        self.machine.bus.write(address & ADDR_MASK, value & WORD_MASK)
 
 
     def load_mem(self, binary_file: str, offset: int = 0x0000) -> None:
@@ -263,16 +259,12 @@ class Simulator:
         self.in_interrupt = False
         self._saved_privs = 0x0000
         self._saved_privs_int = 0x0000
-        self._irq_pin = False
-        self._irq_fifo = []
-        self._irq_pop_ack = 0
-        self._irq_prev_pop = 0
+        self.machine.reset()
         self.pc = (self.read_mem(Vector.RESET + 1) << WORD_SIZE) | self.read_mem(Vector.RESET)
 
 
     def assert_interrupt(self, number: int, argptr: int = 0x0000) -> None:
-        self._irq_fifo.append((number & WORD_MASK, argptr & ADDR_MASK))
-        self._irq_pin = True
+        self.machine.irq.raise_irq(number, argptr)
 
 
     def _take_interrupt(self) -> None:
@@ -283,32 +275,16 @@ class Simulator:
         self.set_csr(Csr.PRIVS, 0x0000)
         self.set_csr(Csr.RETIR, self.pc)
         self.in_interrupt = True
-        self._irq_pin = False
+        self.machine.irq.acknowledge()
         self.pc = (self.read_mem(Vector.INTERRUPT + 1) << WORD_SIZE) | self.read_mem(Vector.INTERRUPT)
-
-
-    def _service_interrupt_queue(self) -> None:
-        pop = self.read_mem(IRQ_BASE + 1)
-        if (self._irq_prev_pop == 0 and pop != 0):
-            if (self._irq_fifo):
-                self._irq_fifo.pop(0)
-            self._irq_pop_ack = 1
-        elif (self._irq_prev_pop != 0 and pop == 0):
-            self._irq_pop_ack = 0
-        self._irq_prev_pop = pop
-        self.mem[IRQ_BASE + 0] = len(self._irq_fifo) & WORD_MASK
-        self.mem[IRQ_BASE + 2] = self._irq_pop_ack
-        if (self._irq_fifo):
-            number, argptr = self._irq_fifo[0]
-            self.mem[IRQ_BASE + 3] = number & WORD_MASK
-            self.mem[IRQ_BASE + 4] = argptr & WORD_MASK
-            self.mem[IRQ_BASE + 5] = (argptr >> WORD_SIZE) & WORD_MASK
 
 
     def step(self):
         try:
-            self._service_interrupt_queue()
-            if (self._irq_pin and (self.get_csr(Csr.EXTNS) & 0b1000) and not self.in_interrupt):
+            self.machine.clock.advance()
+            self.machine.poll()
+            if (self.machine.irq.pending() and (self.get_csr(Csr.EXTNS) & 0b1000)
+                    and not self.in_interrupt):
                 self._take_interrupt()
                 return
             inst: int = (self.read_mem(self.pc + 1) << WORD_SIZE) | self.read_mem(self.pc)

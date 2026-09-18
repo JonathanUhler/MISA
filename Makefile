@@ -32,6 +32,7 @@ install: $(CLI_TARGETS) $(SIM_TARGETS)
 	@mkdir -p $(INSTALL_DIR)
 	cp cli/helpers.py $(INSTALL_DIR)
 	cp misa-sim/simulator.py $(INSTALL_DIR)
+	cp misa-harness/constants.py misa-harness/clock.py misa-harness/ram.py misa-harness/bus.py misa-harness/peripheral.py misa-harness/interrupt.py misa-harness/uart.py misa-harness/timer.py misa-harness/machine.py $(INSTALL_DIR)
 	stack install --work-dir $(BUILD_DIR) --local-bin-path $(INSTALL_DIR)
 
 
