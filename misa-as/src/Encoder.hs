@@ -101,7 +101,7 @@ resolvePseudoInst inst = case inst of
         SbbInst RSCRATCH0 RSCRATCH0 R0,
         WsrInst SADDR RSCRATCH0 RSCRATCH1]
   RetInst
-    -> [RsrInst RADDR RSCRATCH0 RSCRATCH1, JmpInst ALWAYS RSCRATCH0 RSCRATCH1]
+    -> [JmpCsrInst ALWAYS RADDR]
   Rrc2Inst rd1 rd2 rs1 rs2
     -> [RrcInst rd1 rs1, RrcInst rd2 rs2]
   Set2Inst rs1 rs2 imm
@@ -112,7 +112,10 @@ resolvePseudoInst inst = case inst of
     -> [XorInst rd2 rs2 rs4, XorInst rd1 rs1 rs3]
   -- System call extension
   RetsInst
-    -> [RsrInst RETSC RSCRATCH0 RSCRATCH1, JmpInst ALWAYS RSCRATCH0 RSCRATCH1]
+    -> [JmpCsrInst ALWAYS RETSC]
+  -- Interrupt extension
+  RetiInst
+    -> [JmpCsrInst ALWAYS RETIR]
   -- Base instructions
   _ -> [inst]
   where

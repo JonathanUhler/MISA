@@ -1,8 +1,8 @@
 """
 Per-instruction conformance tests for RET.
 
-Manual: `RET` expands to `RSR RADDR RSCRATCH`, `JMP ALWAYS RSCRATCH`. It returns to the address held
-in `RADDR`, which is seeded here with a WSR.
+Manual: `RET` expands to `JMP ALWAYS RADDR`. It returns to the address held in `RADDR`, which is
+seeded here with a WSR.
 """
 
 

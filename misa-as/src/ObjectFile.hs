@@ -268,6 +268,7 @@ packInst inst =
     WsrInst  csr  rs1 rs2 -> packFormatRRC 0xD rs1 rs2 csr
     JalInst  flag rs1 rs2 -> packFormatRRF 0xE rs1 rs2 flag
     JmpInst  flag rs1 rs2 -> packFormatRRF 0xF rs1 rs2 flag
+    JmpCsrInst flag csr   -> packFormatCF  0xF csr flag
     -- System call extension
     SyscallInst rs        -> [0x0 .|. shiftL (fromReg rs) 4, 0x80]
     _                     -> error ("cannot pack pseudo-instruction " ++ show inst)
@@ -278,6 +279,7 @@ packInst inst =
     packFormatRI  op r  i     = [op .|. shiftL (fromReg r) 4,  fromImm i]
     packFormatRRC op r1 r2 c  = [op .|. shiftL (fromReg r1) 4, fromReg r2 .|. shiftL (fromCsr c) 4]
     packFormatRRF op r1 r2 f  = [op .|. shiftL (fromReg r1) 4, fromReg r2 .|. shiftL (fromFlag f) 4]
+    packFormatCF  op c  f     = [op .|. shiftL (fromCsr c) 4, shiftL (fromFlag f) 4 .|. 0x80]
     fromReg r  = fromIntegral (fromEnum r)
     fromCsr c  = case c of
       SADDR -> 0x1
@@ -287,16 +289,11 @@ packInst inst =
       EXTNS -> 0x5
       -- System call extension
       RETSC -> 0x8
+      -- Interrupt extension
+      RETIR -> 0x9
       -- Privilege extension
       PRIVS -> 0xA
-    fromFlag f = case f of
-      ALWAYS        -> 0x0
-      EQUAL         -> 0x1
-      NOT_EQUAL     -> 0x8
-      GREATER       -> 0x2
-      LESS          -> 0x4
-      GREATER_EQUAL -> 0x3
-      LESS_EQUAL    -> 0x5
+    fromFlag f = fromIntegral (fromEnum f)
     fromImm i  = case i of
       (IntImm Full n) -> fromIntegral n
       (IntImm Low n)  -> fromIntegral n

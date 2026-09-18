@@ -135,6 +135,8 @@ def get_extn_bits(extensions: list) -> int:
         extn_bits |= 0x0002
     if ("privilege" in extensions):
         extn_bits |= 0x0004
+    if ("interrupt" in extensions):
+        extn_bits |= 0x0008
     return extn_bits
 
 
@@ -291,7 +293,7 @@ def main() -> None:
     parser.add_argument("-a", "--assemble", action = "store_true",
                         help = "assemble but do not link")
     parser.add_argument("-e", "--extension", nargs = "*", metavar = "<extension>", default = [],
-                        choices = {"dynamichw", "syscall", "privilege"},
+                        choices = {"dynamichw", "syscall", "privilege", "interrupt"},
                         help = "enable architecture extension <extension> in the assembler")
     parser.add_argument("-l", "--linker-options",
                         action = "append", metavar = "<options>", default = [],

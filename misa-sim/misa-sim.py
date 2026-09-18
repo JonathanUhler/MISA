@@ -229,6 +229,9 @@ class Callbacks:
             shell.stdout.write(f"  {csr.name:<8} {val:#06x}  ({val:5d})\n")
 
         shell.stdout.write(f"  {'PC':<8} {shell.sim.pc:#06x}  ({shell.sim.pc:5d})\n")
+        shell.stdout.write(f"  {'in_int':<8} {int(shell.sim.in_interrupt)}\n")
+        shell.stdout.write(f"  {'irq_pin':<8} {int(shell.sim._irq_pin)}\n")
+        shell.stdout.write(f"  {'irq_len':<8} {len(shell.sim._irq_fifo)}\n")
 
 
     @staticmethod
@@ -253,6 +256,12 @@ class Callbacks:
             chunk: list = shell.sim.mem[args[0] + i : args[0] + i + 8]
             hex_part: str = " ".join(f"{b:02x}" for b in chunk)
             shell.stdout.write(f"  {args[0] + i:#06x}:  {hex_part}\n")
+
+
+    @staticmethod
+    def callback_interrupt(shell: "Shell", args: list) -> None:
+        shell.sim.assert_interrupt(args[0], args[1])
+        shell.stdout.write(f"Asserted interrupt {args[0]:#04x} (argptr {args[1]:#06x})\n")
 
 
     @staticmethod
@@ -457,6 +466,20 @@ COMMANDS: Final = [
         arg_types     = [Types.integer, Types.integer],
         last_optional = True,
         last_default  = 16
+    ),
+    CommandSpec(
+        name          = "interrupt",
+        aliases       = ["irq"],
+        callback      = Callbacks.callback_interrupt,
+        usage         = "interrupt <number> [argptr]",
+        short_desc    = "Assert the interrupt pin and enqueue an interrupt.",
+        long_desc     = ("Raises the interrupt pin and appends an entry to the interrupt queue. "
+                         "The processor takes the interrupt on the next `step' or `continue' if it "
+                         "is not already in an interrupt context. <number> is the interrupt number "
+                         "and [argptr] is the optional 16-bit argument pointer (default 0x0000)."),
+        arg_types     = [Types.integer, Types.integer],
+        last_optional = True,
+        last_default  = 0x0000
     ),
     CommandSpec(
         name       = "quit",
