@@ -18,10 +18,12 @@ type Parser = Parsec Void String
 extnForOp :: Op -> Maybe Extn
 extnForOp SYSCALL = Just SystemCallExtn
 extnForOp RETS    = Just SystemCallExtn
+extnForOp RETI    = Just InterruptExtn
 extnForOp _       = Nothing
 
 extnForCsr :: CsrReg -> Maybe Extn
 extnForCsr RETSC = Just SystemCallExtn
+extnForCsr RETIR = Just InterruptExtn
 extnForCsr PRIVS = Just PrivilegeExtn
 extnForCsr _     = Nothing
 
@@ -213,6 +215,7 @@ coreInsts extns =
     (\c (r1, r2) -> RsrInst c r1 r2)  <$> (parseThisIdent "rsr"  *> (parseCsrReg extns)) <*> parseRegPair,
     (\c (r1, r2) -> WsrInst c r1 r2)  <$> (parseThisIdent "wsr"  *> (parseCsrReg extns)) <*> parseRegPair,
     (\f (r1, r2) -> JalInst f r1 r2)  <$> (parseThisIdent "jal"  *> parseCmpFlag) <*> parseRegPair,
+    try ((\f c -> JmpCsrInst f c)     <$> (parseThisIdent "jmp"  *> parseCmpFlag) <*> parseCsrReg extns),
     (\f (r1, r2) -> JmpInst f r1 r2)  <$> (parseThisIdent "jmp"  *> parseCmpFlag) <*> parseRegPair,
     -- Pseudo instructions
     (\(rd1, rd2) (rs1, rs2) (rs3, rs4) -> Add2Inst rd1 rd2 rs1 rs2 rs3 rs4)
@@ -254,9 +257,17 @@ systemCallInsts =
   ]
 
 
+interruptInsts :: [Parser Inst]
+interruptInsts =
+  [
+    RetiInst <$ parseThisIdent "reti"
+  ]
+
+
 parseInst :: [Extn] -> Parser Inst
-parseInst extns = choice ((coreInsts extns) <> systemCallParsers) <?> "instruction"
+parseInst extns = choice ((coreInsts extns) <> systemCallParsers <> interruptParsers) <?> "instruction"
   where systemCallParsers = if elem SystemCallExtn extns then systemCallInsts else []
+        interruptParsers  = if elem InterruptExtn  extns then interruptInsts  else []
 
 
 parseStat :: [Extn] -> Parser Stat

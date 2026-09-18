@@ -44,6 +44,7 @@ printStat (InstStat inst)   = "    " ++ instStr
           WsrInst  csr rs1 rs2 -> unwords ["WSR",  show csr, show rs1, show rs2]
           JalInst  cmp rs1 rs2 -> unwords ["JAL",  show cmp, show rs1, show rs2]
           JmpInst  cmp rs1 rs2 -> unwords ["JMP",  show cmp, show rs1, show rs2]
+          JmpCsrInst cmp csr   -> unwords ["JMP",  show cmp, show csr]
           -- Pseudo instructions
           Add2Inst rd1 rd2 rs1 rs2 rs3 rs4
             -> unwords ["ADD2", show rd1, show rd2, show rs1, show rs2, show rs3, show rs4]
@@ -77,6 +78,7 @@ printStat (InstStat inst)   = "    " ++ instStr
           -- Syscall extension
           SyscallInst rs       -> unwords ["SYSCALL", show rs]
           RetsInst             -> "RETS"
+          RetiInst             -> "RETI"
 printStat (LabelStat label) = labelStr
   where labelStr = label ++ ":"
 printStat (DirStat dir)     = dirStr

@@ -196,8 +196,11 @@ decodeInst lo hi = inst
       0xB                           -> Just (StInst  (toEnum nib1) (toEnum nib2) (toEnum nib3))
       0xC | Just csr <- toCsr nib3  -> Just (RsrInst csr (toEnum nib1) (toEnum nib2))
       0xD | Just csr <- toCsr nib3  -> Just (WsrInst csr (toEnum nib1) (toEnum nib2))
-      0xE | Just cmp <- toCmp nib3  -> Just (JalInst cmp (toEnum nib1) (toEnum nib2))
-      0xF | Just cmp <- toCmp nib3  -> Just (JmpInst cmp (toEnum nib1) (toEnum nib2))
+      0xE | Just cmp <- toCmp (nib3 .&. 0x7) -> Just (JalInst cmp (toEnum nib1) (toEnum nib2))
+      0xF | nib3 .&. 0x8 == 0, Just cmp <- toCmp (nib3 .&. 0x7)
+            -> Just (JmpInst cmp (toEnum nib1) (toEnum nib2))
+      0xF | Just cmp <- toCmp (nib3 .&. 0x7), Just csr <- toCsr nib1
+            -> Just (JmpCsrInst cmp csr)
       _                             -> Nothing
     toCsr nib = case nib of
       0x1 -> Just SADDR
@@ -206,14 +209,15 @@ decodeInst lo hi = inst
       0x4 -> Just CAUSE
       0x5 -> Just EXTNS
       0x8 -> Just RETSC
+      0x9 -> Just RETIR
       0xA -> Just PRIVS
       _   -> Nothing
     toCmp nib = case nib of
       0x0 -> Just ALWAYS
       0x1 -> Just EQUAL
-      0x8 -> Just NOT_EQUAL
-      0x2 -> Just GREATER
+      0x2 -> Just NOT_EQUAL
+      0x3 -> Just GREATER
       0x4 -> Just LESS
-      0x3 -> Just GREATER_EQUAL
-      0x5 -> Just LESS_EQUAL
+      0x5 -> Just GREATER_EQUAL
+      0x6 -> Just LESS_EQUAL
       _   -> Nothing

@@ -12,6 +12,8 @@ ADDR_MASK: int = 2 ** ADDR_SIZE - 1
 WORD_MASK: int = 2 ** WORD_SIZE - 1
 SIGN_MASK: int = 2 ** (WORD_SIZE - 1)
 
+IRQ_BASE: int  = 0x8000
+
 
 class Op(IntEnum):
     SYSCALL = 0x0
@@ -58,29 +60,32 @@ class Csr(IntEnum):
     CAUSE = 0x4
     EXTNS = 0x5
     RETSC = 0x8
+    RETIR = 0x9
     PRIVS = 0xA
 
 
 class Cmp(IntEnum):
     ALWAYS        = 0x0
     EQUAL         = 0x1
-    NOT_EQUAL     = 0x8
-    GREATER       = 0x2
+    NOT_EQUAL     = 0x2
+    GREATER       = 0x3
     LESS          = 0x4
-    GREATER_EQUAL = 0x3
-    LESS_EQUAL    = 0x5
+    GREATER_EQUAL = 0x5
+    LESS_EQUAL    = 0x6
 
 
 class Vector(IntEnum):
-    SYSCALL = 0xFFFA
-    FAULT   = 0xFFFC
-    RESET   = 0xFFFE
+    INTERRUPT = 0xFFF8
+    SYSCALL   = 0xFFFA
+    FAULT     = 0xFFFC
+    RESET     = 0xFFFE
 
 
 class CauseReason(IntEnum):
     NONE        = 0x0
     INSTRUCTION = 0x1
     MEMORY      = 0x2
+    CONTROL     = 0x3
 
 
 class CauseTypeInstruction(IntEnum):
@@ -95,6 +100,12 @@ class CauseTypeMemory(IntEnum):
     PRIVILEGED = 0x2
 
 
+class CauseTypeControl(IntEnum):
+    IMPROPER_RETURN    = 0x0
+    CONDITIONAL_RETURN = 0x1
+    IMPROPER_SYSCALL   = 0x2
+
+
 class Simulator:
 
     class _FaultSignal(Exception):
@@ -104,17 +115,26 @@ class Simulator:
     def __init__(self) -> None:
         self.in_reset = True
         self.in_syscall = False
+        self.in_interrupt = False
         self._saved_privs = 0x0000
+        self._saved_privs_int = 0x0000
+        self._shadow_rscratch0 = 0x00
+        self._shadow_rscratch1 = 0x00
+        self._shadow_flags = 0x0000
+        self._irq_pin = False
+        self._irq_fifo = []
+        self._irq_pop_ack = 0
+        self._irq_prev_pop = 0
         self.pc = 0x0000
         self.reg = [0] * 16
         self.csr = [0] * 16
-        self.csr[Csr.EXTNS] = 0b110
+        self.csr[Csr.EXTNS] = 0b1110
         self.mem = [0] * 0x10000
         self.reset()
 
 
     def _fault(self, extended_status: int,
-               cause_type: CauseTypeInstruction | CauseTypeMemory,
+               cause_type: CauseTypeInstruction | CauseTypeMemory | CauseTypeControl,
                cause_reason: CauseReason) -> None:
         self._set_cause(extended_status, cause_type, cause_reason)
         self.set_csr(Csr.PRIVS, 0x0000)
@@ -153,7 +173,7 @@ class Simulator:
 
 
     def _set_cause(self, extended_status: int,
-                   cause_type: CauseTypeInstruction | CauseTypeMemory,
+                   cause_type: CauseTypeInstruction | CauseTypeMemory | CauseTypeControl,
                    cause_reason: CauseReason) -> None:
         cause: int = (extended_status << WORD_SIZE) | (cause_type << 3) | (cause_reason)
         self.set_csr(Csr.CAUSE, cause)
@@ -240,12 +260,57 @@ class Simulator:
     def reset(self) -> None:
         self.in_reset = False
         self.in_syscall = False
+        self.in_interrupt = False
         self._saved_privs = 0x0000
+        self._saved_privs_int = 0x0000
+        self._irq_pin = False
+        self._irq_fifo = []
+        self._irq_pop_ack = 0
+        self._irq_prev_pop = 0
         self.pc = (self.read_mem(Vector.RESET + 1) << WORD_SIZE) | self.read_mem(Vector.RESET)
+
+
+    def assert_interrupt(self, number: int, argptr: int = 0x0000) -> None:
+        self._irq_fifo.append((number & WORD_MASK, argptr & ADDR_MASK))
+        self._irq_pin = True
+
+
+    def _take_interrupt(self) -> None:
+        self._shadow_rscratch0 = self.reg[Reg.RSCRATCH0]
+        self._shadow_rscratch1 = self.reg[Reg.RSCRATCH1]
+        self._shadow_flags = self.get_csr(Csr.FLAGS)
+        self._saved_privs_int = self.get_csr(Csr.PRIVS)
+        self.set_csr(Csr.PRIVS, 0x0000)
+        self.set_csr(Csr.RETIR, self.pc)
+        self.in_interrupt = True
+        self._irq_pin = False
+        self.pc = (self.read_mem(Vector.INTERRUPT + 1) << WORD_SIZE) | self.read_mem(Vector.INTERRUPT)
+
+
+    def _service_interrupt_queue(self) -> None:
+        pop = self.read_mem(IRQ_BASE + 1)
+        if (self._irq_prev_pop == 0 and pop != 0):
+            if (self._irq_fifo):
+                self._irq_fifo.pop(0)
+            self._irq_pop_ack = 1
+        elif (self._irq_prev_pop != 0 and pop == 0):
+            self._irq_pop_ack = 0
+        self._irq_prev_pop = pop
+        self.mem[IRQ_BASE + 0] = len(self._irq_fifo) & WORD_MASK
+        self.mem[IRQ_BASE + 2] = self._irq_pop_ack
+        if (self._irq_fifo):
+            number, argptr = self._irq_fifo[0]
+            self.mem[IRQ_BASE + 3] = number & WORD_MASK
+            self.mem[IRQ_BASE + 4] = argptr & WORD_MASK
+            self.mem[IRQ_BASE + 5] = (argptr >> WORD_SIZE) & WORD_MASK
 
 
     def step(self):
         try:
+            self._service_interrupt_queue()
+            if (self._irq_pin and (self.get_csr(Csr.EXTNS) & 0b1000) and not self.in_interrupt):
+                self._take_interrupt()
+                return
             inst: int = (self.read_mem(self.pc + 1) << WORD_SIZE) | self.read_mem(self.pc)
             nib0: int = (inst & 0x000F) >> (0 * NIB_SIZE)
             nib1: int = (inst & 0x00F0) >> (1 * NIB_SIZE)
@@ -274,17 +339,14 @@ class Simulator:
 
             if (self.pc > ADDR_MASK):
                 self._fault(0x00, CauseTypeMemory.PC, CauseReason.MEMORY)
-
-            if (self.in_syscall and self.pc == self.get_csr(Csr.RETSC)):
-                self.in_syscall = False
-                self.set_csr(Csr.PRIVS, self._saved_privs)
         except self._FaultSignal:
             pass
 
 
     def _syscall(self, rs: int, e: bool) -> None:
-        if (self.in_syscall):
-            self._fault(0x00, CauseTypeInstruction.ILLEGAL, CauseReason.INSTRUCTION)
+        if (self.in_syscall or self.in_interrupt):
+            ext = int(self.in_syscall) | (int(self.in_interrupt) << 1)
+            self._fault(ext, CauseTypeControl.IMPROPER_SYSCALL, CauseReason.CONTROL)
 
         if (not e and not self._is_privileged()):
             self._fault(0x00, CauseTypeInstruction.PRIVILEGED, CauseReason.INSTRUCTION)
@@ -398,12 +460,38 @@ class Simulator:
         self.set_csr(csr, value)
 
 
-    def _jal(self, rs1: int, rs2: int, cmp: int) -> None:
-        if (self._compare(cmp)):
+    def _jal(self, rs1: int, rs2: int, nib3: int) -> None:
+        if (self._compare(nib3 & 0x7)):
             self.set_csr(Csr.RADDR, self.pc)
             self.pc = (self.get_reg(rs1) << WORD_SIZE) | self.get_reg(rs2)
 
 
-    def _jmp(self, rs1: int, rs2: int, cmp: int) -> None:
-        if (self._compare(cmp)):
-            self.pc = (self.get_reg(rs1) << WORD_SIZE) | self.get_reg(rs2)
+    def _jmp(self, nib1: int, nib2: int, nib3: int) -> None:
+        cmp: int = nib3 & 0x7
+        csr_form: bool = bool(nib3 & 0x8)
+        if (not csr_form):
+            if (self._compare(cmp)):
+                self.pc = (self.get_reg(nib1) << WORD_SIZE) | self.get_reg(nib2)
+            return
+        # CSR form: nib1 is the CSR index; nib2 is Unused.
+        csr: int = nib1
+        if (csr in (Csr.RETSC, Csr.RETIR) and cmp != Cmp.ALWAYS):
+            self._fault((cmp | (csr << 4)), CauseTypeControl.CONDITIONAL_RETURN, CauseReason.CONTROL)
+        if (not self._compare(cmp)):
+            return
+        if (csr == Csr.RETSC):
+            if ((not self.in_syscall) or self.in_interrupt):
+                ext = int(self.in_syscall) | (int(self.in_interrupt) << 1) | (csr << 4)
+                self._fault(ext, CauseTypeControl.IMPROPER_RETURN, CauseReason.CONTROL)
+            self.in_syscall = False
+            self.set_csr(Csr.PRIVS, self._saved_privs)
+        elif (csr == Csr.RETIR):
+            if (not self.in_interrupt):
+                ext = int(self.in_syscall) | (int(self.in_interrupt) << 1) | (csr << 4)
+                self._fault(ext, CauseTypeControl.IMPROPER_RETURN, CauseReason.CONTROL)
+            self.set_reg(Reg.RSCRATCH0, self._shadow_rscratch0)
+            self.set_reg(Reg.RSCRATCH1, self._shadow_rscratch1)
+            self.set_csr(Csr.FLAGS, self._shadow_flags)
+            self.set_csr(Csr.PRIVS, self._saved_privs_int)
+            self.in_interrupt = False
+        self.pc = self.get_csr(csr)

@@ -17,7 +17,7 @@ module Grammar (Extn(..),
 import Data.Word (Word8, Word16)
 
 
-data Extn = DynamicHardwareExtn | SystemCallExtn | PrivilegeExtn
+data Extn = DynamicHardwareExtn | SystemCallExtn | PrivilegeExtn | InterruptExtn
   deriving (Show, Enum, Bounded, Eq)
 
 
@@ -53,6 +53,7 @@ data Inst
   | WsrInst  CsrReg  GpReg GpReg
   | JalInst  CmpFlag GpReg GpReg
   | JmpInst  CmpFlag GpReg GpReg
+  | JmpCsrInst CmpFlag CsrReg
   -- Pseudo instructions
   | Add2Inst  GpReg   GpReg GpReg GpReg GpReg GpReg
   | And2Inst  GpReg   GpReg GpReg GpReg GpReg GpReg
@@ -78,6 +79,8 @@ data Inst
   -- Syscall call extension
   | SyscallInst GpReg
   | RetsInst
+  -- Interrupt extension
+  | RetiInst
   deriving (Show, Eq)
 
 
@@ -89,6 +92,8 @@ data Op
   | PUSH | PUSH2 | RET | RRC2 | SET2 | SUB2 | XOR2
   -- System call extension
   | SYSCALL | RETS
+  -- Interrupt extension
+  | RETI
   deriving (Show, Enum, Bounded)
 
 
@@ -107,6 +112,8 @@ data CsrReg
   = SADDR | RADDR | FLAGS | CAUSE | EXTNS
   -- System call extension
   | RETSC
+  -- Interrupt extension
+  | RETIR
   -- Privilege extension
   | PRIVS
   deriving (Show, Enum, Bounded, Eq)

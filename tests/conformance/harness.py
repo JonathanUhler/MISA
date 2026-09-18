@@ -31,7 +31,7 @@ PROGRAMS_DIR: Final = Path(__file__).resolve().parent / "programs"
 # the copy placed in the install directory during a build.
 sys.path.insert(0, str(SIM_DIR))
 from simulator import (  # noqa: E402
-    Simulator, Reg, Csr, Cmp, CauseReason, CauseTypeInstruction, CauseTypeMemory
+    Simulator, Reg, Csr, Cmp, CauseReason, CauseTypeInstruction, CauseTypeMemory, CauseTypeControl
 )
 
 
