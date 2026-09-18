@@ -5,6 +5,7 @@ interactive command loop.
 """
 
 import importlib.util
+import io
 import sys
 from pathlib import Path
 
@@ -27,3 +28,12 @@ def test_interrupt_command_enqueues_and_raises_pin():
     assert shell.sim.read_mem(IRQ_BASE + 3) == 0x05     # head interrupt number
     assert shell.sim.read_mem(IRQ_BASE + 4) == 0x34     # argptr low byte
     assert shell.sim.read_mem(IRQ_BASE + 5) == 0x12     # argptr high byte
+
+
+def test_info_registers_runs_after_irq_migration():
+    shell = misa_sim.Shell()
+    shell.stdout = io.StringIO()
+    misa_sim.Callbacks.callback_info_registers(shell)
+    output = shell.stdout.getvalue()
+    assert "irq_pin" in output
+    assert "irq_len" in output

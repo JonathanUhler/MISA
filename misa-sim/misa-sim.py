@@ -11,7 +11,7 @@ import subprocess
 from subprocess import CompletedProcess
 from typing import Any, Callable, Final
 from helpers import format_subprocess_output, SmartHelpFormatter
-from simulator import Simulator, Reg, Csr
+from simulator import Simulator, Reg, Csr, IRQ_BASE
 
 
 HISTORY_FILE: Final = os.path.expanduser("~/.misa_history")
@@ -230,8 +230,8 @@ class Callbacks:
 
         shell.stdout.write(f"  {'PC':<8} {shell.sim.pc:#06x}  ({shell.sim.pc:5d})\n")
         shell.stdout.write(f"  {'in_int':<8} {int(shell.sim.in_interrupt)}\n")
-        shell.stdout.write(f"  {'irq_pin':<8} {int(shell.sim._irq_pin)}\n")
-        shell.stdout.write(f"  {'irq_len':<8} {len(shell.sim._irq_fifo)}\n")
+        shell.stdout.write(f"  {'irq_pin':<8} {int(shell.sim.machine.irq.pending())}\n")
+        shell.stdout.write(f"  {'irq_len':<8} {shell.sim.read_mem(IRQ_BASE)}\n")
 
 
     @staticmethod
