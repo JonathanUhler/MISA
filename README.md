@@ -46,3 +46,13 @@ The install directory will be populated with the following tools:
 - `misa-ar-exe`, `misa-as-exe`, `misa-ld-exe`, `misa-nm-exe`, `misa-objdump-exe`, and `misa-pr-exe`:
   binaries built from the Haskell source that provide a very minimal command line interface for use
   by the Python CLI wrappers.
+
+## Demonstration
+
+The `programs` directory includes a number of small programs that execute a handful of instructions
+to showcase some feature of the ISA. The `demos` directory includes several more complex programs.
+
+Using the core ISA, you can render a raytraced sphere as a PPM image over UART. Here's the output
+from the `demos/raytrace/` program (converted from PPM to PNG with `convert out.ppm out.png`):
+
+![](./demos/raytrace/out.png)
