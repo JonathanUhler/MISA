@@ -55,4 +55,4 @@ to showcase some feature of the ISA. The `demos` directory includes several more
 Using the core ISA, you can render a raytraced sphere as a PPM image over UART. Here's the output
 from the `demos/raytrace/` program (converted from PPM to PNG with `convert out.ppm out.png`):
 
-![](./demos/raytrace/out.png)
+<img src="demos/raytrace/out.png" width="30%">
