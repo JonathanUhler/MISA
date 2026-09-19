@@ -1,7 +1,7 @@
 // raytrace.S
 //
-// Renders the 128x128 rt8 scene (a unit sphere on a checkerboard floor under a
-// single light) and streams the raw PPM (P6) image over the UART. Capture with:
+// Renders a 128x128 scene with a sphere under a single light and streams
+// the raw PPM (P6) image over the UART. Capture with:
 //
 //     make run > out.ppm      (or: misa-run raytrace.bin > out.ppm)
 //
@@ -21,7 +21,7 @@
 _start:
         set2 rscratch 0x01FF        // initialize the stack pointer
         wsr saddr rscratch
-        // PPM header "P6\n128 128\n255\n" (fixed, matches rt8.c)
+        // PPM header "P6\n128 128\n255\n"
         set ra 0x50
         call putc                   // 'P'
         set ra 0x36
@@ -127,7 +127,6 @@ _smul_done:
 
 //------------------------------------------------------------------------------
 // clamp16to8: clamp signed 16-bit rab to int8_t.  in ra=hi, rb=lo.  out rt.
-// Matches rt8.c clamp8(int16_t): >127 -> 127, < -128 -> -128, else (int8_t)v.
 // Leaf. Clobbers rt.
 //------------------------------------------------------------------------------
 clamp16to8:
