@@ -26,8 +26,8 @@ getPlacedRelocs placedSecs = concatMap getAbsoluteRelocs placedSecs
 
 
 placeObjsInRegion :: [BinaryObject] -> MemRegion -> [PlacedSec]
-placeObjsInRegion objs (MemRegion start _ names) = concatMap placeObjsByName names
-  where placeObjsByName name = placeSecsInRegion (extractSecs objs name) start
+placeObjsInRegion objs (MemRegion start _ names) =
+  placeSecsInRegion (concatMap (extractSecs objs) names) start
 
 
 extractSecs :: [BinaryObject] -> Label -> [Sec]
