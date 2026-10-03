@@ -9,76 +9,97 @@ externally connected memory. Instructions are fixed-width 16-bit doublewords in 
 order.
 
 The information presented in this chapter is referred to as the MISA core architecture. The last
-section of this chapter enumerates several optional extensions to the core architecture, although
-an implementation is considered conforming if it implements at least the core architecture.
+section of this chapter enumerates several optional extensions to the core architecture, although an
+implementation is considered conforming if it implements at least the core architecture.
+
+## Conformance Language
+
+For an implementation of the MISA architecture to be considered "conforming" to this chapter, there
+are several requirements it needs to respect, although some liberty is given to the implementation.
+
+The following words used in this chapter have specific meanings when describing whether and how a
+conforming implementation implements a part of the architecture:
+
+- "MUST": A conforming implementation is required to include or omit the specified feature/behavior.
+  If the implementation does not respect the requirement, it is not considered conforming to this
+  specification.
+- "SHOULD": A conforming implementation can choose whether or not to include the specified feature,
+  but this specification recommends its inclusion. Implementations that do not include the feature
+  are still considered conforming, but some aspect of the implementation may suffer.
+- "MAY": A conforming implementation can choose whether or not to include the specified feature.
+  Both an implementation that does, and an implementation that does not include the feature will be
+  considered conforming. This specification makes no recommendation on the inclusion of the feature.
+  
+This normative terminology will appear in ALL CAPS throughout this chapter.
 
 ## General Purpose Registers
 
-The general-purpose register file contains sixteen, 8-bit registers for general computation and
+The general-purpose register file MUST contain sixteen, 8-bit registers for general computation and
 data storage, defined by the following ABI:
 
-| ABI Name    | ABI Purpose               | Wide ABI Name | Encoding |
+| ABI Name | ABI Purpose | Wide ABI Name | Encoding |
 |-------------|---------------------------|---------------|----------|
-| `R0`        | Hard-wired zero           | N/A           | 0000     |
-| `RA`        | Argument/temporary        | `RAB`         | 0001     |
-| `RB`        | Argument/temporary        |               | 0010     |
-| `RC`        | Argument/temporary        | `RCD`         | 0011     |
-| `RD`        | Argument/temporary        |               | 0100     |
-| `RE`        | Argument/temporary        | `REF`         | 0101     |
-| `RF`        | Argument/temporary        |               | 0110     |
-| `RU`        | Saved                     | `RUV`         | 0111     |
-| `RV`        | Saved                     |               | 1000     |
-| `RW`        | Saved                     | `RWX`         | 1001     |
-| `RX`        | Saved                     |               | 1010     |
-| `RY`        | Saved                     | `RYZ`         | 1011     |
-| `RZ`        | Saved                     |               | 1100     |
-| `RT`        | Argument/return/temporary | N/A           | 1101     |
-| `RSCRATCH0` | Assembler scratch         | `RSCRATCH`    | 1110     |
-| `RSCRATCH1` | Assembler scratch         |               | 1111     |
+| `R0` | Hard-wired zero | N/A | 0000 |
+| `RA` | Argument/temporary | `RAB` | 0001 |
+| `RB` | Argument/temporary | | 0010 |
+| `RC` | Argument/temporary | `RCD` | 0011 |
+| `RD` | Argument/temporary | | 0100 |
+| `RE` | Argument/temporary | `REF` | 0101 |
+| `RF` | Argument/temporary | | 0110 |
+| `RU` | Saved | `RUV` | 0111 |
+| `RV` | Saved | | 1000 |
+| `RW` | Saved | `RWX` | 1001 |
+| `RX` | Saved | | 1010 |
+| `RY` | Saved | `RYZ` | 1011 |
+| `RZ` | Saved | | 1100 |
+| `RT` | Argument/return/temporary | N/A | 1101 |
+| `RSCRATCH0` | Assembler scratch | `RSCRATCH` | 1110 |
+| `RSCRATCH1` | Assembler scratch | | 1111 |
 
-The `R0` register must be hard-wired to ignore writes and always return the value `0b00000000` on
-reads. Wide registers are formed by two general-purpose registers, which must be equivalent to
-using the two 8-bit register names in order. For instance, `RAB` is semantically equivalent to
-`RA, RB` in that order. General purpose registers can be taken as the operands to most instructions
-which operate on registers.
+The `R0` register MUST be hard-wired to ignore writes and always return the value `0b00000000` on
+reads. Wide registers are formed by two general-purpose registers, which MUST be equivalent to using
+the two 8-bit register names in order. For instance, `RAB` MUST be semantically equivalent to `RA,
+RB` in that order. General purpose registers are taken as the operands to most instructions which
+operate on registers.
 
-Argument and return registers are `RA` - `RF` and `RT`. The `RT` register should be used as the
-first return register, if the value being returned logically fits in a single (not wide) register.
-Otherwise, the register pair `RAB` should be preferred as the first return register. Argument
-registers are also temporary registers (caller-saved). `RU` through `RZ` are saved registers
-(callee-saved).
+Argument and return registers SHOULD be `RA` - `RF` and `RT`. The `RT` register SHOULD be used as
+the first return register, if the value being returned logically fits in a single (not wide)
+register.  Otherwise, the register pair `RAB` SHOULD be preferred as the first return
+register. Argument registers SHOULD also be usable as temporary registers (caller-saved). `RU`
+through `RZ` SHOULD be saved registers (callee-saved).
 
-The `RSCRATCH` wide register is reserved as a "scratch" 16-bit register for the assembler. Certain
-pseudo-instructions and other macros will use this register when a temporary value is needed (like
-loading an address to jump to). As such, the value of `RSCRATCH` should not be assumed to persist
-over time.
+The `RSCRATCH` wide register SHOULD be reserved as a "scratch" 16-bit register for the
+assembler. Certain pseudo-instructions and other macros MAY use this register when a temporary value
+is needed (like loading an address to jump to). As such, the value of `RSCRATCH` SHOULD not be
+assumed to persist over time.
 
 ## Control and Status Registers
 
-Also required are a few special registers, which cannot be used as instruction operands, but can
-be read and written from general purpose registers with the `RSR` and `WSR` instructions. Special
-registers are generally wider 16-bit registers that are required for the operation of certain
-instructions.
+A few special registers MUST also be supported, which cannot be used as instruction operands, but
+can be read and written from general purpose registers with the `RSR` and `WSR`
+instructions. Special registers are generally wider 16-bit registers that are required for the
+operation of certain instructions.
 
 When used as operands for instructions, the special registers are encoded as follows:
 
-| ABI Name | Encoding                           |
+| ABI Name | Encoding |
 |----------|------------------------------------|
-| `SADDR`  | 0001                               |
-| `RADDR`  | 0010                               |
-| `FLAGS`  | 0011                               |
-| `CAUSE`  | 0100                               |
-| `EXTNS`  | 0101                               |
-| `RETSC`  | 1000 (under System Call Extension) |
-| `RETIR`  | 1001 (under Interrupt Extension)   |
-| `PRIVS`  | 1010 (under Privilege Extension)   |
+| `SADDR` | 0001 |
+| `RADDR` | 0010 |
+| `FLAGS` | 0011 |
+| `CAUSE` | 0100 |
+| `EXTNS` | 0101 |
+| `RETSC` | 1000 (under System Call Extension) |
+| `RETIR` | 1001 (under Interrupt Extension) |
+| `PRIVS` | 1010 (under Privilege Extension) |
 
 The following sub-sections describe the purpose and layout of each special register.
 
 ### `SADDR`
 
-The stack address or stack pointer. `SADDR` must be at least an 8-bit register (supporting stack
-addresses `0x00` - `0xFF` with a possible high 8-bit prefix) and no more than a 16-bit register.
+The stack address or stack pointer. `SADDR` MUST be at least an 8-bit register (supporting stack
+addresses `0x00` - `0xFF` with a possible high 8-bit prefix) and MUST not be more than a 16-bit
+register.
 
 ```{python}
 #| echo: false
@@ -95,14 +116,13 @@ SVG(wavedrom.render(str({
 
 ### `RADDR`
 
-The return address is also a dedicated special register given the limited number of general
-purpose registers available. `RADDR` is required to be wide enough to store an absolute address
-for the connected memory, which generally means 16-bit.
+The return address. `RADDR` MUST be wide enough to store an absolute address for the connected
+memory, which SHOULD be 16-bit.
 
 The return address special register is not used by specific base instructions, but provides a
-dedicated 16-bit-wide register for subroutine calling. The `JAL` instruction will set the
-`RADDR` register with the address of the instruction after the `JAL`. Returning to the location
-in `RADDR` can be done with a `RSR` and `JMP` or a `JMP` using `RADDR` as the branch target.
+dedicated 16-bit-wide register for subroutine calling. The `JAL` instruction MUST set the `RADDR`
+register with the address of the instruction after the `JAL`. Returning to the location in `RADDR`
+can be done with a `RSR` and `JMP` or a `JMP` using `RADDR` as the branch target.
 
 ```{python}
 #| echo: false
@@ -119,26 +139,25 @@ SVG(wavedrom.render(str({
 ### `FLAGS`
 
 Conditional branching in the MISA architecture is based on ALU flag values for comparing integers.
-Both branching instructions, `JAL` and `JMP`, use these flags to make decisions on whether a branch
+Both branching instructions, `JAL` and `JMP`, MUST these flags to make decisions on whether a branch
 will be taken.
 
-`FLAGS` is set based on the result of each ALU operation. The instructions which must update
-the `FLAGS` register are: `ADD`, `ADC`, `SUB`, `SBB`, `RRC`. Instructions which may, depending on
-the implementation, update the `FLAGS` register are: `HALT`, `AND`, `OR`, `XOR`. Instructions which
-must not update the `FLAGS` register are: `SET`, `LD`, `ST`, `RSR`, `WSR` (must not update `FLAGS`
-asynchronously through the ALU output, but will update `FLAGS` if writing directly to it), `JAL`,
-`JMP`. A conditional branch that relies on `FLAGS` should be performed immediately after the
+`FLAGS` MUST be set based on the result of each ALU operation. The instructions which MUST update
+the `FLAGS` register are: `ADD`, `ADC`, `SUB`, `SBB`, `AND`, `OR`, `XOR`, `RRC`. Instructions which
+MUST NOT update the `FLAGS` register are: `HALT`, `SET`, `LD`, `ST`, `RSR`, `WSR` (MUST NOT update
+`FLAGS` asynchronously through the ALU output, but MUST update `FLAGS` if writing directly to it),
+`JAL`, `JMP`. A conditional branch that relies on `FLAGS` SHOULD be performed immediately after the
 conditional comparison or a `WSR` to `FLAGS`.
 
-The `FLAGS` special register is a flags register (one bit per flag) which must be at least 4 bits
+The `FLAGS` special register is a flags register (one bit per flag) which MUST be at least 4 bits
 and support the following:
 
-| Flag | Bit | Commentary                                                           |
+| Flag | Bit | Commentary |
 |------|-----|----------------------------------------------------------------------|
-| `Z`  | 0   | Whether the last ALU operation's output was zero.                    |
-| `C`  | 1   | The adder carry out bit of the last ALU operation.                   |
-| `N`  | 2   | Whether the last ALU operation's output was negative (MSB = 1).      |
-| `V`  | 3   | Whether the last ALU operation's output overflowed (sign inversion). |
+| `Z` | 0 | Whether the last ALU operation's output was zero.  |
+| `C` | 1 | The adder carry out bit of the last ALU operation.  |
+| `N` | 2 | Whether the last ALU operation's output was negative (MSB = 1).  |
+| `V` | 3 | Whether the last ALU operation's output overflowed (sign inversion). |
 
 ```{python}
 #| echo: false
@@ -156,31 +175,31 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
-The `FLAGS` register can be accessed indirectly with the conditional jump instructions using
-special assembler symbols:
+The `FLAGS` register can be accessed indirectly with the conditional jump instructions using special
+assembler symbols:
 
-| ABI Name        | Logical Meaning  | Encoding |
+| ABI Name | Logical Meaning | Encoding |
 |-----------------|------------------|----------|
-| `ALWAYS`        | `1`              | 000      |
-| `EQUAL`         | `Z`              | 001      |
-| `NOT_EQUAL`     | `~Z`             | 010      |
-| `GREATER`       | `~((N ^ V) | Z)` | 011      |
-| `LESS`          | `N ^ V`          | 100      |
-| `GREATER_EQUAL` | `~(N ^ V)`       | 101      |
-| `LESS_EQUAL`    | `(N ^ V) | Z`    | 110      |
+| `ALWAYS` | `1` | 000 |
+| `EQUAL` | `Z` | 001 |
+| `NOT_EQUAL` | `~Z` | 010 |
+| `GREATER` | `~((N ^ V) | Z)` | 011 |
+| `LESS` | `N ^ V` | 100 |
+| `GREATER_EQUAL` | `~(N ^ V)` | 101 |
+| `LESS_EQUAL` | `(N ^ V) | Z` | 110 |
 
-These comparison flags, when passed as a conditional branch instruction operand, must perform
-the specified boolean logic on the fields of the `FLAGS` register. If the result is `1`, the
-branch is taken, otherwise the branch is not taken. The assumption is that a comparison of
-registers `RS1` and `RS2` is performed by invoking `SUB R0 RS1 RS2`, which sets the ALU flags
-appropriately for deciding `RS1 ? RS2` where `?` is a comparison operator.
+These comparison flags, when passed as a conditional branch instruction operand, MUST perform the
+specified boolean logic on the fields of the `FLAGS` register. If the result is `1`, the branch is
+taken, otherwise the branch is not taken. The assumption is that a comparison of registers `RS1` and
+`RS2` is performed by invoking `SUB R0 RS1 RS2`, which sets the ALU flags appropriately for deciding
+`RS1 ? RS2` where `?` is a comparison operator.
 
 ### `CAUSE`
 
 The `CAUSE` special register holds information about the status of the processor during exceptions,
-faults, and termination. It is set when the `HALT` instruction is executed, when syscalls are made
-under the System Call Extension, and when fault behavior (such as a malformed instruction decode)
-occurs during execution.
+faults, and termination. It MUST be set when the `HALT` instruction is executed, when syscalls are
+made under the System Call Extension, and when fault behavior (such as a malformed instruction
+decode) occurs during execution.
 
 `CAUSE` is a 16-bit register with the following fields:
 
@@ -199,12 +218,12 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
-| Reason            | Encoding |
+| Reason | Encoding |
 |-------------------|----------|
-| None              | 000      |
-| Instruction usage | 001      |
-| Memory usage      | 010      |
-| Control event     | 011      |
+| None | 000 |
+| Instruction usage | 001 |
+| Memory usage | 010 |
+| Control event | 011 |
 
 #### `CAUSE` Reason: None
 The `CAUSE` register does not represent an exception, or represents an unknown/generic exception
@@ -214,11 +233,11 @@ without a reason. If the reason is 000, the Type and Extended status fields have
 The exception cause is related to the use of a specific instruction or class of instructions. The
 valid Type fields are:
 
-| Type                   | Encoding | Commentary                                                                                                                                                                                          |
+| Type | Encoding | Commentary |
 |------------------------|----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Halt instruction       | 000      | The `HALT` instruction was executed. Extended status is the value of the `RS` operand register. Under the System Call Extension, this reason indicates that the `SYSCALL` instruction was executed. |
-| Illegal instruction    | 001      | An ill-formed instruction failed to decode. Extended status is not used.                                                                                                                            |
-| Privileged instruction | 010      | A privileged instruction was executed while in User Mode (under Privilege Extension).                                                                                                               |
+| Halt instruction | 000 | The `HALT` instruction was executed. Extended status is the value of the `RS` operand register. Under the System Call Extension, this reason indicates that the `SYSCALL` instruction was executed. |
+| Illegal instruction | 001 | An ill-formed instruction failed to decode. Extended status is not used.  |
+| Privileged instruction | 010 | A privileged instruction was executed while in User Mode (under Privilege Extension).  |
 
 : {tbl-colwidths="[20, 15, 65]"}
 
@@ -226,11 +245,11 @@ valid Type fields are:
 The exception cause is related to the use of an address or memory operation. The valid Type fields
 are:
 
-| Type              | Encoding | Commentary                                                                                   |
+| Type | Encoding | Commentary |
 |-------------------|----------|----------------------------------------------------------------------------------------------|
-| Address overflow  | 000      | A memory operation attempted to access an address which is outside the mapped memory space.  |
-| PC overflow       | 001      | The program counter overflowed an unsigned 16-bit value.                                     |
-| Privileged access | 010      | An access to privileged memory was attempted while in User Mode (under Privilege Extension). |
+| Address overflow | 000 | A memory operation attempted to access an address which is outside the mapped memory space.  |
+| PC overflow | 001 | The program counter overflowed an unsigned 16-bit value.  |
+| Privileged access | 010 | An access to privileged memory was attempted while in User Mode (under Privilege Extension). |
 
 : {tbl-colwidths="[20, 15, 65]"}
 
@@ -238,36 +257,34 @@ are:
 The exception cause is related to an exception or interrupt control flow event. The valid Type
 fields are:
 
-| Type                       | Encoding | Commentary                                                                                                                                                                                                                                                                                                                                         |
+| Type | Encoding | Commentary |
 |----------------------------|----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Improper return context    | 000      | Either: `JMP ALWAYS RETSC` was executed outside of a system call context or inside of an interrupt context; `JMP ALWAYS RETIR` was executed outside of an interrupt context. The extended status is set as follows: bit 0 = in system call context, bit 1 = in interrupt context, bits 2-3 = reserved, bits 4-7 = `JMP` target CSR register index. |
-| Conditional context return | 001      | `JMP` was executed with a branch target of `RETSC` or `RETIR` but a comparison other than `ALWAYS`. The extended status is set as follows: bits 0-2 = comparison type, bit 3 = reserved, bits 4-7 = `JMP` target CSR register index.                                                                                                               |
-| Improper system call       | 010      | A system call was executed while the processor was in a system call or interrupt context. The extended status is set as follows: bit 0 = in system call context, bit 1 = in interrupt context.                                                                                                                                                     |
+| Improper return context | 000 | Either: `JMP ALWAYS RETSC` was executed outside of a system call context or inside of an interrupt context; `JMP ALWAYS RETIR` was executed outside of an interrupt context. The extended status is set as follows: bit 0 = in system call context, bit 1 = in interrupt context, bits 2-3 = reserved, bits 4-7 = `JMP` target CSR register index. |
+| Conditional context return | 001 | `JMP` was executed with a branch target of `RETSC` or `RETIR` but a comparison other than `ALWAYS`. The extended status is set as follows: bits 0-2 = comparison type, bit 3 = reserved, bits 4-7 = `JMP` target CSR register index.  |
+| Improper system call | 010 | A system call was executed while the processor was in a system call or interrupt context. The extended status is set as follows: bit 0 = in system call context, bit 1 = in interrupt context.  |
 
 : {tbl-colwidths="[20, 15, 65]"}
 
 ### `EXTNS`
 
 The `EXTNS` special register is a flags register that holds information about which (if any)
-architectural extensions are supported by the hardware. All implementations of the MISA
-architecture must include the `EXTNS` register, even those which only implement the core
-architecture. A core-only implementation can be identified by `EXTNS == 0x0000`.
+architectural extensions are supported by the hardware. All implementations of the MISA architecture
+MUST include the `EXTNS` register, even those which only implement the core architecture. A
+core-only implementation can be identified by `EXTNS == 0x0000`.
 
-Unlike most special registers, writes to `EXTNS` may be ignored (i.e. the register may have a
+Unlike most special registers, writes to `EXTNS` MAY be ignored (i.e. the register MAY have a
 hard-coded value). For more information on writes to `EXTNS`, see the Dynamic Hardware Extension.
-Note that bit 0 (the Dynamic Hardware Extension) *must* ignore writes regardless of its state,
+Note that bit 0 (the Dynamic Hardware Extension) MUST ignore writes regardless of its state,
 preventing the Dynamic Hardware Extension from disabling itself.
 
-`EXTNS` must support at least the following bits. A recommended width is 16-bits (with unsupported
-extensions being forced to `0`), but the actual register width is implementation-defined. Unused
-bits must always be read as zero and ignored on writes (if supported):
+`EXTNS` MUST support at least the following bits:
 
-| Bit | Extension                  |
+| Bit | Extension |
 |-----|----------------------------|
-| 0   | Dynamic Hardware Extension |
-| 1   | System Call Extension      |
-| 2   | Privilege Extension        |
-| 3   | Interrupt Extension        |
+| 0 | Dynamic Hardware Extension |
+| 1 | System Call Extension |
+| 2 | Privilege Extension |
+| 3 | Interrupt Extension |
 
 ## Data Formats and Alignments
 
@@ -293,34 +310,34 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
-16-bit data types may be supported in software using the `ADC` and `SBB` instructions for
+16-bit data types MAY be supported in software using the `ADC` and `SBB` instructions for
 arithmetic.
 
 ## Memory
 
-The MISA architecture supports up to a 16-bit address bus for memory operations, and memory must
+The MISA architecture MAY support up to a 16-bit address bus for memory operations, and memory MUST
 be byte-addressable. While the memory map for applications using the MISA architecture is generally
 free for the user to decide, this section will cover both a recommended map and specific regions
 which are required by all maps.
 
 ### Required Memory Regions
 
-The region 0xFFF0 - 0xFFFF is reserved for a reset vector table. When the processor is taken out of
-reset, the program counter must be initialized to the address stored in memory at 0xFFFE - 0xFFFF
-and begin execution there.
+The region 0xFFF0 - 0xFFFF MUST be reserved for a reset vector table. When the processor is taken
+out of reset, the program counter MUST be initialized to the address stored in memory at 0xFFFE -
+0xFFFF and begin execution there.
 
-The reset vector table contains the following functions:
+The reset vector table contains the following function pointers:
 
-| Vector Address    | Purpose                                       |
+| Vector Address | Purpose |
 |-------------------|-----------------------------------------------|
-| `0xFFF0 - 0xFFF1` | Reserved                                      |
-| `0xFFF2 - 0xFFF3` | Reserved                                      |
-| `0xFFF4 - 0xFFF5` | Reserved                                      |
-| `0xFFF6 - 0xFFF7` | Reserved                                      |
+| `0xFFF0 - 0xFFF1` | Reserved |
+| `0xFFF2 - 0xFFF3` | Reserved |
+| `0xFFF4 - 0xFFF5` | Reserved |
+| `0xFFF6 - 0xFFF7` | Reserved |
 | `0xFFF8 - 0xFFF9` | Interrupt handler (under Interrupt Extension) |
 | `0xFFFA - 0xFFFB` | Syscall handler (under System Call Extension) |
-| `0xFFFC - 0xFFFD` | Fault handler                                 |
-| `0xFFFE - 0xFFFF` | Reset handler                                 |
+| `0xFFFC - 0xFFFD` | Fault handler |
+| `0xFFFE - 0xFFFF` | Reset handler |
 
 ### Recommended Memory Map
 
@@ -345,41 +362,40 @@ SECTION 0xC000 - 0xFFEF : text rodata ;
 SECTION 0xFFF0 - 0xFFFF : vectors ;
 ```
 
-Which define the following sections by convention:
+Which defines the following sections by convention:
 
-| Section   | Commentary                                                                                                                                                                                         |
+| Section | Commentary |
 |-----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `direct`  | Contents to place in the first 256-byte page. This page may support faster memory operations on certain hardware implementations, and thus may be a desirable target for frequently accessed data. |
-| `data`    | Initialized global data that is mutable.                                                                                                                                                           |
-| `bss`     | Declared but uninitialized global data that is mutable. Runtime/startup code should initialize `bss` symbols to zero.                                                                              |
-| `text`    | Executable and immutable program code.                                                                                                                                                             |
-| `rodata`  | Initialized global constants.                                                                                                                                                                      |
-| `vectors` | A small region for reset vector function addresses.                                                                                                                                                |
+| `direct` | Contents to place in the first 256-byte page. This page may support faster memory operations on certain hardware implementations, and thus may be a desirable target for frequently accessed data. |
+| `data` | Initialized global data that is mutable.  |
+| `bss` | Declared but uninitialized global data that is mutable. Runtime/startup code should initialize `bss` symbols to zero.  |
+| `text` | Executable and immutable program code.  |
+| `rodata` | Initialized global constants.  |
+| `vectors` | A small region for reset vector function addresses.  |
 
 : {tbl-colwidths="[10, 90]"}
 
 ### Stack Conventions
 
-The MISA ISA requires a towards-lower-address stack that grows towards `0x0000` on pushes and
-contracts towards `0xFFFF` on pops. This convention must be respected regardless of the supported
-width of the `SADDR` special register or the location in memory of the stack.
+The stack SHOULD be towards-lower-address, which grows towards `0x0000` on pushes and contracts
+towards `0xFFFF` on pops. This convention SHOULD be respected regardless of the supported width of
+the `SADDR` special register or the location in memory of the stack.
 
-Stack operations must respect the convention of the `PUSH` and `POP` assembler macros. That is,
-pushing to the stack must write before decrementing `SADDR`, and popping from the stack must
+Stack operations SHOULD respect the convention of the `PUSH` and `POP` assembler macros. That is,
+pushing to the stack SHOULD write before decrementing `SADDR`, and popping from the stack SHOULD
 increment `SADDR` before reading.
 
-Multi-byte pushes and pops must be logically equivalent to chaining several `PUSH` or `POP`
+Multi-byte pushes and pops SHOULD be logically equivalent to chaining several `PUSH` or `POP`
 assembler macros.
 
 ## Reset
 
-When the processor is taken out of the reset state, it is guaranteed by the ISA to initialize some
-internal state, including:
+When the processor is taken out of the reset state, some internal state MUST be initialized:
 
-- The reset vector address stored in memory at `0xFFFE - 0xFFFF` must be read and used to initialize
+- The reset vector address stored in memory at `0xFFFE - 0xFFFF` MUST be read and used to initialize
   the program counter.
 
-The state of general purpose registers and control and status registers is implementation defined.
+The state of general purpose registers and control and status registers is not defined.
 
 ## Faults
 
@@ -389,35 +405,46 @@ Fault conditions occur when something goes wrong during program execution. This 
 - Overflow of the program counter
 - Etc.
 
-When a fault is detected, the processor must set the `CAUSE` register based on the type of fault
-and then set the program counter to the fault vector address stored in memory at `0xFFFC - 0xFFFD`.
-Execution must then continue in the fault handler, which is software-defined and may attempt
+When a fault is detected, the processor MUST set the `CAUSE` register based on the type of fault and
+then set the program counter to the fault vector address stored in memory at `0xFFFC - 0xFFFD`.
+Execution MUST then continue in the fault handler, which is software-defined and MAY attempt
 recovery, dump diagnostic information, or simply halt.
 
 ## Exceptions and Interrupts
 
 The core ISA defined in this chapter does not support traditional exceptions or interrupts. The
 `CAUSE` special register is intended for use as a diagnostic tool in the core architecture, and
-`HALT` is the only instruction that is required to update it.
+`HALT` is the only instruction that MUST update it.
 
 A basic synchronous exception system is supported under the System Call Extension which, when
-combined with the Privilege Extension, can be used to invoke privileged routines from the
+combined with the Privilege Extension, MAY be used to invoke privileged routines from the
 unprivileged user mode.
 
-The Interrupt Extension provides support for basic asynchronous interrupts, which can be used to
-let the processor more easily keep time and interact with peripherals.
+The Interrupt Extension provides support for basic asynchronous interrupts, which MAY be used to let
+the processor more easily keep time and interact with peripherals.
 
 ## Base Instructions
 
-Only 16 base instructions (with distinct opcodes and behavior) are supported by the MISA
-architecture. This is a hard limit, and the 8-bit MISA architecture does not allow for more than
-4 bits of opcode in each instruction word. This subsection defines all the base instructions
-and their behavior on the microprocessor's state.
+Sixteen base instructions (with distinct opcodes and behavior) MUST be supported by the MISA
+architecture. This is a hard limit, and the 8-bit MISA architecture does not allow for more than 4
+bits of opcode in each instruction word. This subsection defines all the base instructions and their
+behavior on the microprocessor's state.
+
+Instruction behavior is given under the "Meaning" label, which is a formalism for how the
+instruction should affect the behavior of the processor. The following syntax is used when
+describing instruction behavior:
+
+- `Register`: The general-purpose register file, indexed by the register number from 0-15
+- `Special`: The special register file, indexed by the special register number from 0-15
+- `Memory`: The mapped memory, indexed by an address from 0-64K
+- `Check`: The truth value from the current state of `FLAGS`, indexed by a comparison operand
+- `PC`: The program counter
+- `Halt`: Stop processor execution
+- `Update`: Update a value using a definition/ruleset provided elsewhere in this chapter
+- `If`: Perform the encapsulated operations only if a condition is true
 
 ### `HALT`
 Usage: `HALT RS`
-
-Meaning: `CAUSE = RS << 8 | 0x01 ; exit(RS)`
 
 Description: Halt the processor and emit the contents of `RS` for debug.
 
@@ -436,10 +463,14 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
+Meaning:
+```
+Special[CAUSE] = Register[RS] << 8 | 0x01;
+Halt;
+```
+
 ### `ADD`
 Usage: `ADD RD RS1 RS2`
-
-Meaning: `RD = RS1 + RS2`
 
 Description: Add the content of `RS1` and `RS2` and store the result in `RD`.
 
@@ -459,13 +490,17 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
+Meaning:
+```
+Register[RD] = Register[RS1] + Register[RS2];
+Update Special[FLAGS];
+```
+
 ### `ADC`
 Usage: `ADC RD RS1 RS2`
 
-Meaning: `RD = RS1 + RS2 + C`
-
-Description: Add the contents of `RS1`, `RS2`, and the `C` field of the `FLAGS` register and
-store the result in `RD`.
+Description: Add the contents of `RS1`, `RS2`, and the `C` field of the `FLAGS` register and store
+the result in `RD`.
 
 Encoding:
 ```{python}
@@ -483,10 +518,14 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
+Meaning:
+```
+Register[RD] = Register[RS1] + Register[RS2] + Special[FLAGS.C];
+Update Special[FLAGS];
+```
+
 ### `SUB`
 Usage: `SUB RD RS1 RS2`
-
-Meaning: `RD = RS1 - RS2`
 
 Description: Subtract the contents of `RS2` from `RS1` and store the result in `RD`.
 
@@ -506,10 +545,14 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
+Meaning:
+```
+Register[RD] = Register[RS1] - Register[RS2];
+Update Special[FLAGS];
+```
+
 ### `SBB`
 Usage: `SBB RD RS1 RS2`
-
-Meaning: `RD = RS1 + ~RS2 + C`
 
 Description: Add the contents of `RS1`, the bitwise complement of `RS2`, and the `C` field of the
 `FLAGS` register, and store the result in `RD`. Because `C` is the adder carry out, this equals
@@ -532,13 +575,17 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
+Meaning:
+```
+Regsiter[RD] = Register[RS1] + ~Register[RS2] + Special[FLAGS.C];
+Update Special[FLAGS];
+```
+
 ### `AND`
 Usage: `AND RD RS1 RS2`
 
-Meaning: `RD = RS1 & RS2`
-
-Description: Compute the bitwise AND of the contents of `RS1` and `RS2` and store the result
-in `RD`.
+Description: Compute the bitwise AND of the contents of `RS1` and `RS2` and store the result in
+`RD`.
 
 Encoding:
 ```{python}
@@ -556,10 +603,14 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
+Meaning:
+```
+Register[RD] = Register[RS1] & Register[RS2];
+Update Special[FLAGS];
+```
+
 ### `OR`
 Usage: `OR RD RS1 RS2`
-
-Meaning: `RD = RS1 | RS2`
 
 Description: Compute the bitwise OR of the contents of `RS1` and `RS2` and store the result in `RD`.
 
@@ -579,10 +630,14 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
+Meaning:
+```
+Regsiter[RD] = Register[RS1] | Register[RS2];
+Update Special[FLAGS];
+```
+
 ### `XOR`
 Usage: `XOR RD RS1 RS2`
-
-Meaning: `RD = RS1 ^ RS2`
 
 Description: Compute the bitwise exclusive OR of the contents of `RS1` and `RS2` and store the
 result in `RD`.
@@ -603,15 +658,19 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
+Meaning:
+```
+Regsiter[RD] = Register[RS1] ^ Register[RS2];
+Update Special[FLAGS];
+```
+
 ### `RRC`
 Usage: `RRC RD RS`
 
-Meaning: `RD = (C << 7) | (RS >> 1) ; C = RS & 1`
-
-Description: Shift the 9-bit integer formed by `{C, RS}` right by one bit. Store the shifted
-result in `RD` and the LSB of `RS` into `C`. The ALU flags are updated from the 8-bit result. `Z`
-is set when the result is zero, `N` takes the most significant bit of the result, and `V` is
-cleared. `C` receives the shifted-out LSB of `RS` as described above.
+Description: Shift the 9-bit integer formed by `{C, RS}` right by one bit. Store the shifted result
+in `RD` and the LSB of `RS` into `C`. The ALU flags are updated from the 8-bit result. `Z` is set
+when the result is zero, `N` takes the most significant bit of the result, and `V` is cleared. `C`
+receives the shifted-out LSB of `RS` as described above.
 
 Encoding:
 ```{python}
@@ -629,10 +688,15 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
+Meaning:
+```
+Register[RD] = (Special[FLAGS.C] << 0x07) | (Register[RS] >> 0x01);
+Update Special[FLAGS];
+Special[FLAGS.C] = Register[RS] & 0x01;
+```
+
 ### `SET`
 Usage: `SET RD IMM`
-
-Meaning: `RD = IMM`
 
 Description: Store the provided 8-bit immediate value into `RD`.
 
@@ -651,10 +715,13 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
+Meaning:
+```
+Register[RD] = IMM;
+```
+
 ### `LD`
 Usage: `LD RD RS1 RS2`
-
-Meaning: `RD = Memory[RS1 << 8 | RS2]`
 
 Description: Load the 8-bit word at the address formed by `{RS1, RS2}` into `RD`.
 
@@ -674,10 +741,13 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
+Meaning:
+```
+MARK
+```
+
 ### `ST`
 Usage: `ST RD RS1 RS2`
-
-Meaning: `Memory[RS1 << 8 | RS2] = RD`
 
 Description: Store the 8-bit word in `RD` to the address formed by `{RS1, RS2}`.
 
@@ -697,10 +767,13 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
+Meaning:
+```
+MARK
+```
+
 ### `RSR`
 Usage: `RSR CSR RS1 RS2`
-
-Meaning: `RS1 = CSR >> 8 ; RS2 = CSR & 0xFF`
 
 Description: Read the 16-bit control and status register `CSR` into the two 8-bit general purpose
 registers `{RS1, RS2}`
@@ -721,13 +794,17 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
+Meaning:
+```
+Register[RS1] = Special[CSR] >> 0x08;
+Register[RS2] = Special[CSR] & 0xFF;
+```
+
 ### `WSR`
 Usage: `WSR CSR RS1 RS2`
 
-Meaning: `CSR = RS1 << 8 | RS2`
-
-Description: Write the contents formed by `{RS1, RS2}` into the 16-bit control and status
-register `CSR`.
+Description: Write the contents formed by `{RS1, RS2}` into the 16-bit control and status register
+`CSR`.
 
 Encoding:
 ```{python}
@@ -745,10 +822,13 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
+Meaning:
+```
+Special[CSR] = (Register[RS1] << 0x08) | Register[RS2];
+```
+
 ### `JAL`
 Usage: `JAL CMP RS1 RS2`
-
-Meaning: `if (CMP) { RADDR = PC + 2 ; PC = RS1 << 8 | RS2 }`
 
 Description: If the comparison type `CMP` is true as determined by the current ALU flags, set
 `RADDR` to the address of the next instruction and set `PC` to the address formed by `{RS1, RS2}`.
@@ -771,16 +851,23 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
+Meaning:
+```
+If (Check[CMP]) {
+  Special[RADDR] = PC + 0x02;
+  PC = (Register[RS1] << 0x08) | Register[RS2];
+}
+```
+
 ### `JMP`
-Usage: `JMP CMP RS1 RS2` or `JMP CMP CSR`
+`JMP` has two variants depending on the branch target. The most significant bit of the instruction
+encoding identifies the target source.
 
-Meaning: `if (CMP) { PC = RS1 << 8 | RS2 }` or `if (CMP) { PC = CSR }`
+#### General Purpose Register Target
+Usage: `JMP CMP RS1 RS2`
 
-Description: If the comparison type `CMP` is true as determined by the current ALU flags, set
-`PC` to the address formed by `{RS1, RS2}` or `CSR`, whichever is provided. Jumping to the 16-bit
-value in a special register is intended to be used for quickly returning to addresses like `RADDR`,
-`RETSC`, and `RETIR`. The most significant bit of the instruction encoding identifies the branch
-target source.
+Description: If the comparison type `CMP` is true as determined by the current ALU flags, set `PC`
+to the address formed by `{RS1, RS2}`.
 
 Encoding (when the branch target is stored in two general-purpose registers):
 ```{python}
@@ -799,6 +886,20 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
+Meaning:
+```
+If (Check[CMP]) {
+  PC = (Register[RS1] << 0x08) | Register[RS2];
+}
+```
+
+#### Special Register Target
+Usage: `JMP CMP CSR`
+
+Description: If the comparison type `CMP` is true as determined by the current ALU flags, set `PC`
+to the address in `CSR`. Jumping to the 16-bit value in a special register is intended to be used
+for quickly returning to addresses like `RADDR`, `RETSC`, and `RETIR`.
+
 Encoding (when the branch target is stored in one special register):
 ```{python}
 #| echo: false
@@ -816,112 +917,167 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
+Meaning:
+```
+If (Check[CMP]) {
+  PC = Special[CSR];
+}
+```
+
 ## Pseudo Instructions
 
-Because of the limitations of the core instruction set, this document also recommends a set of
-assembler macros whose functionality can be represented by one or more of the base 16 instructions.
+Because of the limitations of the core instruction set, implementations SHOULD additionally provide
+the following set of assembler macros whose functionality can be represented by one or more of the
+base instructions.
+
+The semantic meaning of pseudo instructions is given in terms of a sequence of base instructions to
+be executed in order. Implementations providing pseudo instructions MAY use a different definition,
+but the semantic behavior MUST match.
 
 ### `ADD2`
 Usage: `ADD2 RD1 RD2 RS1 RS2 RS3 RS4`
 
-Meaning: `ADD RD2 RS2 RS4`, `ADC RD1 RS1 RS3`
+Description: Add the 16-bit values `{RS1, RS2}` and `{RS3, RS4}` and store the result in `{RD1,
+RD2}`.
 
-Description: Add the 16-bit values `{RS1, RS2}` and `{RS3, RS4}` and store the result in
-`{RD1, RD2}`.
+Meaning:
+```
+ADD RD2 RS2 RS4
+ADC RD1 RS1 RS3
+```
 
 ### `AND2`
 Usage: `AND2 RD1 RD2 RS1 RS2 RS3 RS4`
 
-Meaning: `AND RD2 RS2 RS4`, `AND RD1 RS1 RS3`
+Description: Compute the bitwise AND of the contents of `{RS1, RS2}` and `{RS3, RS4}` and store the
+result in `{RD1, RD2}`
 
-Description: Compute the bitwise AND of the contents of `{RS1, RS2}` and `{RS3, RS4}` and store
-the result in `{RD1, RD2}`
+Meaning:
+```
+AND RD2 RS2 RS4
+AND RD1 RS1 RS3
+```
 
 ### `CALL`
 Usage: `CALL IMM`
 
-Meaning: `SET RSCRATCH0 (IMM >> 8)`, `SET RSCRATCH1 (IMM & 0xFF)`, `JAL ALWAYS RSCRATCH0 RSCRATCH1`
-
 Description: Jump to the subroutine at the address `IMM` and link with the `RADDR` special register.
+
+Meaning:
+```
+SET RSCRATCH0 (IMM >> 0x08)
+SET RSCRATCH1 (IMM & 0xFF)
+JAL ALWAYS RSCRATCH0 RSCRATCH1
+```
 
 ### `CLR`
 Usage: `CLR`
 
-Meaning: `WSR FLAGS R0 R0`
-
 Description: Set the `FLAGS` special register to zero, effectively lowering all flags.
+
+Meaning:
+```
+WSR FLAGS R0 R0
+```
 
 ### `CMP`
 Usage: `CMP RS1 RS2`
 
-Meaning: `SUB R0 RS1 RS2`
+Description: Perform an arithmetic operation which will set the `FLAGS` register such that the
+boolean operation `?` can be performed on `RS1 ? RS2`.
 
-Description: Perform an arithmetic operation which will set the `FLAGS` register such that
-the boolean operation `?` can be performed on `RS1 ? RS2`.
+Meaning:
+```
+SUB R0 RS1 RS2
+```
 
 ### `GOTO`
 Usage: `GOTO IMM`
 
-Meaning: `SET RSCRATCH0 (IMM >> 8)`, `SET RSCRATCH1 (IMM & 0xFF)`, `JMP ALWAYS RSCRATCH0 RSCRATCH1`
-
 Description: Unconditionally jump to the address `IMM`.
+
+Meaning:
+```
+SET RSCRATCH0 (IMM >> 0x08)
+SET RSCRATCH1 (IMM & 0xFF)
+JMP ALWAYS RSCRATCH0 RSCRATCH1
+```
 
 ### `JALI`
 Usage: `JALI CMP IMM`
 
-Meaning: `SET RSCRATCH0 (IMM >> 8)`, `SET RSCRATCH1 (IMM & 0xFF)`, `JAL CMP RSCRATCH0 RSCRATCH1`
-
 Description: If the comparison type `CMP` is true as determined by the current ALU flags, set
 `RADDR` to the address of the next instruction and set `PC` to the address `IMM`.
+
+Meaning:
+```
+SET RSCRATCH0 (IMM >> 0x08)
+SET RSCRATCH1 (IMM & 0xFF)
+JAL CMP RSCRATCH0 RSCRATCH1
+```
 
 ### `JMPI`
 Usage: `JMPI CMP IMM`
 
-Meaning: `SET RSCRATCH0 (IMM >> 8)`, `SET RSCRATCH1 (IMM & 0xFF)`, `JMP CMP RSCRATCH0 RSCRATCH1`
+Description: If the comparison type `CMP` is true as determined by the current ALU flags, set `PC`
+to the address `IMM`.
 
-Description: If the comparison type `CMP` is true as determined by the current ALU flags, set
-`PC` to the address `IMM`.
+Meaning:
+```
+SET RSCRATCH0 (IMM >> 0x08)
+SET RSCRATCH1 (IMM & 0xFF)
+JMP CMP RSCRATCH0 RSCRATCH1
+```
 
 ### `MOV`
 Usage: `MOV RD RS1`
 
-Meaning: `OR RD RS1 R0`
-
 Description: Copy the contents of `RS1` into `RD`.
+
+Meaning:
+```
+OR RD RS1 R0
+```
 
 ### `MOV2`
 Usage: `MOV2 RD1 RD2 RS1 RS2`
 
-Meaning: `MOV RD2 RS2`, `MOV RD1 RS1`
-
 Description: Copy the contents of the 16-bit value `{RS1, RS2}` into `{RD1, RD2}`.
+
+Meaning:
+```
+MOV RD2 RS2
+MOV RD1 RS1
+```
 
 ### `NOP`
 Usage: `NOP`
 
-Meaning: `OR R0 R0 R0`
-
 Description: Do nothing.
+
+Meaning:
+```
+SET R0 0x00
+```
 
 ### `OR2`
 Usage: `OR2 RD1 RD2 RS1 RS2 RS3 RS4`
 
-Meaning: `OR RD2 RS2 RS4`, `OR RD1 RS1 RS3`
+Description: Compute the bitwise OR of the contents of `{RS1, RS2}` and `{RS3, RS4}` and store the
+result in `{RD1, RD2}`.
 
-Description: Compute the bitwise OR of the contents of `{RS1, RS2}` and `{RS3, RS4}` and store
-the result in `{RD1, RD2}`.
+Meaning:
+```
+OR RD2 RS2 RS4
+OR RD1 RS1 RS3
+```
 
 ### `POP`
 Usage: `POP RD`
 
 Meaning:
 ```
-RSR SADDR RSCRATCH
-SET RD 1
-ADD RSCRATCH1 RSCRATCH1 RD
-ADC RSCRATCH0 RSCRATCH0 R0
-LD RD RSCRATCH
-WSR SADDR RSCRATCH
+MARK
 ```
 
 Description: Increment `SADDR` by 1 byte and then load the byte at the new stack address into `RD`.
@@ -929,21 +1085,19 @@ Description: Increment `SADDR` by 1 byte and then load the byte at the new stack
 ### `POP2`
 Usage: `POP2 RD1 RD2`
 
-Meaning: `POP RD1`, `POP RD2`
-
 Description: Pop a 16-bit value off the stack and into `{RD1, RD2}`.
+
+Meaning:
+```
+MARK
+```
 
 ### `PUSH`
 Usage: `PUSH RS`
 
 Meaning:
 ```
-RSR SADDR RSCRATCH
-ST RS RSCRATCH
-ADD R0 R0 R0
-SBB RSCRATCH1 RSCRATCH1 R0
-SBB RSCRATCH0 RSCRATCH0 R0
-WSR SADDR RSCRATCH
+MARK
 ```
 
 Description: Write `RS` onto the stack at `SADDR`, and then decrement `SADDR` by 1 byte.
@@ -951,53 +1105,75 @@ Description: Write `RS` onto the stack at `SADDR`, and then decrement `SADDR` by
 ### `PUSH2`
 Usage: `PUSH2 RS1 RS2`
 
-Meaning: `PUSH RS2`, `PUSH RS1`
-
 Description: Push a 16-bit value onto the stack from `{RS1, RS2}`.
+
+Meaning:
+```
+MARK
+```
 
 ### `RET`
 Usage: `RET`
 
-Meaning: `JMP ALWAYS RADDR`
-
 Description: Return to the address in `RADDR`.
+
+Meaning:
+```
+JMP ALWAYS RADDR
+```
 
 ### `RRC2`
 Usage: `RRC2 RD1 RD2 RS1 RS2`
 
-Meaning: `RRC RD1 RS1`, `RRC RD2 RS2`
-
 Description: Shift the 17-bit integer formed by `{C, RS1, RS2}` right by one bit. Store the shifted
 result in `{RD1, RD2}` and the LSB of `RS2` into `C`.
+
+Meaning:
+```
+RRC RD1 RS1
+RRC RD2 RS2
+```
 
 ### `SET2`
 Usage: `SET2 RS1 RS2 IMM`
 
-Meaning: `SET RS1 (IMM >> 8)`, `SET RS2 (IMM & 0xFF)`
-
 Description: Set both the `RS1` and `RS2` registers from the high and low halves of a 16-bit
 immediate value.
+
+Meaning:
+```
+SET RS1 (IMM >> 0x8)
+SET RS2 (IMM & 0xFF)
+```
 
 ### `SUB2`
 Usage: `SUB2 RD1 RD2 RS1 RS2 RS3 RS4`
 
-Meaning: `SUB RD2 RS2 RS4`, `SBB RD1 RS1 RS3`
+Description: Subtract the 16-bit value `{RS3, RS4}` from `{RS1, RS2}` and store the result in `{RD1,
+RD2}`.
 
-Description: Subtract the 16-bit value `{RS3, RS4}` from `{RS1, RS2}` and store the result in
-`{RD1, RD2}`.
+Meaning:
+```
+SUB RD2 RS2 RS4
+SBB RD1 RS1 RS3
+```
 
 ### `XOR2`
 Usage: `XOR2 RD1 RD2 RS1 RS2 RS3 RS4`
 
-Meaning: `XOR RD2 RS2 RS4`, `XOR RD1 RS1 RS3`
+Description: Compute the bitwise XOR of the contents of `{RS1, RS2}` and `{RS3, RS4}` and store the
+result in `{RD1, RD2}`
 
-Description: Compute the bitwise XOR of the contents of `{RS1, RS2}` and `{RS3, RS4}` and store
-the result in `{RD1, RD2}`
+Meaning:
+```
+XOR RD2 RS2 RS4
+XOR RD1 RS1 RS3
+```
 
 ## Architecture Extensions
 
-The content in this chapter until this point is the MISA core architecture. This section provides
-a description of several optional extensions to that architecture which enable additional
+The content in this chapter until this point is the MISA core architecture. This section provides a
+description of several optional extensions to that architecture which enable additional
 functionalities.
 
 ### Dynamic Hardware Extension
@@ -1006,35 +1182,29 @@ The Dynamic Hardware Extension enables writes to the `EXTNS` special register an
 support for the architecture extensions discussed in this section.
 
 **Note:** If the Dynamic Hardware Extension is supported, writes to the Dynamic Hardware Extension
-bit of the `EXTNS` special register must always be ignored. The extension cannot be used to disable
+bit of the `EXTNS` special register MUST always be ignored. The extension cannot be used to disable
 itself at runtime.
 
-If the Dynamic Hardware Extension is not supported, writes to any bit of `EXTNS` are ignored. The
-list of supported extensions is static and a property of the hardware itself. If supported, writes
-must take effect on the instruction following the `WSR`.
+If the Dynamic Hardware Extension is not supported, writes to any bit of `EXTNS` MUST be
+ignored. The list of supported extensions is static and a property of the hardware itself. If
+supported, writes MUST take effect on the instruction following the `WSR`.
 
-Partial support of the Dynamic Hardware Extension is also allowed. That is, an implementation may
-only permit enabling/disabling specific, but not every extension at runtime. In that case, writes
-to the bit of any extension that cannot be toggled must be ignored. Software should treat the lack
-of change in the target bit as a signal that the target extension is permanently enabled/disabled.
+Partial support of the Dynamic Hardware Extension is also allowed. That is, an implementation MAY
+only permit enabling/disabling specific, but not every extension at runtime. In that case, writes to
+the bit of any extension that cannot be toggled MUST be ignored. Software should treat the lack of
+change in the target bit as a signal that the target extension is permanently enabled/disabled.
 
 ### System Call Extension
 
 The System Call Extension extends the `HALT` instruction in the core architecture to support basic
-synchronous exceptions that may be used for system calls and other similar features.
+synchronous exceptions that MAY be used for system calls and other similar features.
 
 #### `SYSCALL`
 The `SYSCALL` instruction replaces the `HALT` instruction in the assembler under the System Call
-Extension. Its usage is similar to `HALT`, but with a conditional "exception" bit that controls
-the terminal behavior of the processor.
+Extension. Its usage is similar to `HALT`, but with a conditional "exception" bit that controls the
+terminal behavior of the processor.
 
 Usage: `SYSCALL RS`
-
-Meaning:
-```
-CAUSE = RS << 8 | 0x01
-if (E == 0) { exit(RS) } else { PC = Memory[0xFFFB] << 8 | Memory[0xFFFA] }
-```
 
 Encoding:
 ```{python}
@@ -1052,24 +1222,35 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
+Meaning:
+```
+Special[CAUSE] = Register[RS] << 8 | 0x01;
+If (E == 0b0) {
+  Halt;
+}
+If (E == 0b1) {
+  PC = (Memory[0xFFFB] << 0x08) | Memory[0xFFFA];
+}
+```
+
 #### `HALT`
 `HALT` functionality as defined in the core architecture is supported under the System Call
-Extension by setting the `E` bit to `0`. In that case, the processor must adhere to the core
-architecture behavior for `HALT`, including stopping the clock and setting the `CAUSE` register.
+Extension by setting the `E` bit to `0`. Assemblers MUST set `E` to `0` when the `HALT` opcode is
+used, and set `E` to `1` when the `SYSCALL` opcode is used.
 
 #### Calling Conventions and Stack Frame
 When a `SYSCALL` instruction is executed, the contents of the `RS` register are used as the syscall
 code, stored in the `CAUSE` special register. The syscall handler address at `0xFFFA - 0xFFFB` is
-responsible for reading the `CAUSE` register, understanding that a syscall was executed, and
-using the extended status value to branch to different handler code for each type of call.
+responsible for reading the `CAUSE` register, understanding that a syscall was executed, and using
+the extended status value to branch to different handler code for each type of call.
 
 General purpose registers follow the same caller-callee conventions as standard subroutine/function
 calls in the MISA ABI. This includes which registers are used as arguments to the system call, and
-which registers are used as return values from the system call. All special registers must be
-saved and restored by the system call routine.
+which registers are used as return values from the system call. All special registers MUST be saved
+and restored by the system call routine.
 
 #### Nested System Calls
-The `SYSCALL` instruction may not be executed within a system call context. The processor is
+The `SYSCALL` instruction cannot be executed within a system call context. The processor is
 canonically in a system call context under the following formal definition:
 
 - The processor enters a system call context when the `SYSCALL` instruction is executed with the
@@ -1078,8 +1259,8 @@ canonically in a system call context under the following formal definition:
 - Every instruction executed between entering and leaving the system call context exists within the
   system call context
   
-If a secondary `SYSCALL` is performed in a system call context, a fault must occur with the
-`CAUSE` Reason "Control event" and the `CAUSE` Type "Improper system call".
+If a secondary `SYSCALL` is performed in a system call context, a fault MUST occur with the `CAUSE`
+Reason "Control event" and the `CAUSE` Type "Improper system call".
 
 #### Returning From System Calls
 To return from system calls, the `RETSC` special register is defined, which stores the return
@@ -1101,46 +1282,49 @@ The following pseudo-instruction is defined to return to this address easily:
 
 Usage: `RETS`
 
-Meaning: `JMP ALWAYS RETSC`
-
 Description: Return from a system call to the address in `RETSC`.
+
+Meaning:
+```
+JMP ALWAYS RETSC
+```
 
 ### Interrupt Extension
 
-The Interrupt Extension adds support for basic asynchronous, non-deterministic exceptions. While
-the synchronous exceptions in the System Call Extension come from code being executed by the
-processor, interrupts are triggered externally to allow the processor to keep time, communicate
-with peripherals, and more.
+The Interrupt Extension adds support for basic asynchronous, non-deterministic exceptions. While the
+synchronous exceptions in the System Call Extension come from code being executed by the processor,
+interrupts are triggered externally to allow the processor to keep time, communicate with
+peripherals, and more.
 
 #### Triggering Interrupts
-MISA processors supporting the interrupt extension must designate one pin as the interrupt pin. This
-specification does not define whether the interrupt pin is active-high or active-low. The interrupt
-pin is set to its active state when an interrupt occurs, and rising or falling edge must cause the
-processor to finish executing the current instruction and then set the program counter to the
-interrupt handler address at `0xFFF8 - 0xFFF9`.
+MISA processors supporting the interrupt extension MUST designate one pin as the interrupt pin. The
+interrupt pin MAY be active-high or active-low. The interrupt pin is set to its active state to
+trigger an interrupt -- the rising or falling edge of the pin MUST cause the processor to finish
+executing the current instruction and then set the program counter to the interrupt handler address
+at `0xFFF8 - 0xFFF9`.
 
-When this happens, interrupts must be automatically disabled by the processor. If the interrupt pin
-is toggled, another interrupt should not be detected. Taking interrupts does not affect the `CAUSE`
+When this happens, interrupts MUST be automatically disabled by the processor. If the interrupt pin
+is toggled, another interrupt MUST not be detected. Taking interrupts does not affect the `CAUSE`
 register like system calls or faults.
 
 #### Interrupt Queue
-Information about which interrupt was triggered is provided to the processor through a memory-mapped
-queue. This specification does not define whether the queue should be located in memory.
+Information about which interrupt was triggered SHOULD be provided to the processor through a
+memory-mapped queue. The queue MAY be located anywhere in memory.
 
-The queue is structured as follows:
+The queue SHOULD be structured as follows:
 
-| Bytes | Purpose             |
+| Bytes | Purpose |
 |-------|---------------------|
-| 0     | Length              |
-| 1     | Pop signal          |
-| 2     | Pop acknowledgement |
-| 3     | Interrupt number    |
-| 4-5   | Argument pointer    |
+| 0 | Length |
+| 1 | Pop signal |
+| 2 | Pop acknowledgement |
+| 3 | Interrupt number |
+| 4-5 | Argument pointer |
 
-Every field except for the pop signal may only be read by the processor. Writing to other fields
-is undefined behavior.
+Every field except for the pop signal MUST only be read by the processor. Writing to other fields is
+undefined behavior.
 
-The length field defines the number of outstanding interrupts. The interrupt handler should respond
+The length field defines the number of outstanding interrupts. The interrupt handler SHOULD respond
 to every interrupt in the queue before returning, as it is not guaranteed that the interrupt source
 will reassert the interrupt pin. If the queue is not emptied before returning, interrupts will be
 left unaddressed until the next time the pin is asserted.
@@ -1154,7 +1338,7 @@ should be popped from the queue. The pop acknowledgement is written by the exter
 non-zero value when the requested pop is completed and the queue fields are updated. Both fields are
 zero in the idle state, including after reset and when the Interrupt Extension is first enabled.
 
-The handshake proceeds in four phases. To pop an entry, the processor must:
+The handshake proceeds in four phases. To pop an entry, the processor MUST:
 
 1. Write a non-zero value to the pop signal to request the pop.
 2. Wait until the pop acknowledgement is non-zero.
@@ -1163,20 +1347,16 @@ The handshake proceeds in four phases. To pop an entry, the processor must:
 
 In response, the external hardware must:
 
-1. On the pop signal becoming non-zero, remove the head entry, update the length and (if the queue is
-   not empty) the number and argument pointer fields to reflect the new head, and only then write a
-   non-zero value to the pop acknowledgement.
+1. On the pop signal becoming non-zero, remove the head entry, update the length and (if the queue
+   is not empty) the number and argument pointer fields to reflect the new head, and only then write
+   a non-zero value to the pop acknowledgement.
 2. On the pop signal returning to zero, write zero to the pop acknowledgement.
 
-The fourth phase is required. Without waiting for the pop acknowledgement to return to zero, a
-subsequent pop could observe the acknowledgement left over from the previous pop and read stale head
-fields.
-
 While the handshake is idle (both the pop signal and pop acknowledgement are zero) and the length is
-non-zero, the number and argument pointer fields must hold the head entry. To preserve this, the
-external hardware must modify those fields only during a pop (between observing the pop signal
+non-zero, the number and argument pointer fields MUST hold the head entry. To preserve this, the
+external hardware MUST modify those fields only during a pop (between observing the pop signal
 non-zero and asserting the pop acknowledgement) or, when enqueuing into an empty queue, before
-incrementing the length. The processor must read those fields only while the handshake is idle and
+incrementing the length. The processor MUST read those fields only while the handshake is idle and
 the length is non-zero.
 
 The exact use of the interrupt number and argument pointer fields are implementation-defined. The
@@ -1187,15 +1367,14 @@ and argument pointer are undefined.
 
 #### Calling Conventions
 Because interrupts are not necessarily triggered by the running code in the way system calls are,
-the entire processor state is considered to be callee-saved in an interrupt context. The interrupt
-handler is responsible for saving and restoring every special and general purpose register that it
-modifies.
+the entire processor state MUST be considered to be callee-saved in an interrupt context. The
+interrupt handler is responsible for saving and restoring every special and general purpose register
+that it modifies.
 
 Three exceptions are the `RSCRATCH0` and `RSCRATCH1` general-purpose registers, and the `FLAGS`
-special register. These registers must be automatically saved by the processor when an interrupt is
+special register. These registers MUST be automatically saved by the processor when an interrupt is
 triggered and automatically restored when returning from the interrupt. On entry, `RSCRATCH` is
-therefore the only register the handler may freely use before saving anything; every other register
-still holds the interrupted program's live data.
+therefore the only register the handler can freely use before saving anything.
 
 #### Returning From Interrupts
 To return from interrupts, the `RETIR` special register is defined, which stores the return address
@@ -1217,24 +1396,26 @@ The following pseudo-instruction is defined to return to this address easily:
 
 Usage: `RETI`
 
-Meaning: `JMP ALWAYS RETIR`
-
 Description: Return from an interrupt to the address in `RETIR`.
 
-When the processor executes `JMP ALWAYS RETIR`, it must also perform the following actions
+Meaning:
+```
+JMP ALWAYS RETIR
+```
+
+When the processor executes `JMP ALWAYS RETIR`, it MUST also perform the following actions
 atomically:
 
 1. Restore `RSCRATCH0`, `RSCRATCH1`, `FLAGS`, and `PRIVS.R` (under the Privilege Extension)
 2. Set the program counter to the address in `RETIR`
 3. Leave the interrupt context and reenable interrupts
 
-Software must not return from an interrupt via `RSR RETIR RSCRATCH; JMP ALWAYS RSCRATCH`, as this
-is not guaranteed to complete steps 1 and 3.
+Software MUST not return from an interrupt via `RSR RETIR RSCRATCH; JMP ALWAYS RSCRATCH`, as this is
+not guaranteed to complete steps 1 and 3.
 
 #### Masking Interrupts
-
-Interrupt masking may not be controlled by software. If the Interrupt Extension is supported,
-interrupts may always be triggered. Only two conditions prevent the processor from taking new
+Interrupt masking MUST not be controlled by software. If the Interrupt Extension is supported,
+interrupts can always be triggered. Only two conditions prevent the processor from taking new
 interrupts:
 
 1. Disabling the Interrupt Extension through the Dynamic Hardware Extension.
@@ -1248,11 +1429,11 @@ The processor is canonically in an interrupt context under the following formal 
 - Every instruction executed between entering and leaving the interrupt context exists within the
   interrupt context
 
-Software may choose to ignore the interrupt by returning immediately from the interrupt handler.
+Software MAY choose to ignore the interrupt by returning immediately from the interrupt handler.
 
 #### System Calls in Interrupts
-While the processor is in an interrupt context, system calls may not be executed. If a system call
-is performed in an interrupt context, the processor must fault with the reason "Control event"
+While the processor is in an interrupt context, system calls SHOULD not be executed. If a system
+call is performed in an interrupt context, the processor MUST fault with the reason "Control event"
 and the type "Improper system call".
 
 #### Canonical Interrupt Handler
@@ -1285,21 +1466,20 @@ Interrupt_Handler:
 ### Privilege Extension
 
 The Privilege Extension segments the capabilities of the processor into two distinct levels of
-privilege, which can be used to limit the actions taken by untrusted software.
+privilege, which MAY be used to limit the actions taken by untrusted software.
 
 Machine Mode grants access to all functionality of the processor, and is similar in scope to the
-core architecture without the Privilege Extension. User Mode restricts access to certain features
-of the core architecture, and provides a way to manage memory I/O at a more cautious level of
+core architecture without the Privilege Extension. User Mode restricts access to certain features of
+the core architecture, and provides a way to manage memory I/O at a more cautious level of
 privilege.
 
 #### `PRIVS`
-
 Privilege is tracked and controlled using the `PRIVS` special register, which is defined as part of
 the Privilege Extension. It is a flags register with the following fields:
 
-| Flag | Bit | Commentary                                                   |
+| Flag | Bit | Commentary |
 |------|-----|--------------------------------------------------------------|
-| `R`  | 0   | The privilege ring bit. 0 for Machine Mode, 1 for User Mode. |
+| `R` | 0 | The privilege ring bit. 0 for Machine Mode, 1 for User Mode. |
 
 ```{python}
 #| echo: false
@@ -1316,7 +1496,7 @@ SVG(wavedrom.render(str({
 
 #### User Mode Restrictions
 
-When the processor is in User Mode, the following actions must cause a privilege-related fault:
+When the processor is in User Mode, the following actions MUST cause a privilege-related fault:
 
 - Execution of `HALT`
 - Execution of `RSR` except on `SADDR`, `RADDR`, `FLAGS`, and `PRIVS`
@@ -1324,19 +1504,19 @@ When the processor is in User Mode, the following actions must cause a privilege
 - Access to privileged memory, if a memory protection unit is used to manage access based on the
   ring bit
 
-If a privilege error is detected, the processor must preempt the instruction which caused the error,
+If a privilege error is detected, the processor MUST preempt the instruction which caused the error,
 discard any partial result of the instruction, and jump to the fault handler. The `CAUSE` special
-register must be set to indicate the privilege error for the instruction use or memory access.
+register MUST be set to indicate the privilege error for the instruction use or memory access.
 
 #### Points of Privilege Change
 
 Under normal operation, the processor is expected to change privilege modes when the following
 occur:
 
-- When any fault occurs which requires the processor to jump to the fault handler (including an
-  User Mode privilege error), the processor must first set `PRIVS.R` to 0.
-- Under the System Call Extension, when the `SYSCALL` instruction is executed and the exception
-  bit is 1, `PRIVS.R` must be set to 0 before the system call handler is entered.
+- When any fault occurs which requires the processor to jump to the fault handler (including an User
+  Mode privilege error), the processor must first set `PRIVS.R` to 0.
+- Under the System Call Extension, when the `SYSCALL` instruction is executed and the exception bit
+  is 1, `PRIVS.R` must be set to 0 before the system call handler is entered.
 - Under the System Call Extension, when the processor is returned from a system call context, the
   `PRIVS.R` bit must be restored to its initial value before the `SYSCALL`.
 - Under the Interrupt Extension, when an interrupt is taken, `PRIVS.R` must be set to 0 before the
@@ -1345,8 +1525,8 @@ occur:
   `PRIVS.R` bit must be restored to its initial value before the interrupt occurred. Note that
   interrupts may trigger while the processor is in a system call context, in which case returning
   from the interrupt and returning from the system call will restore different ring bit values.
-- When `WSR` is executed on the `PRIVS` special register from Machine Mode, the updated ring
-  bit must take effect for the next instruction.
+- When `WSR` is executed on the `PRIVS` special register from Machine Mode, the updated ring bit
+  must take effect for the next instruction.
 
-All privilege changes must be performed automatically by the processor when an appropriate condition
+All privilege changes MUST be performed automatically by the processor when an appropriate condition
 is detected, except for direct writes to `PRIVS` via `WSR` from Machine Mode.

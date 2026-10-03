@@ -62,7 +62,7 @@ resolvePseudoInst inst = case inst of
   Mov2Inst rd1 rd2 rs1 rs2
     -> [OrInst rd2 rs2 R0, OrInst rd1 rs1 R0]
   NopInst
-    -> [OrInst R0 R0 R0]
+    -> [SetInst R0 (IntImm Low 0x00)]
   Or2Inst rd1 rd2 rs1 rs2 rs3 rs4
     -> [OrInst rd2 rs2 rs4, OrInst rd1 rs1 rs3]
   PopInst rd
