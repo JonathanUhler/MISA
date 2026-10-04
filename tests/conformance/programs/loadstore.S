@@ -3,9 +3,9 @@ _start:
         set ra 0x02
         set rb 0x00
         set rc 0x2A
-        st rc ra rb
+        st rc ra 0
         set rd 0x00
-        ld rd ra rb
+        ld rd ra 0
         halt rd
 
         .section vectors

@@ -47,8 +47,8 @@ data Inst
   | XorInst  GpReg   GpReg GpReg
   | RrcInst  GpReg   GpReg
   | SetInst  GpReg   Imm
-  | LdInst   GpReg   GpReg GpReg
-  | StInst   GpReg   GpReg GpReg
+  | LdInst   GpReg   GpReg Int
+  | StInst   GpReg   GpReg Int
   | RsrInst  CsrReg  GpReg GpReg
   | WsrInst  CsrReg  GpReg GpReg
   | JalInst  CmpFlag GpReg GpReg

@@ -66,40 +66,15 @@ resolvePseudoInst inst = case inst of
   Or2Inst rd1 rd2 rs1 rs2 rs3 rs4
     -> [OrInst rd2 rs2 rs4, OrInst rd1 rs1 rs3]
   PopInst rd
-    -> [RsrInst SADDR RSCRATCH0 RSCRATCH1,
-        SetInst rd (IntImm Low 0x01),
-        AddInst RSCRATCH1 RSCRATCH1 rd,
-        AdcInst RSCRATCH0 RSCRATCH0 R0,
-        LdInst rd RSCRATCH0 RSCRATCH1,
-        WsrInst SADDR RSCRATCH0 RSCRATCH1]
+    -> [LdInst rd RSCRATCH1 1]
   Pop2Inst rd1 rd2
-    -> [RsrInst SADDR RSCRATCH0 RSCRATCH1,
-        SetInst rd2 (IntImm Low 0x01),
-        AddInst RSCRATCH1 RSCRATCH1 rd2,
-        AdcInst RSCRATCH0 RSCRATCH0 R0,
-        LdInst rd1 RSCRATCH0 RSCRATCH1,
-        AddInst RSCRATCH1 RSCRATCH1 rd2,
-        AdcInst RSCRATCH0 RSCRATCH0 R0,
-        LdInst rd2 RSCRATCH0 RSCRATCH1,
-        WsrInst SADDR RSCRATCH0 RSCRATCH1]
+    -> [LdInst rd1 RSCRATCH1 1,
+        LdInst rd2 RSCRATCH1 1]
   PushInst rs
-    -> [RsrInst SADDR RSCRATCH0 RSCRATCH1,
-        StInst rs RSCRATCH0 RSCRATCH1,
-        AddInst R0 R0 R0,  -- To set FLAGS.C = 0
-        SbbInst RSCRATCH1 RSCRATCH1 R0,
-        SbbInst RSCRATCH0 RSCRATCH0 R0,
-        WsrInst SADDR RSCRATCH0 RSCRATCH1]
+    -> [StInst rs RSCRATCH1 (-1)]
   Push2Inst rs1 rs2
-    -> [RsrInst SADDR RSCRATCH0 RSCRATCH1,
-        StInst rs2 RSCRATCH0 RSCRATCH1,
-        AddInst R0 R0 R0,  -- To set FLAGS.C = 0
-        SbbInst RSCRATCH1 RSCRATCH1 R0,
-        SbbInst RSCRATCH0 RSCRATCH0 R0,
-        StInst rs1 RSCRATCH0 RSCRATCH1,
-        AddInst R0 R0 R0,  -- To set FLAGS.C = 0
-        SbbInst RSCRATCH1 RSCRATCH1 R0,
-        SbbInst RSCRATCH0 RSCRATCH0 R0,
-        WsrInst SADDR RSCRATCH0 RSCRATCH1]
+    -> [StInst rs2 RSCRATCH1 (-1),
+        StInst rs1 RSCRATCH1 (-1)]
   RetInst
     -> [JmpCsrInst ALWAYS RADDR]
   Rrc2Inst rd1 rd2 rs1 rs2

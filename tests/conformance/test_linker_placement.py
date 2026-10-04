@@ -22,7 +22,7 @@ def test_text_and_rodata_do_not_overlap():
         "        .section text\n"
         "_start:\n"
         "        set2 rscratch rodata_val\n"
-        "        ld rt rscratch\n"
+        "        ld rt rscratch 0\n"
         "        halt rt\n"
         "        .section rodata\n"
         "rodata_val:\n"
@@ -42,9 +42,9 @@ def test_data_and_bss_do_not_overlap():
         "_start:\n"
         "        set2 rc rd scratch\n"
         "        set ra 0x99\n"
-        "        st ra rc rd\n"           # clobber the bss cell
+        "        st ra rc 0\n"           # clobber the bss cell
         "        set2 rscratch data_val\n"
-        "        ld rt rscratch\n"        # data must be intact
+        "        ld rt rscratch 0\n"        # data must be intact
         "        halt rt\n"
         "        .section data\n"
         "data_val:\n"

@@ -21,7 +21,7 @@ _arraysum_loop:
         cmp rw r0
         jmpi equal _arraysum_loop_end
 
-        ld rt ruv
+        ld rt ruv 0
         add2 ryz ryz r0 rt
 
         add2 ruv ruv r0 rx

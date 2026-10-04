@@ -7,23 +7,23 @@ loop:
 interrupt_handler:
         // read head interrupt number from IRQ_BASE+3 (0x8003) into RA and store to `last`
         set2 rc rd 0x8003
-        ld ra rc rd
+        ld ra rc 0
         set2 rc rd last
-        st ra rc rd
+        st ra rc 0
         // four-phase pop: write pop=1 at 0x8001, wait ack (0x8002)=1, write pop=0, wait ack=0
         set2 rc rd 0x8001
         set rb 0x01
-        st rb rc rd
+        st rb rc 0
 wait_ack_high:
         set2 rc rd 0x8002
-        ld rb rc rd
+        ld rb rc 0
         cmp rb r0
         jmpi equal wait_ack_high
         set2 rc rd 0x8001
-        st r0 rc rd
+        st r0 rc 0
 wait_ack_low:
         set2 rc rd 0x8002
-        ld rb rc rd
+        ld rb rc 0
         cmp rb r0
         jmpi not_equal wait_ack_low
         reti

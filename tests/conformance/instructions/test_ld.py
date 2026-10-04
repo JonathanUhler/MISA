@@ -1,8 +1,8 @@
 """
 Per-instruction conformance tests for LD.
 
-Manual: `LD RD RS1 RS2` loads `RD = Memory[RS1 << 8 | RS2]`. The address pair is built with SET2
-from a data label, so the load reads a known seeded byte.
+Manual: `LD RD RSB IMM` loads `RD = Memory[{RSB, RSB + 1} + IMM]`, naming the high base register.
+The base pair is built with SET2 from a data label, so the load reads a known seeded byte.
 """
 
 
@@ -15,7 +15,7 @@ def test_ld_reads_memory_into_register():
     sim = run(
         """
         set2 ra rb value
-        ld rc ra rb
+        ld rc ra 0
         halt rc
         """,
         data="""

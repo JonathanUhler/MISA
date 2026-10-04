@@ -192,8 +192,8 @@ decodeInst lo hi = inst
       0x7                           -> Just (XorInst (toEnum nib1) (toEnum nib2) (toEnum nib3))
       0x8 | nib3 == 0               -> Just (RrcInst (toEnum nib1) (toEnum nib2))
       0x9                           -> Just (SetInst (toEnum nib1) (IntImm Full word1))
-      0xA                           -> Just (LdInst  (toEnum nib1) (toEnum nib2) (toEnum nib3))
-      0xB                           -> Just (StInst  (toEnum nib1) (toEnum nib2) (toEnum nib3))
+      0xA                           -> Just (LdInst (toEnum nib1) (toEnum nib2) (signExt4 nib3))
+      0xB                           -> Just (StInst (toEnum nib1) (toEnum nib2) (signExt4 nib3))
       0xC | Just csr <- toCsr nib3  -> Just (RsrInst csr (toEnum nib1) (toEnum nib2))
       0xD | Just csr <- toCsr nib3  -> Just (WsrInst csr (toEnum nib1) (toEnum nib2))
       0xE | Just cmp <- toCmp (nib3 .&. 0x7) -> Just (JalInst cmp (toEnum nib1) (toEnum nib2))
@@ -202,6 +202,7 @@ decodeInst lo hi = inst
       0xF | Just cmp <- toCmp (nib3 .&. 0x7), Just csr <- toCsr nib1
             -> Just (JmpCsrInst cmp csr)
       _                             -> Nothing
+    signExt4 n = if n >= 8 then n - 16 else n
     toCsr nib = case nib of
       0x1 -> Just SADDR
       0x2 -> Just RADDR

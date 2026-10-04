@@ -26,12 +26,12 @@ receive_line:
 
 rx_wait:
         set2 re rf 0x8012           // RX_VALID
-        ld ra re rf
+        ld ra re 0
         cmp ra r0
         jmpi equal rx_wait          // spin until a byte arrives
 
         set2 re rf 0x8013           // RX_DATA
-        ld ra re rf                 // ra = received byte
+        ld ra re 0                 // ra = received byte
 
         set re 0x0A                 // Enter ends the line
         cmp ra re
@@ -41,7 +41,7 @@ rx_wait:
         cmp rb re
         jmpi equal rx_wait          // full, drop the byte and keep reading
 
-        st ra rc rd                 // buffer[ptr] = byte
+        st ra rc 0                 // buffer[ptr] = byte
         set rf 0x01
         add rd rd rf                // pointer low += 1 (sets carry)
         adc rc rc r0                // pointer high += carry
@@ -59,13 +59,13 @@ tx_loop:
 
 tx_wait_ready:
         set2 re rf 0x8010           // TX_READY
-        ld ra re rf
+        ld ra re 0
         cmp ra r0
         jmpi equal tx_wait_ready    // spin until the transmitter is ready
 
-        ld ra rc rd                 // ra = buffer[ptr]
+        ld ra rc 0                 // ra = buffer[ptr]
         set2 re rf 0x8011           // TX_DATA
-        st ra re rf                 // transmit the byte
+        st ra re 0                 // transmit the byte
 
         set rf 0x01
         add rd rd rf                // pointer low += 1
@@ -75,12 +75,12 @@ tx_wait_ready:
 
 tx_newline:
         set2 re rf 0x8010           // TX_READY
-        ld ra re rf
+        ld ra re 0
         cmp ra r0
         jmpi equal tx_newline       // spin until the transmitter is ready
         set ra 0x0A                 // append a newline so the line stands alone
         set2 re rf 0x8011           // TX_DATA
-        st ra re rf
+        st ra re 0
         goto receive_line
 
 do_quit:

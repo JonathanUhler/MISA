@@ -16,7 +16,7 @@ def test_pop_increments_saddr_then_reads():
         set ra 0x01
         set rb 0xFF
         set rc 0x2A
-        st rc ra rb
+        st rc ra 0
         set ra 0x01
         set rb 0xFE
         wsr saddr ra rb

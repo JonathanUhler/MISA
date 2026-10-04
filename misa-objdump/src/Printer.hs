@@ -38,8 +38,8 @@ printStat (InstStat inst)   = "    " ++ instStr
           XorInst  rd  rs1 rs2 -> unwords ["XOR",  show rd,  show rs1, show rs2]
           RrcInst  rd  rs      -> unwords ["RRC",  show rd,  show rs]
           SetInst  rd  imm     -> unwords ["SET",  show rd,  showImm imm]
-          LdInst   rd  rs1 rs2 -> unwords ["LD",   show rd,  show rs1, show rs2]
-          StInst   rd  rs1 rs2 -> unwords ["ST",   show rd,  show rs1, show rs2]
+          LdInst   rd  rsb off -> unwords ["LD",   show rd,  show rsb, showOffset off]
+          StInst   rd  rsb off -> unwords ["ST",   show rd,  show rsb, showOffset off]
           RsrInst  csr rs1 rs2 -> unwords ["RSR",  show csr, show rs1, show rs2]
           WsrInst  csr rs1 rs2 -> unwords ["WSR",  show csr, show rs1, show rs2]
           JalInst  cmp rs1 rs2 -> unwords ["JAL",  show cmp, show rs1, show rs2]
@@ -100,6 +100,10 @@ showImm (LabelImm _ label) = label
 
 showHexInt :: Integral a => a -> String
 showHexInt int = "0x" ++ map toUpper (showHex int "")
+
+
+showOffset :: Int -> String
+showOffset = show
 
 
 printBinary :: [Word8] -> [Stat] -> [String]

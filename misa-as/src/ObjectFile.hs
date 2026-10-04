@@ -34,7 +34,7 @@ module ObjectFile (BinaryObject,
 import Grammar
 import Packing
 
-import Data.Bits ((.|.), shiftR, shiftL)
+import Data.Bits ((.|.), (.&.), shiftR, shiftL)
 import qualified Data.ByteString as B
 import Data.List (elemIndex, nub, union)
 import qualified Data.Text as T
@@ -262,8 +262,8 @@ packInst inst =
     XorInst  rd   rs1 rs2 -> packFormatRRR 0x7 rd  rs1 rs2
     RrcInst  rd   rs      -> packFormatRR  0x8 rd  rs
     SetInst  rd   imm     -> packFormatRI  0x9 rd  imm
-    LdInst   rd   rs1 rs2 -> packFormatRRR 0xA rd  rs1 rs2
-    StInst   rd   rs1 rs2 -> packFormatRRR 0xB rd  rs1 rs2
+    LdInst   rd   rsb off -> packFormatRRI 0xA rd rsb off
+    StInst   rd   rsb off -> packFormatRRI 0xB rd rsb off
     RsrInst  csr  rs1 rs2 -> packFormatRRC 0xC rs1 rs2 csr
     WsrInst  csr  rs1 rs2 -> packFormatRRC 0xD rs1 rs2 csr
     JalInst  flag rs1 rs2 -> packFormatRRF 0xE rs1 rs2 flag
@@ -276,6 +276,8 @@ packInst inst =
     packFormatR   op r1       = [op .|. shiftL (fromReg r1) 4, 0x00]
     packFormatRR  op r1 r2    = [op .|. shiftL (fromReg r1) 4, fromReg r2]
     packFormatRRR op r1 r2 r3 = [op .|. shiftL (fromReg r1) 4, fromReg r2 .|. shiftL (fromReg r3) 4]
+    packFormatRRI op r1 r2 i  = [op .|. shiftL (fromReg r1) 4,
+                                 fromReg r2 .|. shiftL (fromIntegral (i .&. 0xF)) 4]
     packFormatRI  op r  i     = [op .|. shiftL (fromReg r) 4,  fromImm i]
     packFormatRRC op r1 r2 c  = [op .|. shiftL (fromReg r1) 4, fromReg r2 .|. shiftL (fromCsr c) 4]
     packFormatRRF op r1 r2 f  = [op .|. shiftL (fromReg r1) 4, fromReg r2 .|. shiftL (fromFlag f) 4]

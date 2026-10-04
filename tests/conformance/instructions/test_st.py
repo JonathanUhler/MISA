@@ -1,8 +1,8 @@
 """
 Per-instruction conformance tests for ST.
 
-Manual: `ST RD RS1 RS2` stores `Memory[RS1 << 8 | RS2] = RD`. The address is a fixed RAM location so
-the written byte can be read back from simulator memory.
+Manual: `ST RD RSB IMM` stores `Memory[{RSB, RSB + 1} + IMM] = RD`, naming the high base register.
+The address is a fixed RAM location so the written byte can be read back from simulator memory.
 """
 
 
@@ -16,7 +16,7 @@ def test_st_writes_register_to_memory():
         set ra 0x02
         set rb 0x00
         set rc 0x2A
-        st rc ra rb
+        st rc ra 0
         halt r0
     """)
     assert sim.mem[0x0200] == 0x2A

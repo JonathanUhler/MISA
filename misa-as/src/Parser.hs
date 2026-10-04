@@ -74,7 +74,10 @@ parseQuotedString = lexeme (char '"' *> someTill anySingle (char '"'))
 
 
 parseInteger :: Parser Int
-parseInteger = lexeme (try parseHex <|> try parseBin <|> try parseOct <|> parseDec)
+parseInteger = lexeme $ do
+  sign <- option id (negate <$ char '-' <|> id <$ char '+')
+  mag  <- try parseHex <|> try parseBin <|> try parseOct <|> parseDec
+  return (sign mag)
   where parseHex = parseString "0x" *> L.hexadecimal
         parseBin = parseString "0b" *> L.binary
         parseOct = parseString "0o" *> L.octal
@@ -84,8 +87,8 @@ parseInteger = lexeme (try parseHex <|> try parseBin <|> try parseOct <|> parseD
 parseWord :: Parser Word8
 parseWord = do
   int <- parseInteger <?> "integer literal"
-  if int < fromIntegral (minBound :: Word8) || int > fromIntegral (maxBound :: Word8) then
-    fail ("integer literal " ++ show int ++ " is not a representable as a word")
+  if int < -128 || int > fromIntegral (maxBound :: Word8) then
+    fail ("integer literal " ++ show int ++ " is not representable as a word")
   else
     return (fromIntegral int)
 
@@ -93,8 +96,8 @@ parseWord = do
 parseDoubleWord :: Parser Word16
 parseDoubleWord = do
   int <- parseInteger <?> "integer literal"
-  if int < fromIntegral (minBound :: Word16) || int > fromIntegral (maxBound :: Word16) then
-    fail ("integer literal " ++ show int ++ " is not a representable as a double-word")
+  if int < -32768 || int > fromIntegral (maxBound :: Word16) then
+    fail ("integer literal " ++ show int ++ " is not representable as a double-word")
   else
     return (fromIntegral int)
 
@@ -154,8 +157,10 @@ parseLookup env symbol = do
     Just x  -> return x
     Nothing -> fail $ "unknown " ++ symbol ++ " '" ++ ident ++ "'"
 
+
 parseGpReg :: Parser GpReg
 parseGpReg = parseLookup reservedGpRegs "general purpose register"
+
 
 parseWideReg :: Parser (GpReg, GpReg)
 parseWideReg = do
@@ -169,11 +174,29 @@ parseWideReg = do
     RYZ      -> return (RY, RZ)
     RSCRATCH -> return (RSCRATCH0, RSCRATCH1)
 
+
 parseRegPair :: Parser (GpReg, GpReg)
 parseRegPair = choice [try parseWideReg, (,) <$> parseGpReg <*> parseGpReg]
 
+
+parseBaseReg :: Parser GpReg
+parseBaseReg = try (fst <$> parseWideReg) <|> parseGpReg
+
+
+parseOffset :: Parser Int
+parseOffset = lexeme $ do
+  sign <- option id (negate <$ char '-' <|> id <$ char '+')
+  n    <- L.decimal
+  let v = sign n
+  if v < -8 || v > 7 then
+    fail ("memory offset " ++ show v ++ " is out of range (-8 to 7)")
+  else
+    return v
+
+
 parseCsrReg :: [Extn] -> Parser CsrReg
 parseCsrReg extns = parseLookup (reservedCsrRegs extns) "special register"
+
 
 parseCmpFlag :: Parser CmpFlag
 parseCmpFlag = parseLookup reservedCmpFlags "comparison flag"
@@ -210,8 +233,8 @@ coreInsts extns =
     XorInst  <$> (parseThisIdent "xor"  *> parseGpReg)   <*> parseGpReg <*> parseGpReg,
     RrcInst  <$> (parseThisIdent "rrc"  *> parseGpReg)   <*> parseGpReg,
     SetInst  <$> (parseThisIdent "set"  *> parseGpReg)   <*> parseLowImm,
-    (\rd (r1, r2) -> LdInst rd r1 r2) <$> (parseThisIdent "ld"   *> parseGpReg)   <*> parseRegPair,
-    (\rd (r1, r2) -> StInst rd r1 r2) <$> (parseThisIdent "st"   *> parseGpReg)   <*> parseRegPair,
+    LdInst <$> (parseThisIdent "ld" *> parseGpReg) <*> parseBaseReg <*> parseOffset,
+    StInst <$> (parseThisIdent "st" *> parseGpReg) <*> parseBaseReg <*> parseOffset,
     (\c (r1, r2) -> RsrInst c r1 r2)  <$> (parseThisIdent "rsr"  *> (parseCsrReg extns)) <*> parseRegPair,
     (\c (r1, r2) -> WsrInst c r1 r2)  <$> (parseThisIdent "wsr"  *> (parseCsrReg extns)) <*> parseRegPair,
     (\f (r1, r2) -> JalInst f r1 r2)  <$> (parseThisIdent "jal"  *> parseCmpFlag) <*> parseRegPair,

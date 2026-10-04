@@ -411,14 +411,28 @@ class Simulator:
         self.set_reg(rd, imm)
 
 
-    def _ld(self, rd: int, rs1: int, rs2: int) -> None:
-        address: int = (self.get_reg(rs1) << WORD_SIZE) | self.get_reg(rs2)
-        self.set_reg(rd, self.read_mem(address))
+    def _ld(self, rd: int, base: int, off: int) -> None:
+        off = off - 0x10 if (off & 0x08) else off
+        if (base == Reg.RSCRATCH1):
+            # Stack mode: pre-adjust the stack pointer, then load the byte it points at.
+            self.set_csr(Csr.SADDR, self.get_csr(Csr.SADDR) + off)
+            self.set_reg(rd, self.read_mem(self.get_csr(Csr.SADDR)))
+        else:
+            # The base register holds the high byte; its successor holds the low byte.
+            address: int = (self.get_reg(base) << WORD_SIZE) | self.get_reg(base + 1)
+            self.set_reg(rd, self.read_mem(address + off))
 
 
-    def _st(self, rd: int, rs1: int, rs2: int) -> None:
-        address: int = (self.get_reg(rs1) << WORD_SIZE) | self.get_reg(rs2)
-        self.write_mem(address, self.get_reg(rd))
+    def _st(self, rd: int, base: int, off: int) -> None:
+        off = off - 0x10 if (off & 0x08) else off
+        if (base == Reg.RSCRATCH1):
+            # Stack mode: store the byte at the stack pointer, then post-adjust it.
+            self.write_mem(self.get_csr(Csr.SADDR), self.get_reg(rd))
+            self.set_csr(Csr.SADDR, self.get_csr(Csr.SADDR) + off)
+        else:
+            # The base register holds the high byte; its successor holds the low byte.
+            address: int = (self.get_reg(base) << WORD_SIZE) | self.get_reg(base + 1)
+            self.write_mem(address + off, self.get_reg(rd))
 
 
     def _rsr(self, rs1: int, rs2: int, csr: int) -> None:

@@ -492,11 +492,11 @@ asr4:
 putc:
 _putc_wait:
         set2 re rf 0x8010           // TX_READY
-        ld rc re rf
+        ld rc re 0
         cmp rc r0
         jmpi equal _putc_wait
         set2 re rf 0x8011           // TX_DATA
-        st ra re rf
+        st ra re 0
         ret
 
 //------------------------------------------------------------------------------
@@ -530,14 +530,14 @@ hit_sphere:
         set rz 0x00
         set ra 0x13                 // CAM_B.y = 19
         set2 re rf d_y
-        ld rb re rf
+        ld rb re 0
         call mul_uu
         mov ra rt
         call sext8
         add2 ry rz ry rz ra rb
         set ra 0x86                 // CAM_B.z = -122
         set2 re rf d_z
-        ld rb re rf
+        ld rb re 0
         call mul_uu
         mov ra rt
         call sext8
@@ -546,7 +546,7 @@ hit_sphere:
         mov rb rz
         call clamp16to8             // rt = b
         set2 re rf hs_b
-        st rt re rf
+        st rt re 0
         cmp rt r0
         jmpi less _hs_bneg          // b < 0 -> in front
         set rt 0x00
@@ -554,37 +554,37 @@ hit_sphere:
 _hs_bneg:
         // px = CAM_B.x - mul_uu(b,d.x) = -mul_uu(b,d.x)   (CAM_B.x = 0)
         set2 re rf hs_b
-        ld ra re rf
+        ld ra re 0
         set2 re rf d_x
-        ld rb re rf
+        ld rb re 0
         call mul_uu
         set rc 0x00
         sub rc rc rt
         set2 re rf hs_px
-        st rc re rf
+        st rc re 0
         // py = CAM_B.y(19) - mul_uu(b,d.y)
         set2 re rf hs_b
-        ld ra re rf
+        ld ra re 0
         set2 re rf d_y
-        ld rb re rf
+        ld rb re 0
         call mul_uu
         set rc 0x13
         sub rc rc rt
         set2 re rf hs_py
-        st rc re rf
+        st rc re 0
         // pz = CAM_B.z(-122) - mul_uu(b,d.z)
         set2 re rf hs_b
-        ld ra re rf
+        ld ra re 0
         set2 re rf d_z
-        ld rb re rf
+        ld rb re 0
         call mul_uu
         set rc 0x86
         sub rc rc rt
         set2 re rf hs_pz
-        st rc re rf
+        st rc re 0
         // range: any |component| > 63 -> miss
         set2 re rf hs_px
-        ld ra re rf
+        ld ra re 0
         set rc 0x3F
         cmp ra rc
         jmpi greater _hs_miss
@@ -592,7 +592,7 @@ _hs_bneg:
         cmp ra rc
         jmpi less _hs_miss
         set2 re rf hs_py
-        ld ra re rf
+        ld ra re 0
         set rc 0x3F
         cmp ra rc
         jmpi greater _hs_miss
@@ -600,7 +600,7 @@ _hs_bneg:
         cmp ra rc
         jmpi less _hs_miss
         set2 re rf hs_pz
-        ld ra re rf
+        ld ra re 0
         set rc 0x3F
         cmp ra rc
         jmpi greater _hs_miss
@@ -609,106 +609,106 @@ _hs_bneg:
         jmpi less _hs_miss
         // px,py,pz <<= 1  (Q2.6 -> Q1.7)
         set2 re rf hs_px
-        ld ra re rf
+        ld ra re 0
         add ra ra ra
-        st ra re rf
+        st ra re 0
         set2 re rf hs_py
-        ld ra re rf
+        ld ra re 0
         add ra ra ra
-        st ra re rf
+        st ra re 0
         set2 re rf hs_pz
-        ld ra re rf
+        ld ra re 0
         add ra ra ra
-        st ra re rf
+        st ra re 0
         // h2 = 0 ; accumulate squares with early miss if > 127
         set2 re rf hs_h2
-        st r0 re rf
+        st r0 re 0
         // q = mul_uu(px,px)
         set2 re rf hs_px
-        ld ra re rf
+        ld ra re 0
         mov rb ra
         call mul_uu
         set2 re rf hs_h2
-        ld rc re rf
+        ld rc re 0
         set rd 0x7F
         sub rd rd rc                // 127 - h2
         cmp rt rd
         jmpi greater _hs_miss
         add rc rc rt
         set2 re rf hs_h2
-        st rc re rf
+        st rc re 0
         // q = mul_uu(py,py)
         set2 re rf hs_py
-        ld ra re rf
+        ld ra re 0
         mov rb ra
         call mul_uu
         set2 re rf hs_h2
-        ld rc re rf
+        ld rc re 0
         set rd 0x7F
         sub rd rd rc
         cmp rt rd
         jmpi greater _hs_miss
         add rc rc rt
         set2 re rf hs_h2
-        st rc re rf
+        st rc re 0
         // q = mul_uu(pz,pz)
         set2 re rf hs_pz
-        ld ra re rf
+        ld ra re 0
         mov rb ra
         call mul_uu
         set2 re rf hs_h2
-        ld rc re rf
+        ld rc re 0
         set rd 0x7F
         sub rd rd rc
         cmp rt rd
         jmpi greater _hs_miss
         add rc rc rt
         set2 re rf hs_h2
-        st rc re rf
+        st rc re 0
         // s = sqrt_u(127 - h2)
         set2 re rf hs_h2
-        ld rc re rf
+        ld rc re 0
         set ra 0x7F
         sub ra ra rc
         call sqrt_u
         set2 re rf hs_s
-        st rt re rf
+        st rt re 0
         // n.x = clamp8(px - mul_uu(s,d.x))
         set2 re rf hs_s
-        ld ra re rf
+        ld ra re 0
         set2 re rf d_x
-        ld rb re rf
+        ld rb re 0
         call mul_uu
         set2 re rf hs_px
-        ld ra re rf
+        ld ra re 0
         mov rb rt
         call clamp8_diff
         set2 re rf n_x
-        st rt re rf
+        st rt re 0
         // n.y = clamp8(py - mul_uu(s,d.y))
         set2 re rf hs_s
-        ld ra re rf
+        ld ra re 0
         set2 re rf d_y
-        ld rb re rf
+        ld rb re 0
         call mul_uu
         set2 re rf hs_py
-        ld ra re rf
+        ld ra re 0
         mov rb rt
         call clamp8_diff
         set2 re rf n_y
-        st rt re rf
+        st rt re 0
         // n.z = clamp8(pz - mul_uu(s,d.z))
         set2 re rf hs_s
-        ld ra re rf
+        ld ra re 0
         set2 re rf d_z
-        ld rb re rf
+        ld rb re 0
         call mul_uu
         set2 re rf hs_pz
-        ld ra re rf
+        ld ra re 0
         mov rb rt
         call clamp8_diff
         set2 re rf n_z
-        st rt re rf
+        st rt re 0
         set rt 0x01
         goto _hs_ret
 _hs_miss:
@@ -728,30 +728,30 @@ shadowed:
         push2 re rf
         push2 ry rz
         set2 re rf shd_px
-        st ra re rf
+        st ra re 0
         set2 re rf shd_py
-        st rb re rf
+        st rb re 0
         set2 re rf shd_pz
-        st rc re rf
+        st rc re 0
         // b = clamp8(mul_su(px,LIGHT.x)+mul_su(py,LIGHT.y)+mul_su(pz,LIGHT.z))
         set ry 0x00
         set rz 0x00
         set2 re rf shd_px
-        ld ra re rf
+        ld ra re 0
         set rb 0xCA                 // LIGHT.x = -54
         call mul_uu
         mov ra rt
         call sext8
         add2 ry rz ry rz ra rb
         set2 re rf shd_py
-        ld ra re rf
+        ld ra re 0
         set rb 0x6C                 // LIGHT.y = 108
         call mul_uu
         mov ra rt
         call sext8
         add2 ry rz ry rz ra rb
         set2 re rf shd_pz
-        ld ra re rf
+        ld ra re 0
         set rb 0xD5                 // LIGHT.z = -43
         call mul_uu
         mov ra rt
@@ -761,7 +761,7 @@ shadowed:
         mov rb rz
         call clamp16to8             // rt = b
         set2 re rf shd_b
-        st rt re rf
+        st rt re 0
         cmp rt r0
         jmpi greater _shd_bpos
         set rt 0x00
@@ -769,35 +769,35 @@ shadowed:
 _shd_bpos:
         // qx = px - mul_su(b,LIGHT.x)   (8-bit wrap, matches (int8_t) cast)
         set2 re rf shd_b
-        ld ra re rf
+        ld ra re 0
         set rb 0xCA
         call mul_uu
         set2 re rf shd_px
-        ld rc re rf
+        ld rc re 0
         sub rc rc rt
         set2 re rf shd_qx
-        st rc re rf
+        st rc re 0
         set2 re rf shd_b
-        ld ra re rf
+        ld ra re 0
         set rb 0x6C
         call mul_uu
         set2 re rf shd_py
-        ld rc re rf
+        ld rc re 0
         sub rc rc rt
         set2 re rf shd_qy
-        st rc re rf
+        st rc re 0
         set2 re rf shd_b
-        ld ra re rf
+        ld ra re 0
         set rb 0xD5
         call mul_uu
         set2 re rf shd_pz
-        ld rc re rf
+        ld rc re 0
         sub rc rc rt
         set2 re rf shd_qz
-        st rc re rf
+        st rc re 0
         // range: any |q| > 16 -> not shadowed
         set2 re rf shd_qx
-        ld ra re rf
+        ld ra re 0
         set rc 0x10
         cmp ra rc
         jmpi greater _shd_miss
@@ -805,7 +805,7 @@ _shd_bpos:
         cmp ra rc
         jmpi less _shd_miss
         set2 re rf shd_qy
-        ld ra re rf
+        ld ra re 0
         set rc 0x10
         cmp ra rc
         jmpi greater _shd_miss
@@ -813,7 +813,7 @@ _shd_bpos:
         cmp ra rc
         jmpi less _shd_miss
         set2 re rf shd_qz
-        ld ra re rf
+        ld ra re 0
         set rc 0x10
         cmp ra rc
         jmpi greater _shd_miss
@@ -824,21 +824,21 @@ _shd_bpos:
         set ry 0x00
         set rz 0x00
         set2 re rf shd_qx
-        ld ra re rf
+        ld ra re 0
         mov rb ra
         call mul_ss
         mov ra rt
         call sext8
         add2 ry rz ry rz ra rb
         set2 re rf shd_qy
-        ld ra re rf
+        ld ra re 0
         mov rb ra
         call mul_ss
         mov ra rt
         call sext8
         add2 ry rz ry rz ra rb
         set2 re rf shd_qz
-        ld ra re rf
+        ld ra re 0
         mov rb ra
         call mul_ss
         mov ra rt
@@ -877,7 +877,7 @@ shade:
         cmp rt r0
         jmpi not_equal _shade_hit
         set2 re rf d_y
-        ld ra re rf
+        ld ra re 0
         set rc 0xEA                 // -22
         cmp ra rc
         jmpi less _shade_floor      // d.y < -22 -> floor
@@ -888,21 +888,21 @@ _shade_hit:
         set ry 0x00
         set rz 0x00
         set2 re rf n_x
-        ld ra re rf
+        ld ra re 0
         set rb 0xCA
         call mul_uu
         mov ra rt
         call sext8
         add2 ry rz ry rz ra rb
         set2 re rf n_y
-        ld ra re rf
+        ld ra re 0
         set rb 0x6C
         call mul_uu
         mov ra rt
         call sext8
         add2 ry rz ry rz ra rb
         set2 re rf n_z
-        ld ra re rf
+        ld ra re 0
         set rb 0xD5
         call mul_uu
         mov ra rt
@@ -919,41 +919,41 @@ _sh_ndlok:
         // hx=(LIGHT.x-d.x)>>1 ; hy=(LIGHT.y-d.y)>>1 ; hz=(LIGHT.z-d.z)>>1
         set ra 0xCA
         set2 re rf d_x
-        ld rb re rf
+        ld rb re 0
         call halfdiff
         set2 re rf sh_hx
-        st rt re rf
+        st rt re 0
         set ra 0x6C
         set2 re rf d_y
-        ld rb re rf
+        ld rb re 0
         call halfdiff
         set2 re rf sh_hy
-        st rt re rf
+        st rt re 0
         set ra 0xD5
         set2 re rf d_z
-        ld rb re rf
+        ld rb re 0
         call halfdiff
         set2 re rf sh_hz
-        st rt re rf
+        st rt re 0
         // hl = sqrt_u(clamp8(hx*hx + hy*hy + hz*hz))
         set ry 0x00
         set rz 0x00
         set2 re rf sh_hx
-        ld ra re rf
+        ld ra re 0
         mov rb ra
         call mul_uu
         mov ra rt
         call sext8
         add2 ry rz ry rz ra rb
         set2 re rf sh_hy
-        ld ra re rf
+        ld ra re 0
         mov rb ra
         call mul_uu
         mov ra rt
         call sext8
         add2 ry rz ry rz ra rb
         set2 re rf sh_hz
-        ld ra re rf
+        ld ra re 0
         mov rb ra
         call mul_uu
         mov ra rt
@@ -965,41 +965,41 @@ _sh_ndlok:
         mov ra rt
         call sqrt_u                 // rt = hl
         set2 re rf sh_hl
-        st rt re rf
+        st rt re 0
         // spec = clamp8(n.x*div_uu(hx,hl) + n.y*div_uu(hy,hl) + n.z*div_uu(hz,hl))
         set ry 0x00
         set rz 0x00
         set2 re rf sh_hx
-        ld ra re rf
+        ld ra re 0
         set2 re rf sh_hl
-        ld rb re rf
+        ld rb re 0
         call div128
         set2 re rf n_x
-        ld ra re rf
+        ld ra re 0
         mov rb rt
         call mul_uu
         mov ra rt
         call sext8
         add2 ry rz ry rz ra rb
         set2 re rf sh_hy
-        ld ra re rf
+        ld ra re 0
         set2 re rf sh_hl
-        ld rb re rf
+        ld rb re 0
         call div128
         set2 re rf n_y
-        ld ra re rf
+        ld ra re 0
         mov rb rt
         call mul_uu
         mov ra rt
         call sext8
         add2 ry rz ry rz ra rb
         set2 re rf sh_hz
-        ld ra re rf
+        ld ra re 0
         set2 re rf sh_hl
-        ld rb re rf
+        ld rb re 0
         call div128
         set2 re rf n_z
-        ld ra re rf
+        ld ra re 0
         mov rb rt
         call mul_uu
         mov ra rt
@@ -1035,7 +1035,7 @@ _sh_specok:
         mov rb rv
         call clamp8_sum2
         set2 re rf col_x
-        st rt re rf
+        st rt re 0
         // col.y = clamp8(mul_uu(k,38) + spec)
         mov ra rw
         set rb 0x26                 // 38
@@ -1044,7 +1044,7 @@ _sh_specok:
         mov rb rv
         call clamp8_sum2
         set2 re rf col_y
-        st rt re rf
+        st rt re 0
         // col.z = clamp8(mul_uu(k,28) + spec)
         mov ra rw
         set rb 0x1C                 // 28
@@ -1053,45 +1053,45 @@ _sh_specok:
         mov rb rv
         call clamp8_sum2
         set2 re rf col_z
-        st rt re rf
+        st rt re 0
         goto _shade_done
 //---- floor ----
 _shade_floor:
         // t = div_su((-16 - CAM_S.y), d.y) = div_uu(-21, d.y)
         set ra 0xEB                 // -21
         set2 re rf d_y
-        ld rb re rf
+        ld rb re 0
         call div128
         mov ru rt                   // ru = t
         // px = CAM_S.x(0) + mul_su(t,d.x)
         mov ra ru
         set2 re rf d_x
-        ld rb re rf
+        ld rb re 0
         call mul_uu
         set rc 0x00
         add rc rc rt
         set2 re rf fpx
-        st rc re rf
+        st rc re 0
         // py = -16
         set rc 0xF0
         set2 re rf fpy
-        st rc re rf
+        st rc re 0
         // pz = CAM_S.z(-30) + mul_su(t,d.z)
         mov ra ru
         set2 re rf d_z
-        ld rb re rf
+        ld rb re 0
         call mul_uu
         set rc 0xE2                 // -30
         add rc rc rt
         set2 re rf fpz
-        st rc re rf
+        st rc re 0
         // chk = (((px>>4)+(pz>>4)) & 1) ? 30 : 115
         set2 re rf fpx
-        ld ra re rf
+        ld ra re 0
         call asr4
         mov rv rt
         set2 re rf fpz
-        ld ra re rf
+        ld ra re 0
         call asr4
         add rv rv rt
         set rc 0x01
@@ -1106,11 +1106,11 @@ _fl_chkdone:
         // ndl = LIGHT.y(108) ; if shadowed(px,py,pz) ndl = 0
         set rx 0x6C
         set2 re rf fpx
-        ld ra re rf
+        ld ra re 0
         set2 re rf fpy
-        ld rb re rf
+        ld rb re 0
         set2 re rf fpz
-        ld rc re rf
+        ld rc re 0
         call shadowed
         cmp rt r0
         jmpi equal _fl_noshadow
@@ -1127,17 +1127,17 @@ _fl_noshadow:
         mov rb rc
         call mul_uu
         set2 re rf col_x
-        st rt re rf
+        st rt re 0
         set2 re rf col_y
-        st rt re rf
+        st rt re 0
         set2 re rf col_z
-        st rt re rf
+        st rt re 0
         goto _shade_done
 //---- sky ----
 _shade_sky:
         // k = (d.y + 127) >> 1
         set2 re rf d_y
-        ld ra re rf
+        ld ra re 0
         set rb 0x7F
         call hsum
         mov rw rt                   // rw = k
@@ -1148,7 +1148,7 @@ _shade_sky:
         set rc 0x7F
         sub rc rc rt
         set2 re rf col_x
-        st rc re rf
+        st rc re 0
         // col.y = 127 - mul_uu(k,23)
         mov ra rw
         set rb 0x17                 // 23
@@ -1156,11 +1156,11 @@ _shade_sky:
         set rc 0x7F
         sub rc rc rt
         set2 re rf col_y
-        st rc re rf
+        st rc re 0
         // col.z = 127
         set rc 0x7F
         set2 re rf col_z
-        st rc re rf
+        st rc re 0
 _shade_done:
         pop2 ry rz
         pop2 rw rx
@@ -1181,35 +1181,35 @@ render_pixel:
         set rc 0x40
         sub ra ra rc
         set2 re rf vx
-        st ra re rf
+        st ra re 0
         // v.y = 64 - y
         set rc 0x40
         sub rb rc rb
         set2 re rf vy
-        st rb re rf
+        st rb re 0
         // v.z = 64
         set ra 0x40
         set2 re rf vz
-        st ra re rf
+        st ra re 0
         // len = sqrt_u(clamp8(vx*vx + vy*vy + vz*vz))
         set ry 0x00
         set rz 0x00
         set2 re rf vx
-        ld ra re rf
+        ld ra re 0
         mov rb ra
         call mul_uu
         mov ra rt
         call sext8
         add2 ry rz ry rz ra rb
         set2 re rf vy
-        ld ra re rf
+        ld ra re 0
         mov rb ra
         call mul_uu
         mov ra rt
         call sext8
         add2 ry rz ry rz ra rb
         set2 re rf vz
-        ld ra re rf
+        ld ra re 0
         mov rb ra
         call mul_uu
         mov ra rt
@@ -1221,42 +1221,42 @@ render_pixel:
         mov ra rt
         call sqrt_u                 // rt = len
         set2 re rf dlen
-        st rt re rf
+        st rt re 0
         // d.x = div_uu(vx,len)
         set2 re rf vx
-        ld ra re rf
+        ld ra re 0
         set2 re rf dlen
-        ld rb re rf
+        ld rb re 0
         call div128
         set2 re rf d_x
-        st rt re rf
+        st rt re 0
         // d.y = div_uu(vy,len)
         set2 re rf vy
-        ld ra re rf
+        ld ra re 0
         set2 re rf dlen
-        ld rb re rf
+        ld rb re 0
         call div128
         set2 re rf d_y
-        st rt re rf
+        st rt re 0
         // d.z = div_uu(vz,len)
         set2 re rf vz
-        ld ra re rf
+        ld ra re 0
         set2 re rf dlen
-        ld rb re rf
+        ld rb re 0
         call div128
         set2 re rf d_z
-        st rt re rf
+        st rt re 0
         // col = shade(d)
         call shade
         // emit col.x ; emit col.y ; emit col.z
         set2 re rf col_x
-        ld ra re rf
+        ld ra re 0
         call emit
         set2 re rf col_y
-        ld ra re rf
+        ld ra re 0
         call emit
         set2 re rf col_z
-        ld ra re rf
+        ld ra re 0
         call emit
         pop2 ry rz
         pop2 re rf

@@ -441,6 +441,7 @@ describing instruction behavior:
 - `PC`: The program counter
 - `Halt`: Stop processor execution
 - `Update`: Update a value using a definition/ruleset provided elsewhere in this chapter
+- `SignExtN`: Copy the MSB of a narrow field to all bits added when converting to an `N`-bit field
 - `If`: Perform the encapsulated operations only if a condition is true
 
 ### `HALT`
@@ -721,9 +722,17 @@ Register[RD] = IMM;
 ```
 
 ### `LD`
-Usage: `LD RD RS1 RS2`
+Usage: `LD RD RSB IMM`
 
-Description: Load the 8-bit word at the address formed by `{RS1, RS2}` into `RD`.
+Description: Load the 8-bit word at the address formed by `{RSB, RSB + 1} + IMM` into `RD`. The
+base address is stored in two adjacent general purpose registers; the instruction names the high
+register `RSB`, and the low byte is taken from register `RSB + 1`.
+
+The encoding `0xF` for the base register `RSB` is reserved for stack operations and has a separate
+behavior.
+
+The immediate operand is a 4-bit two's complement integer ranging from `-8` to `7`. It specifies a
+byte offset to add to the base address in the general purpose register pair.
 
 Encoding:
 ```{python}
@@ -734,8 +743,8 @@ SVG(wavedrom.render(str({
     "reg": [
         *[{"name": bit, "bits": 1} for bit in reversed("1010")],
         {"name": "RD", "bits": 4},
-        {"name": "RS1", "bits": 4},
-        {"name": "RS2", "bits": 4}
+        {"name": "RSB", "bits": 4},
+        {"name": "IMM", "bits": 4}
     ],
     "config": {"bits": 16}
 })).tostring())
@@ -743,13 +752,27 @@ SVG(wavedrom.render(str({
 
 Meaning:
 ```
-MARK
+If (RSB != 0xF) {
+  Register[RD] = Memory[((Register[RSB] << 0x08) | Register[RSB + 1]) + SignExt16 IMM];
+}
+If (RSB == 0xF) {
+  Special[SADDR] = Special[SADDR] + SignExt16 IMM;
+  Register[RD] = Memory[Special[SADDR]];
+}
 ```
 
 ### `ST`
-Usage: `ST RD RS1 RS2`
+Usage: `ST RD RSB IMM`
 
-Description: Store the 8-bit word in `RD` to the address formed by `{RS1, RS2}`.
+Description: Store the 8-bit word in `RD` to the address formed by `{RSB, RSB + 1} + IMM`. The
+base address is stored in two adjacent general purpose registers; the instruction names the high
+register `RSB`, and the low byte is taken from register `RSB + 1`.
+
+The encoding `0xF` for the base register `RSB` is reserved for stack operations and has a separate
+behavior.
+
+The immediate operand is a 4-bit two's complement integer ranging from `-8` to `7`. It specifies a
+byte offset to add to the base address in the general purpose register pair.
 
 Encoding:
 ```{python}
@@ -760,8 +783,8 @@ SVG(wavedrom.render(str({
     "reg": [
         *[{"name": bit, "bits": 1} for bit in reversed("1011")],
         {"name": "RD", "bits": 4},
-        {"name": "RS1", "bits": 4},
-        {"name": "RS2", "bits": 4}
+        {"name": "RSB", "bits": 4},
+        {"name": "IMM", "bits": 4}
     ],
     "config": {"bits": 16}
 })).tostring())
@@ -769,7 +792,13 @@ SVG(wavedrom.render(str({
 
 Meaning:
 ```
-MARK
+If (RSB != 0xF) {
+  Memory[((Register[RSB] << 0x08) | Register[RSB + 1]) + SignExt16 IMM] = Register[RD];
+}
+If (RSB == 0xF) {
+  Memory[Special[SADDR]] = Register[RD];
+  Special[SADDR] = Special[SADDR] + SignExt16 IMM;
+}
 ```
 
 ### `RSR`
@@ -1077,7 +1106,7 @@ Usage: `POP RD`
 
 Meaning:
 ```
-MARK
+LD RD RSCRATCH1 +1
 ```
 
 Description: Increment `SADDR` by 1 byte and then load the byte at the new stack address into `RD`.
@@ -1089,7 +1118,8 @@ Description: Pop a 16-bit value off the stack and into `{RD1, RD2}`.
 
 Meaning:
 ```
-MARK
+LD RD1 RSCRATCH1 +1
+LD RD2 RSCRATCH1 +1
 ```
 
 ### `PUSH`
@@ -1097,7 +1127,7 @@ Usage: `PUSH RS`
 
 Meaning:
 ```
-MARK
+ST RS RSCRATCH1 -1
 ```
 
 Description: Write `RS` onto the stack at `SADDR`, and then decrement `SADDR` by 1 byte.
@@ -1109,7 +1139,8 @@ Description: Push a 16-bit value onto the stack from `{RS1, RS2}`.
 
 Meaning:
 ```
-MARK
+ST RS2 RSCRATCH1 -1
+ST RS1 RSCRATCH1 -1
 ```
 
 ### `RET`
