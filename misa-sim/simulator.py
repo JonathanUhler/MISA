@@ -73,6 +73,13 @@ class Cmp(IntEnum):
     LESS_EQUAL    = 0x6
 
 
+class Extn(IntEnum):
+    DYNAMICHW = 0b0000
+    SYSCALL   = 0b0010
+    PRIVILEGE = 0b0100
+    INTERRUPT = 0b1000
+
+
 class Vector(IntEnum):
     INTERRUPT = 0xFFF8
     SYSCALL   = 0xFFFA
@@ -191,6 +198,10 @@ class Simulator:
         return bool(self.get_csr(Csr.PRIVS) & 0b0001 == 0)
 
 
+    def _has_extension(self, extn: Extn) -> bool:
+        return bool(self.get_csr(Csr.EXTNS) & extn)
+
+
     def get_csr(self, csr: Csr | int) -> int:
         if (not isinstance(csr, Csr)):
             try:
@@ -283,10 +294,10 @@ class Simulator:
         try:
             self.machine.clock.advance()
             self.machine.poll()
-            if (self.machine.irq.pending() and (self.get_csr(Csr.EXTNS) & 0b1000)
-                    and not self.in_interrupt):
+            if (self.machine.irq.pending() and self._has_extension(Extn.INTERRUPT) and not self.in_interrupt):
                 self._take_interrupt()
                 return
+
             inst: int = (self.read_mem(self.pc + 1) << WORD_SIZE) | self.read_mem(self.pc)
             nib0: int = (inst & 0x000F) >> (0 * NIB_SIZE)
             nib1: int = (inst & 0x00F0) >> (1 * NIB_SIZE)
