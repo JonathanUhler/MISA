@@ -1,0 +1,10 @@
+name = "misa-spec"
+version = "0.1.0"
+defaultTargets = ["misa-spec"]
+
+[[lean_lib]]
+name = "MisaSpec"
+
+[[lean_exe]]
+name = "misa-spec"
+root = "Main"
