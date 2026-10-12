@@ -159,6 +159,8 @@ and support the following:
 | `N` | 2 | Whether the last ALU operation's output was negative (MSB = 1).  |
 | `V` | 3 | Whether the last ALU operation's output overflowed (sign inversion). |
 
+The `C` and `V` flags must always be `0` after executing `AND`, `OR`, `XOR`, or `RRC`.
+
 ```{python}
 #| echo: false
 import wavedrom

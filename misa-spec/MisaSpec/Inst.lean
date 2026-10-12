@@ -37,8 +37,8 @@ def Inst.enc : Inst -> InstWord
   | .and    rd  rs1 rs2 =>          rs2.enc ++  rs1.enc ++  rd.enc ++ 0b0101#4
   | .or     rd  rs1 rs2 =>          rs2.enc ++  rs1.enc ++  rd.enc ++ 0b0110#4
   | .xor    rd  rs1 rs2 =>          rs2.enc ++  rs1.enc ++  rd.enc ++ 0b0111#4
-  | rrc     rd  rs      =>         0b0000#4 ++   rs.enc ++  rd.enc ++ 0b1000#4
-  | set     rd  imm     =>                          imm ++  rd.enc ++ 0b1001#4
+  | .rrc    rd  rs      =>         0b0000#4 ++   rs.enc ++  rd.enc ++ 0b1000#4
+  | .set    rd  imm     =>                          imm ++  rd.enc ++ 0b1001#4
   | .ld     rd  rsb imm =>              imm ++  rsb.enc ++  rd.enc ++ 0b1010#4
   | .st     rd  rsb imm =>              imm ++  rsb.enc ++  rd.enc ++ 0b1011#4
   | .rsr    rs1 rs2 csr =>          csr.enc ++  rs2.enc ++ rs1.enc ++ 0b1100#4
@@ -48,7 +48,36 @@ def Inst.enc : Inst -> InstWord
   | .jmpCsr csr cmp     => 0b1#1 ++ cmp.enc ++ 0b0000#4 ++ csr.enc ++ 0b1111#4
 
 
---def Inst.dec : InstWord -> Option Inst  
+def Inst.dec (w : InstWord) : Option Inst := do
+  let n0     : HalfWord := w.extractLsb' 0 4
+  let n1     : HalfWord := w.extractLsb' 4 4
+  let n2     : HalfWord := w.extractLsb' 8 4
+  let n3     : HalfWord := w.extractLsb' 12 4
+  let w1     : DataWord := w.extractLsb' 8 8
+  let cmp    : CmpWord  := w.extractLsb' 12 3
+  let target : Bool     := w.getLsbD 15
+  match n0 with
+  | 0b0000#4 => return .halt (<- GpReg.dec n1)
+  | 0b0001#4 => return .add (<- GpReg.dec n1) (<- GpReg.dec n2) (<- GpReg.dec n3)
+  | 0b0010#4 => return .adc (<- GpReg.dec n1) (<- GpReg.dec n2) (<- GpReg.dec n3)
+  | 0b0011#4 => return .sub (<- GpReg.dec n1) (<- GpReg.dec n2) (<- GpReg.dec n3)
+  | 0b0100#4 => return .sbb (<- GpReg.dec n1) (<- GpReg.dec n2) (<- GpReg.dec n3)
+  | 0b0101#4 => return .and (<- GpReg.dec n1) (<- GpReg.dec n2) (<- GpReg.dec n3)
+  | 0b0110#4 => return .or  (<- GpReg.dec n1) (<- GpReg.dec n2) (<- GpReg.dec n3)
+  | 0b0111#4 => return .xor (<- GpReg.dec n1) (<- GpReg.dec n2) (<- GpReg.dec n3)
+  | 0b1000#4 => return .rrc (<- GpReg.dec n1) (<- GpReg.dec n2)
+  | 0b1001#4 => return .set (<- GpReg.dec n1) w1
+  | 0b1010#4 => return .ld  (<- GpReg.dec n1) (<- GpReg.dec n2) n3
+  | 0b1011#4 => return .st  (<- GpReg.dec n1) (<- GpReg.dec n2) n3
+  | 0b1100#4 => return .rsr (<- GpReg.dec n1) (<- GpReg.dec n2) (<- CsrReg.dec n3)
+  | 0b1101#4 => return .wsr (<- GpReg.dec n1) (<- GpReg.dec n2) (<- CsrReg.dec n3)
+  | 0b1110#4 => return .jal (<- GpReg.dec n1) (<- GpReg.dec n2) (<- CmpFlag.dec cmp)
+  | 0b1111#4 =>
+    if target then
+      return .jmpCsr (<- CsrReg.dec n1) (<- CmpFlag.dec cmp)
+    else
+      return .jmp (<- GpReg.dec n1) (<- GpReg.dec n2) (<- CmpFlag.dec cmp)
+  | _  => failure  -- Unreachable
 
 
 end MisaSpec
