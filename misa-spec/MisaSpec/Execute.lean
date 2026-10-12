@@ -140,23 +140,23 @@ def execute (q : State) : State :=
   | none      => q.fault (CsrCause.make FaultKind.illegalInstruction)
   | some inst =>
     match inst with
-    | .halt rs => executeHalt q rs
-    | .add rd rs1 rs2 => executeAdd q rd rs1 rs2
-    | .adc rd rs1 rs2 => executeAdc q rd rs1 rs2
-    | .sub rd rs1 rs2 => executeSub q rd rs1 rs2
-    | .sbb rd rs1 rs2 => executeSbb q rd rs1 rs2
-    | .and rd rs1 rs2 => executeAnd q rd rs1 rs2
-    | .or rd rs1 rs2 => executeOr q rd rs1 rs2
-    | .xor rd rs1 rs2 => executeXor q rd rs1 rs2
-    | .rrc rd rs => executeRrc q rd rs
-    | .set rd imm => executeSet q rd imm
-    | .ld rd rsb imm => executeLd q rd rsb imm
-    | .st rd rsb imm => executeSt q rd rsb imm
-    | .rsr rs1 rs2 csr => executeRsr q rs1 rs2 csr
-    | .wsr rs1 rs2 csr => executeWsr q rs1 rs2 csr
-    | .jal rs1 rs2 cmp => executeJal q rs1 rs2 cmp
-    | .jmp rs1 rs2 cmp => executeJmp q rs1 rs2 cmp
-    | .jmpCsr csr cmp => executeJmpCsr q csr cmp
+    | .halt   rs          => executeHalt   q rs
+    | .add    rd  rs1 rs2 => executeAdd    q rd  rs1 rs2
+    | .adc    rd  rs1 rs2 => executeAdc    q rd  rs1 rs2
+    | .sub    rd  rs1 rs2 => executeSub    q rd  rs1 rs2
+    | .sbb    rd  rs1 rs2 => executeSbb    q rd  rs1 rs2
+    | .and    rd  rs1 rs2 => executeAnd    q rd  rs1 rs2
+    | .or     rd  rs1 rs2 => executeOr     q rd  rs1 rs2
+    | .xor    rd  rs1 rs2 => executeXor    q rd  rs1 rs2
+    | .rrc    rd  rs      => executeRrc    q rd  rs
+    | .set    rd  imm     => executeSet    q rd  imm
+    | .ld     rd  rsb imm => executeLd     q rd  rsb imm
+    | .st     rd  rsb imm => executeSt     q rd  rsb imm
+    | .rsr    rs1 rs2 csr => executeRsr    q rs1 rs2 csr
+    | .wsr    rs1 rs2 csr => executeWsr    q rs1 rs2 csr
+    | .jal    rs1 rs2 cmp => executeJal    q rs1 rs2 cmp
+    | .jmp    rs1 rs2 cmp => executeJmp    q rs1 rs2 cmp
+    | .jmpCsr csr cmp     => executeJmpCsr q csr cmp
 
 
 end MisaSpec

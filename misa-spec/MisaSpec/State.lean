@@ -44,6 +44,18 @@ def State.fault (q : State) (cause : SpecWord) : State :=
   { q with pc := q.memory 0xFFFD ++ q.memory 0xFFFC }
 
 
+def State.first (bytes : ByteArray) : State :=
+  let mem : AddrWord -> DataWord := fun a =>
+    let i := a.toNat
+    if i < bytes.size then BitVec.ofNat 8 (bytes.get! i).toNat else 0
+  { register := fun _ => 0,
+    special  := fun _ => 0,
+    memory   := mem,
+    check    := CsrFlags.eval (CsrFlags.dec 0),
+    pc       := mem 0xFFFF ++ mem 0xFFFE,
+    halted   := false }
+
+
 def State.next (q : State) : State :=
   let pc' := q.pc + 2
   if pc' < q.pc then

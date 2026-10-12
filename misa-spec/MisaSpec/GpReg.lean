@@ -37,4 +37,12 @@ def GpReg.dec (n : HalfWord) : Option GpReg :=
   GpReg.all.find? (·.enc == n)
 
 
+def GpReg.name : GpReg -> String
+  | .r0 => "r0" | .ra => "ra" | .rb => "rb" | .rc => "rc"
+  | .rd => "rd" | .re => "re" | .rf => "rf" | .ru => "ru"
+  | .rv => "rv" | .rw => "rw" | .rx => "rx" | .ry => "ry"
+  | .rz => "rz" | .rt => "rt"
+  | .rscratch0 => "rscratch0" | .rscratch1 => "rscratch1"
+
+
 end MisaSpec

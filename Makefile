@@ -8,7 +8,11 @@ INSTALL_DIR ?= install
 all: build install
 
 
-build: build-toolchain
+build: build-spec build-toolchain
+
+
+build-spec:
+	cd misa-spec && lake build
 
 
 build-toolchain:
@@ -32,6 +36,7 @@ install: $(CLI_TARGETS) $(SIM_TARGETS)
 	@mkdir -p $(INSTALL_DIR)
 	cp cli/helpers.py $(INSTALL_DIR)
 	cp misa-sim/simulator.py $(INSTALL_DIR)
+	cp misa-spec/.lake/build/bin/misa-spec $(INSTALL_DIR)
 	stack install --work-dir $(BUILD_DIR) --local-bin-path $(INSTALL_DIR)
 
 

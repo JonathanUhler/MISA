@@ -26,6 +26,14 @@ def CsrReg.dec (n : HalfWord) : Option CsrReg :=
   CsrReg.all.find? (·.enc == n)
 
 
+def CsrReg.name : CsrReg -> String
+  | .saddr => "saddr"
+  | .raddr => "raddr"
+  | .flags => "flags"
+  | .cause => "cause"
+  | .extns => "extns"
+
+
 structure CsrFlags where
   z : Bool
   c : Bool
@@ -102,6 +110,14 @@ def FaultKind.enc : FaultKind -> BitVec 6
 
 def FaultKind.dec (n : BitVec 6) : Option FaultKind :=
   FaultKind.all.find? (·.enc == n)
+
+
+def FaultKind.name : FaultKind -> String
+  | .none               => "none"
+  | .haltInstruction    => "halt"
+  | .illegalInstruction => "illegal-instruction"
+  | .addressOverflow    => "address-overflow"
+  | .pcOverflow         => "pc-overflow"
 
 
 structure CsrCause where
