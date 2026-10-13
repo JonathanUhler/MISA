@@ -7,19 +7,26 @@ namespace MisaSpec
 
 inductive CsrReg where
   | saddr | raddr | flags | cause | extns
-  deriving Repr
+  -- System call extension
+  | retsc
+  deriving DecidableEq, Repr
 
 
 def CsrReg.all : List CsrReg :=
-  [.saddr, .raddr, .flags, .cause, .extns]
+  [
+    .saddr, .raddr, .flags, .cause, .extns,
+    .retsc
+  ]
 
 
 def CsrReg.enc : CsrReg -> HalfWord
-  | .saddr => 0b0001
-  | .raddr => 0b0010
-  | .flags => 0b0011
-  | .cause => 0b0100
-  | .extns => 0b0101
+  | .saddr => 0b0001#4
+  | .raddr => 0b0010#4
+  | .flags => 0b0011#4
+  | .cause => 0b0100#4
+  | .extns => 0b0101#4
+  -- System call extension
+  | .retsc => 0b1000#4
 
 
 def CsrReg.dec (n : HalfWord) : Option CsrReg :=
@@ -32,6 +39,8 @@ def CsrReg.name : CsrReg -> String
   | .flags => "flags"
   | .cause => "cause"
   | .extns => "extns"
+  -- System call extension
+  | .retsc => "retsc"
 
 
 structure CsrFlags where
@@ -84,40 +93,55 @@ def CsrExtns.dec (n : SpecWord) : CsrExtns :=
     interrupt := n.getLsbD 3 }
 
 
+def CsrReg.availableUnder (csr : CsrReg) (extns : CsrExtns) : Bool :=
+  match csr with
+  -- System call extension
+  | .retsc => extns.syscall
+  | _      => true
+
+
 inductive FaultKind where
   -- Reason: None
-  | none
+  | nothing
   -- Reason: Instruction Usage
   | haltInstruction
   | illegalInstruction
+  | privilegedInstruction
   -- Reason: Memory Usage
   | addressOverflow
   | pcOverflow
+  | privilegedAccess
+  -- Reason: Control Event
+  | improperReturnContext
+  | conditionalContextReturn
+  | improperSystemCall
   deriving Repr
 
 
 def FaultKind.all : List FaultKind :=
-  [.none, .haltInstruction, .illegalInstruction, .addressOverflow, .pcOverflow]
+  [
+    .nothing,
+    .haltInstruction, .illegalInstruction, .privilegedInstruction,
+    .addressOverflow, .pcOverflow, .privilegedAccess,
+    .improperReturnContext, .conditionalContextReturn, .improperSystemCall
+  ]
 
 
 def FaultKind.enc : FaultKind -> BitVec 6
-  | .none               => 0b000000#6
-  | .haltInstruction    => 0b000001#6
-  | .illegalInstruction => 0b001001#6
-  | .addressOverflow    => 0b000010#6
-  | .pcOverflow         => 0b001010#6
+  | .nothing                  => 0b000000#6
+  | .haltInstruction          => 0b000001#6
+  | .illegalInstruction       => 0b001001#6
+  | .privilegedInstruction    => 0b010001#6
+  | .addressOverflow          => 0b000010#6
+  | .pcOverflow               => 0b001010#6
+  | .privilegedAccess         => 0b010010#6
+  | .improperReturnContext    => 0b000011#6
+  | .conditionalContextReturn => 0b001011#6
+  | .improperSystemCall       => 0b010011#6
 
 
 def FaultKind.dec (n : BitVec 6) : Option FaultKind :=
   FaultKind.all.find? (·.enc == n)
-
-
-def FaultKind.name : FaultKind -> String
-  | .none               => "none"
-  | .haltInstruction    => "halt"
-  | .illegalInstruction => "illegal-instruction"
-  | .addressOverflow    => "address-overflow"
-  | .pcOverflow         => "pc-overflow"
 
 
 structure CsrCause where
@@ -129,9 +153,37 @@ def CsrCause.enc (cause : CsrCause) : SpecWord :=
   cause.status ++ 0b00#2 ++ cause.kind.enc
 
 
-def CsrCause.make (kind : FaultKind) : SpecWord :=
-  let cause : CsrCause := { kind := kind, status := 0b00000000#8 }
-  cause.enc
+def CsrCause.nothing : CsrCause :=
+  { kind := .nothing, status := 0b00000000#8 }
+
+def CsrCause.haltInstruction (rs : DataWord) : CsrCause :=
+  { kind := .haltInstruction, status := rs }
+
+def CsrCause.illegalInstruction : CsrCause :=
+  { kind := .illegalInstruction, status := 0b00000000#8 }
+
+def CsrCause.privilegedInstruction : CsrCause :=
+  { kind := .privilegedInstruction, status := 0b00000000#8 }
+
+def CsrCause.addressOverflow : CsrCause :=
+  { kind := .addressOverflow, status := 0b00000000#8 }
+
+def CsrCause.pcOverflow : CsrCause :=
+  { kind := .pcOverflow, status := 0b00000000#8 }
+
+def CsrCause.privilegedAccess : CsrCause :=
+  { kind := .privilegedAccess, status := 0b00000000#8 }
+
+def CsrCause.improperReturnContext (inSyscall inInterrupt : Bool) (csr : CsrReg) : CsrCause :=
+  { kind   := .improperReturnContext,
+    status := csr.enc ++ 0b00#2 ++ BitVec.ofBool inInterrupt ++ BitVec.ofBool inSyscall }
+
+def CsrCause.conditionalContextReturn (cmp : CmpFlag) (csr : CsrReg) : CsrCause :=
+  { kind := .conditionalContextReturn, status := csr.enc ++ 0b0#1 ++ cmp.enc }
+
+def CsrCause.improperSystemCall (inSyscall inInterrupt : Bool) : CsrCause :=
+  { kind   := .improperSystemCall,
+    status := 0b000000#6 ++ BitVec.ofBool inInterrupt ++ BitVec.ofBool inSyscall }
 
 
 def CsrCause.dec (n : SpecWord) : Option CsrCause :=

@@ -6,7 +6,7 @@ namespace MisaSpec
 
 inductive CmpFlag where
   | always | equal | notEqual | greater | less | greaterEqual | lessEqual
-  deriving Repr
+  deriving DecidableEq, Repr
 
 
 def CmpFlag.all : List CmpFlag :=

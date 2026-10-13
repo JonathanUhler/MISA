@@ -8,44 +8,48 @@ namespace MisaSpec
 
 
 inductive Inst where
-  | halt   (rs : GpReg)
-  | add    (rd : GpReg)   (rs1 : GpReg)    (rs2 : GpReg)
-  | adc    (rd : GpReg)   (rs1 : GpReg)    (rs2 : GpReg)
-  | sub    (rd : GpReg)   (rs1 : GpReg)    (rs2 : GpReg)
-  | sbb    (rd : GpReg)   (rs1 : GpReg)    (rs2 : GpReg)
-  | and    (rd : GpReg)   (rs1 : GpReg)    (rs2 : GpReg)
-  | or     (rd : GpReg)   (rs1 : GpReg)    (rs2 : GpReg)
-  | xor    (rd : GpReg)   (rs1 : GpReg)    (rs2 : GpReg)
-  | rrc    (rd : GpReg)   (rs : GpReg)
-  | set    (rd : GpReg)   (imm : DataWord)
-  | ld     (rd : GpReg)   (rsb : GpReg)    (imm : HalfWord)
-  | st     (rd : GpReg)   (rsb : GpReg)    (imm : HalfWord)
-  | rsr    (rs1 : GpReg)  (rs2 : GpReg)    (csr : CsrReg)
-  | wsr    (rs1 : GpReg)  (rs2 : GpReg)    (csr : CsrReg)
-  | jal    (rs1 : GpReg)  (rs2 : GpReg)    (cmp : CmpFlag)
-  | jmp    (rs1 : GpReg)  (rs2 : GpReg)    (cmp : CmpFlag)
-  | jmpCsr (csr : CsrReg) (cmp : CmpFlag)
+  | halt    (rs : GpReg)
+  | add     (rd : GpReg)   (rs1 : GpReg)    (rs2 : GpReg)
+  | adc     (rd : GpReg)   (rs1 : GpReg)    (rs2 : GpReg)
+  | sub     (rd : GpReg)   (rs1 : GpReg)    (rs2 : GpReg)
+  | sbb     (rd : GpReg)   (rs1 : GpReg)    (rs2 : GpReg)
+  | and     (rd : GpReg)   (rs1 : GpReg)    (rs2 : GpReg)
+  | or      (rd : GpReg)   (rs1 : GpReg)    (rs2 : GpReg)
+  | xor     (rd : GpReg)   (rs1 : GpReg)    (rs2 : GpReg)
+  | rrc     (rd : GpReg)   (rs : GpReg)
+  | set     (rd : GpReg)   (imm : DataWord)
+  | ld      (rd : GpReg)   (rsb : GpReg)    (imm : HalfWord)
+  | st      (rd : GpReg)   (rsb : GpReg)    (imm : HalfWord)
+  | rsr     (rs1 : GpReg)  (rs2 : GpReg)    (csr : CsrReg)
+  | wsr     (rs1 : GpReg)  (rs2 : GpReg)    (csr : CsrReg)
+  | jal     (rs1 : GpReg)  (rs2 : GpReg)    (cmp : CmpFlag)
+  | jmp     (rs1 : GpReg)  (rs2 : GpReg)    (cmp : CmpFlag)
+  | jmpCsr  (csr : CsrReg) (cmp : CmpFlag)
+  -- System call extension
+  | syscall (rs : GpReg)
   deriving Repr
 
 
 def Inst.enc : Inst -> InstWord
-  | .halt   rs          =>                 0b00000000#8 ++  rs.enc ++ 0b0000#4
-  | .add    rd  rs1 rs2 =>          rs2.enc ++  rs1.enc ++  rd.enc ++ 0b0001#4
-  | .adc    rd  rs1 rs2 =>          rs2.enc ++  rs1.enc ++  rd.enc ++ 0b0010#4
-  | .sub    rd  rs1 rs2 =>          rs2.enc ++  rs1.enc ++  rd.enc ++ 0b0011#4
-  | .sbb    rd  rs1 rs2 =>          rs2.enc ++  rs1.enc ++  rd.enc ++ 0b0100#4
-  | .and    rd  rs1 rs2 =>          rs2.enc ++  rs1.enc ++  rd.enc ++ 0b0101#4
-  | .or     rd  rs1 rs2 =>          rs2.enc ++  rs1.enc ++  rd.enc ++ 0b0110#4
-  | .xor    rd  rs1 rs2 =>          rs2.enc ++  rs1.enc ++  rd.enc ++ 0b0111#4
-  | .rrc    rd  rs      =>         0b0000#4 ++   rs.enc ++  rd.enc ++ 0b1000#4
-  | .set    rd  imm     =>                          imm ++  rd.enc ++ 0b1001#4
-  | .ld     rd  rsb imm =>              imm ++  rsb.enc ++  rd.enc ++ 0b1010#4
-  | .st     rd  rsb imm =>              imm ++  rsb.enc ++  rd.enc ++ 0b1011#4
-  | .rsr    rs1 rs2 csr =>          csr.enc ++  rs2.enc ++ rs1.enc ++ 0b1100#4
-  | .wsr    rs1 rs2 csr =>          csr.enc ++  rs2.enc ++ rs1.enc ++ 0b1101#4
-  | .jal    rs1 rs2 cmp => 0b0#1 ++ cmp.enc ++  rs2.enc ++ rs1.enc ++ 0b1110#4
-  | .jmp    rs1 rs2 cmp => 0b0#1 ++ cmp.enc ++  rs2.enc ++ rs1.enc ++ 0b1111#4
-  | .jmpCsr csr cmp     => 0b1#1 ++ cmp.enc ++ 0b0000#4 ++ csr.enc ++ 0b1111#4
+  | .halt    rs          =>                 0b00000000#8 ++  rs.enc ++ 0b0000#4
+  | .add     rd  rs1 rs2 =>          rs2.enc ++  rs1.enc ++  rd.enc ++ 0b0001#4
+  | .adc     rd  rs1 rs2 =>          rs2.enc ++  rs1.enc ++  rd.enc ++ 0b0010#4
+  | .sub     rd  rs1 rs2 =>          rs2.enc ++  rs1.enc ++  rd.enc ++ 0b0011#4
+  | .sbb     rd  rs1 rs2 =>          rs2.enc ++  rs1.enc ++  rd.enc ++ 0b0100#4
+  | .and     rd  rs1 rs2 =>          rs2.enc ++  rs1.enc ++  rd.enc ++ 0b0101#4
+  | .or      rd  rs1 rs2 =>          rs2.enc ++  rs1.enc ++  rd.enc ++ 0b0110#4
+  | .xor     rd  rs1 rs2 =>          rs2.enc ++  rs1.enc ++  rd.enc ++ 0b0111#4
+  | .rrc     rd  rs      =>         0b0000#4 ++   rs.enc ++  rd.enc ++ 0b1000#4
+  | .set     rd  imm     =>                          imm ++  rd.enc ++ 0b1001#4
+  | .ld      rd  rsb imm =>              imm ++  rsb.enc ++  rd.enc ++ 0b1010#4
+  | .st      rd  rsb imm =>              imm ++  rsb.enc ++  rd.enc ++ 0b1011#4
+  | .rsr     rs1 rs2 csr =>          csr.enc ++  rs2.enc ++ rs1.enc ++ 0b1100#4
+  | .wsr     rs1 rs2 csr =>          csr.enc ++  rs2.enc ++ rs1.enc ++ 0b1101#4
+  | .jal     rs1 rs2 cmp => 0b0#1 ++ cmp.enc ++  rs2.enc ++ rs1.enc ++ 0b1110#4
+  | .jmp     rs1 rs2 cmp => 0b0#1 ++ cmp.enc ++  rs2.enc ++ rs1.enc ++ 0b1111#4
+  | .jmpCsr  csr cmp     => 0b1#1 ++ cmp.enc ++ 0b0000#4 ++ csr.enc ++ 0b1111#4
+  -- System call extension
+  | .syscall rs          =>                 0b10000000#8 ++  rs.enc ++ 0b0000#4
 
 
 def Inst.dec (w : InstWord) : Option Inst := do
@@ -57,7 +61,11 @@ def Inst.dec (w : InstWord) : Option Inst := do
   let cmp    : CmpWord  := w.extractLsb' 12 3
   let target : Bool     := w.getLsbD 15
   match n0 with
-  | 0b0000#4 => return .halt (<- GpReg.dec n1)
+  | 0b0000#4 =>
+    if target then
+      return .syscall (<- GpReg.dec n1)
+    else
+      return .halt (<- GpReg.dec n1)
   | 0b0001#4 => return .add (<- GpReg.dec n1) (<- GpReg.dec n2) (<- GpReg.dec n3)
   | 0b0010#4 => return .adc (<- GpReg.dec n1) (<- GpReg.dec n2) (<- GpReg.dec n3)
   | 0b0011#4 => return .sub (<- GpReg.dec n1) (<- GpReg.dec n2) (<- GpReg.dec n3)
@@ -78,6 +86,22 @@ def Inst.dec (w : InstWord) : Option Inst := do
     else
       return .jmp (<- GpReg.dec n1) (<- GpReg.dec n2) (<- CmpFlag.dec cmp)
   | _  => failure  -- Unreachable
+
+
+def Inst.csrOperand : Inst -> Option CsrReg
+  | .rsr    _ _ csr => some csr
+  | .wsr    _ _ csr => some csr
+  | .jmpCsr csr _   => some csr
+  | _               => none
+
+
+def Inst.decUnder (w : InstWord) (extns : CsrExtns) : Option Inst :=
+  match Inst.dec w with
+  | none      => none
+  | some inst =>
+    match inst.csrOperand with
+    | some csr => if csr.availableUnder extns then some inst else none
+    | none     => some inst
 
 
 end MisaSpec

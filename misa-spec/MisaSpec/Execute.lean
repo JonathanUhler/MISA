@@ -22,8 +22,18 @@ def aluAdd (a : DataWord) (b : DataWord) (cin : Bool) : DataWord × CsrFlags :=
 
 
 def executeHalt (q : State) (rs : GpReg) : State :=
-  let cause : CsrCause := { kind := .haltInstruction, status := q.register rs }
+  let cause : CsrCause := CsrCause.haltInstruction (q.register rs)
   { (q.writeSpecial .cause cause.enc) with halted := true }
+
+
+def executeSyscall (q : State) (rs : GpReg) : State :=
+  if q.inSyscall then
+    q.fault (CsrCause.improperSystemCall q.inSyscall false)
+  else
+    let cause : CsrCause := CsrCause.haltInstruction (q.register rs)
+    let target : AddrWord := q.memory 0xFFFB ++ q.memory 0xFFFA
+    { (q.writeSpecial .cause cause.enc).writeSpecial .retsc (q.pc + 2)
+      with pc := target, inSyscall := true }
 
 
 def executeAdd (q : State) (rd : GpReg) (rs1 : GpReg) (rs2 : GpReg) : State :=
@@ -130,33 +140,44 @@ def executeJmp (q : State) (rs1 : GpReg) (rs2 : GpReg) (cmp : CmpFlag) : State :
 
 def executeJmpCsr (q : State) (csr : CsrReg) (cmp : CmpFlag) : State :=
   if q.check cmp then
-    { q with pc := q.special csr }
+    match csr with
+    | .retsc =>
+      if cmp == .always && q.inSyscall then
+        { q with pc := q.special csr, inSyscall := false }
+      else if cmp == .always then
+        q.fault (CsrCause.improperReturnContext q.inSyscall false csr)
+      else
+        q.fault (CsrCause.conditionalContextReturn cmp csr)
+    | _      => { q with pc := q.special csr }
   else
     q.next
 
 
 def execute (q : State) : State :=
-  match Inst.dec (fetch q) with
-  | none      => q.fault (CsrCause.make FaultKind.illegalInstruction)
+  let extns : CsrExtns := CsrExtns.dec (q.special .extns)
+  match Inst.decUnder (fetch q) extns with
+  | none      => q.fault CsrCause.illegalInstruction
   | some inst =>
     match inst with
-    | .halt   rs          => executeHalt   q rs
-    | .add    rd  rs1 rs2 => executeAdd    q rd  rs1 rs2
-    | .adc    rd  rs1 rs2 => executeAdc    q rd  rs1 rs2
-    | .sub    rd  rs1 rs2 => executeSub    q rd  rs1 rs2
-    | .sbb    rd  rs1 rs2 => executeSbb    q rd  rs1 rs2
-    | .and    rd  rs1 rs2 => executeAnd    q rd  rs1 rs2
-    | .or     rd  rs1 rs2 => executeOr     q rd  rs1 rs2
-    | .xor    rd  rs1 rs2 => executeXor    q rd  rs1 rs2
-    | .rrc    rd  rs      => executeRrc    q rd  rs
-    | .set    rd  imm     => executeSet    q rd  imm
-    | .ld     rd  rsb imm => executeLd     q rd  rsb imm
-    | .st     rd  rsb imm => executeSt     q rd  rsb imm
-    | .rsr    rs1 rs2 csr => executeRsr    q rs1 rs2 csr
-    | .wsr    rs1 rs2 csr => executeWsr    q rs1 rs2 csr
-    | .jal    rs1 rs2 cmp => executeJal    q rs1 rs2 cmp
-    | .jmp    rs1 rs2 cmp => executeJmp    q rs1 rs2 cmp
-    | .jmpCsr csr cmp     => executeJmpCsr q csr cmp
+    | .halt    rs          => executeHalt   q rs
+    | .add     rd  rs1 rs2 => executeAdd    q rd  rs1 rs2
+    | .adc     rd  rs1 rs2 => executeAdc    q rd  rs1 rs2
+    | .sub     rd  rs1 rs2 => executeSub    q rd  rs1 rs2
+    | .sbb     rd  rs1 rs2 => executeSbb    q rd  rs1 rs2
+    | .and     rd  rs1 rs2 => executeAnd    q rd  rs1 rs2
+    | .or      rd  rs1 rs2 => executeOr     q rd  rs1 rs2
+    | .xor     rd  rs1 rs2 => executeXor    q rd  rs1 rs2
+    | .rrc     rd  rs      => executeRrc    q rd  rs
+    | .set     rd  imm     => executeSet    q rd  imm
+    | .ld      rd  rsb imm => executeLd     q rd  rsb imm
+    | .st      rd  rsb imm => executeSt     q rd  rsb imm
+    | .rsr     rs1 rs2 csr => executeRsr    q rs1 rs2 csr
+    | .wsr     rs1 rs2 csr => executeWsr    q rs1 rs2 csr
+    | .jal     rs1 rs2 cmp => executeJal    q rs1 rs2 cmp
+    | .jmp     rs1 rs2 cmp => executeJmp    q rs1 rs2 cmp
+    | .jmpCsr  csr cmp     => executeJmpCsr q csr cmp
+    -- System call extension
+    | .syscall rs          => if extns.syscall then executeSyscall q rs else executeHalt q rs
 
 
 end MisaSpec
