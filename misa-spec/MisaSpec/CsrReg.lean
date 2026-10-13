@@ -6,7 +6,11 @@ namespace MisaSpec
 
 
 inductive CsrReg where
-  | saddr | raddr | flags | cause | extns
+  | saddr
+  | raddr
+  | flags
+  | cause
+  | extns
   -- System call extension
   | retsc
   deriving DecidableEq, Repr
@@ -15,6 +19,7 @@ inductive CsrReg where
 def CsrReg.all : List CsrReg :=
   [
     .saddr, .raddr, .flags, .cause, .extns,
+    -- System call extension
     .retsc
   ]
 
@@ -52,10 +57,10 @@ structure CsrFlags where
 
 
 def CsrFlags.enc (flags : CsrFlags) : SpecWord :=
-  (BitVec.ofBool flags.v ++
-   BitVec.ofBool flags.n ++
-   BitVec.ofBool flags.c ++
-   BitVec.ofBool flags.z).setWidth 16
+  ( BitVec.ofBool flags.v ++
+    BitVec.ofBool flags.n ++
+    BitVec.ofBool flags.c ++
+    BitVec.ofBool flags.z ).setWidth 16
 
 
 def CsrFlags.dec (n : SpecWord) : CsrFlags :=
@@ -80,10 +85,10 @@ structure CsrExtns where
 
 
 def CsrExtns.enc (extns : CsrExtns) : SpecWord :=
-  (BitVec.ofBool extns.interrupt ++
-   BitVec.ofBool extns.privilege ++
-   BitVec.ofBool extns.syscall   ++
-   BitVec.ofBool extns.dynamichw).setWidth 16
+  ( BitVec.ofBool extns.interrupt ++
+    BitVec.ofBool extns.privilege ++
+    BitVec.ofBool extns.syscall   ++
+    BitVec.ofBool extns.dynamichw ).setWidth 16
 
 
 def CsrExtns.dec (n : SpecWord) : CsrExtns :=
