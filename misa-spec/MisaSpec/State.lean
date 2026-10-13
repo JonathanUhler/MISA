@@ -45,12 +45,12 @@ def State.fault (q : State) (cause : CsrCause) : State :=
   { q with pc := q.memory 0xFFFD ++ q.memory 0xFFFC }
 
 
-def State.first (bytes : ByteArray) : State :=
+def State.first (bytes : ByteArray) (extns : SpecWord) : State :=
   let mem : AddrWord -> DataWord := fun a =>
     let i := a.toNat
     if i < bytes.size then BitVec.ofNat 8 (bytes.get! i).toNat else 0
   { register  := fun _ => 0x00,
-    special   := fun _ => 0x00,
+    special   := fun c => if c.enc == CsrReg.extns.enc then extns else 0x00,
     memory    := mem,
     check     := CsrFlags.eval (CsrFlags.dec 0x0000),
     pc        := mem 0xFFFF ++ mem 0xFFFE,

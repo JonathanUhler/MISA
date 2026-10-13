@@ -17,6 +17,32 @@ def toHex (digits : Nat) (v : Nat) : String :=
   String.mk (toHexAux digits v [])
 
 
+def digitValue? (c : Char) : Option Nat :=
+  let n := c.toNat
+  if      n ≥ '0'.toNat ∧ n ≤ '9'.toNat then some (n - '0'.toNat)
+  else if n ≥ 'a'.toNat ∧ n ≤ 'f'.toNat then some (n - 'a'.toNat + 10)
+  else if n ≥ 'A'.toNat ∧ n ≤ 'F'.toNat then some (n - 'A'.toNat + 10)
+  else none
+
+
+def parseDigits (base : Nat) (cs : List Char) : Option Nat :=
+  match cs with
+  | [] => none
+  | _  => cs.foldl (fun acc c =>
+    match acc, digitValue? c with
+    | some v, some d => if d < base then some (v * base + d) else none
+    | _,      _      => none) (some 0)
+
+
+def parseNumeral? (s : String) : Option Nat :=
+  match s.toList with
+  | '0' :: 'x' :: rest => parseDigits 16 rest
+  | '0' :: 'X' :: rest => parseDigits 16 rest
+  | '0' :: 'b' :: rest => parseDigits 2  rest
+  | '0' :: 'B' :: rest => parseDigits 2  rest
+  | cs                 => parseDigits 10 cs
+
+
 def runSteps : Nat -> State -> State
   | 0,     q => q
   | n + 1, q => if q.halted then q else runSteps n (execute q)
@@ -31,16 +57,17 @@ def dumpState (q : State) : String :=
     s!"  {c.name} = 0x{toHex 4 (q.special c).toNat}\n")
   let regLines := String.join (GpReg.all.map fun r =>
     s!"  {r.name} = 0x{toHex 2 (q.register r).toNat}\n")
-  s!"halted = {q.halted}\n" ++
-  s!"pc     = 0x{toHex 4 q.pc.toNat}\n" ++
+  s!"halted    = {q.halted}\n" ++
+  s!"inSyscall = {q.inSyscall}\n" ++
+  s!"pc        = 0x{toHex 4 q.pc.toNat}\n" ++
   "special:\n" ++
   specLines ++
   "registers:\n" ++
   regLines
 
 
-def runAndDump (bytes : ByteArray) (stepsArg : String) : IO Unit := do
-  let q0 := State.first bytes
+def runAndDump (bytes : ByteArray) (stepsArg : String) (extns : SpecWord) : IO Unit := do
+  let q0 := State.first bytes extns
   if stepsArg == "*" then
     IO.print (dumpState (runUntilHalt q0))
   else
@@ -54,8 +81,16 @@ def main (args : List String) : IO Unit := do
   match args with
   | [path, stepsArg] =>
     let bytes ← IO.FS.readBinFile (⟨path⟩ : System.FilePath)
-    runAndDump bytes stepsArg
+    runAndDump bytes stepsArg 0x0000
+  | [path, stepsArg, extnsArg] =>
+    match parseNumeral? extnsArg with
+    | none   =>
+      IO.eprintln s!"error: <extns> must be a number (e.g. 14, 0xE, or 0b1110), got '{extnsArg}'"
+    | some e =>
+      let bytes ← IO.FS.readBinFile (⟨path⟩ : System.FilePath)
+      runAndDump bytes stepsArg (BitVec.ofNat 16 e)
   | _ =>
-    IO.eprintln "usage: misa-spec <binary-file> <steps>"
+    IO.eprintln "usage: misa-spec <binary-file> <steps> [extns]"
     IO.eprintln "  <binary-file>  flat memory image to load at address 0x0000"
     IO.eprintln "  <steps>        number of instructions to execute, or '*' to run until halt"
+    IO.eprintln "  [extns]        optional EXTNS register value (decimal, 0x…, or 0b…); default 0x0000"
