@@ -14,17 +14,17 @@ The project includes the following software applications:
 - `misa-nm`: A program to list symbol names imported and exported by object files
 - `misa-objdump`: A program to disassemble object files and flat binaries into assembly
 - `misa-pr`: A preprocessor to add additional functionality to the assembly pipeline
-- `misa-sim`: A faithful simulator for a single-cycle CPU implementation of the MISA architecture
+- `misa-spec`: A behavioral model of the MISA instruction set in Lean4, intended to be used as
+  a reference 'correct'/'golden' implementation of the architecture.
 
 ## Documentation
 
-The `docs` directory includes a full specification of the project, split into a functional block
-diagram of the computer implemented by `misa-sim`, and a architecture book describing the ISA,
-build toolchain, and simulator.
+The `docs` directory includes a full specification of the project, including the ISA manual and
+notes about the workings/development of the build toolchain and simulators.
 
 ## Building
 
-Building the MISA toolchain and simulator requires:
+Building the MISA toolchain requires:
 
 - Stack 3.3.0 or later
 - A recent Haskell compiler
