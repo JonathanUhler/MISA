@@ -40,7 +40,13 @@ def State.writeFlags (q : State) (f : CsrFlags) : State :=
 
 def State.writeSpecial (q : State) (c : CsrReg) (v : SpecWord) : State :=
   match c with
-  | .extns => q
+  | .extns =>
+    let cur := q.special .extns
+    if (CsrExtns.dec cur).dynamichw then
+      let v' := (v &&& 0xFFFE#16) ||| (cur &&& 0x0001#16)
+      { q with special := fun c' => if c'.enc == CsrReg.extns.enc then v' else q.special c' }
+    else
+      q
   | .flags => q.writeFlags (CsrFlags.dec v)
   | _      => { q with special := fun c' => if c'.enc == c.enc then v else q.special c' }
 
