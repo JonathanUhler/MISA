@@ -8,16 +8,18 @@ namespace MisaSpec
 
 
 structure State where
-  register    : GpReg -> DataWord
-  special     : CsrReg -> SpecWord
-  memory      : AddrWord -> DataWord
-  check       : CmpFlag -> Bool
-  pc          : AddrWord
-  inSyscall   : Bool
-  inInterrupt : Bool
-  intRscratch : SpecWord
-  intFlags    : SpecWord
-  halted      : Bool
+  register     : GpReg -> DataWord
+  special      : CsrReg -> SpecWord
+  memory       : AddrWord -> DataWord
+  check        : CmpFlag -> Bool
+  pc           : AddrWord
+  inSyscall    : Bool
+  inInterrupt  : Bool
+  intRscratch  : SpecWord
+  intFlags     : SpecWord
+  syscallPrivs : SpecWord
+  intPrivs     : SpecWord
+  halted       : Bool
 
 
 def State.writeReg (q : State) (r : GpReg) (v : DataWord) : State :=
@@ -44,7 +46,7 @@ def State.writeSpecial (q : State) (c : CsrReg) (v : SpecWord) : State :=
 
 
 def State.fault (q : State) (cause : CsrCause) : State :=
-  let q := q.writeSpecial .cause cause.enc
+  let q := (q.writeSpecial .cause cause.enc).writeSpecial .privs 0x0000
   { q with pc := q.memory 0xFFFD ++ q.memory 0xFFFC }
 
 
@@ -52,16 +54,18 @@ def State.first (bytes : ByteArray) (extns : SpecWord) : State :=
   let mem : AddrWord -> DataWord := fun a =>
     let i := a.toNat
     if i < bytes.size then BitVec.ofNat 8 (bytes.get! i).toNat else 0
-  { register    := fun _ => 0x00#8,
-    special     := fun c => if c.enc == CsrReg.extns.enc then extns else 0x0000#16,
-    memory      := mem,
-    check       := CsrFlags.eval (CsrFlags.dec 0x0000#16),
-    pc          := mem 0xFFFF ++ mem 0xFFFE,
-    inSyscall   := false,
-    inInterrupt := false,
-    intRscratch := 0x0000#16,
-    intFlags    := 0x0000#16,
-    halted      := false }
+  { register     := fun _ => 0x00#8,
+    special      := fun c => if c.enc == CsrReg.extns.enc then extns else 0x0000#16,
+    memory       := mem,
+    check        := CsrFlags.eval (CsrFlags.dec 0x0000#16),
+    pc           := mem 0xFFFF ++ mem 0xFFFE,
+    inSyscall    := false,
+    inInterrupt  := false,
+    intRscratch  := 0x0000#16,
+    intFlags     := 0x0000#16,
+    syscallPrivs := 0x0000#16,
+    intPrivs     := 0x0000#16,
+    halted       := false }
 
 
 def State.next (q : State) : State :=
@@ -76,10 +80,16 @@ def State.canInterrupt (q : State) : Bool :=
   (CsrExtns.dec (q.special .extns)).interrupt && !q.inInterrupt
 
 
+def State.userMode (q : State) : Bool :=
+  (CsrExtns.dec (q.special .extns)).privilege && (q.special .privs).getLsbD 0
+
+
 def State.interrupt (q : State) : State :=
-  { (q.writeSpecial .retir q.pc) with
+  let saved : SpecWord := q.special .privs
+  { ((q.writeSpecial .retir q.pc).writeSpecial .privs 0x0000) with
     intRscratch := q.register .rscratch0 ++ q.register .rscratch1,
     intFlags    := q.special .flags,
+    intPrivs    := saved,
     inInterrupt := true,
     pc          := q.memory 0xFFF9 ++ q.memory 0xFFF8 }
 

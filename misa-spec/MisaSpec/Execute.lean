@@ -22,8 +22,11 @@ def aluAdd (a : DataWord) (b : DataWord) (cin : Bool) : DataWord × CsrFlags :=
 
 
 def executeHalt (q : State) (rs : GpReg) : State :=
-  let cause : CsrCause := CsrCause.haltInstruction (q.register rs)
-  { (q.writeSpecial .cause cause.enc) with halted := true }
+  if q.userMode then
+    q.fault CsrCause.privilegedInstruction
+  else
+    let cause : CsrCause := CsrCause.haltInstruction (q.register rs)
+    { (q.writeSpecial .cause cause.enc) with halted := true }
 
 
 def executeSyscall (q : State) (rs : GpReg) : State :=
@@ -32,8 +35,10 @@ def executeSyscall (q : State) (rs : GpReg) : State :=
   else
     let cause : CsrCause := CsrCause.haltInstruction (q.register rs)
     let target : AddrWord := q.memory 0xFFFB ++ q.memory 0xFFFA
-    { (q.writeSpecial .cause cause.enc).writeSpecial .retsc (q.pc + 2)
-      with pc := target, inSyscall := true }
+    let saved : SpecWord := q.special .privs
+    let q := (q.writeSpecial .cause cause.enc).writeSpecial .retsc (q.pc + 2)
+    { (q.writeSpecial .privs 0x0000)
+      with pc := target, inSyscall := true, syscallPrivs := saved }
 
 
 def executeAdd (q : State) (rd : GpReg) (rs1 : GpReg) (rs2 : GpReg) : State :=
@@ -115,12 +120,18 @@ def executeSt (q : State) (rd : GpReg) (rsb : GpReg) (imm : HalfWord) : State :=
 
 
 def executeRsr (q : State) (rs1 : GpReg) (rs2 : GpReg) (csr : CsrReg) : State :=
-  let v := q.special csr
-  ((q.writeReg rs1 (v.extractLsb' 8 8)).writeReg rs2 (v.extractLsb' 0 8)).next
+  if q.userMode && !csr.userReadable then
+    q.fault CsrCause.privilegedInstruction
+  else
+    let v := q.special csr
+    ((q.writeReg rs1 (v.extractLsb' 8 8)).writeReg rs2 (v.extractLsb' 0 8)).next
 
 
 def executeWsr (q : State) (rs1 : GpReg) (rs2 : GpReg) (csr : CsrReg) : State :=
-  (q.writeSpecial csr (q.register rs1 ++ q.register rs2)).next
+  if q.userMode && !csr.userWritable then
+    q.fault CsrCause.privilegedInstruction
+  else
+    (q.writeSpecial csr (q.register rs1 ++ q.register rs2)).next
 
 
 def executeJal (q : State) (rs1 : GpReg) (rs2 : GpReg) (cmp : CmpFlag) : State :=
@@ -143,7 +154,8 @@ def executeJmpCsr (q : State) (csr : CsrReg) (cmp : CmpFlag) : State :=
     match csr with
     | .retsc =>
       if cmp == .always && q.inSyscall && !q.inInterrupt then
-        { q with pc := q.special csr, inSyscall := false }
+        { (q.writeSpecial .privs q.syscallPrivs)
+          with pc := q.special csr, inSyscall := false }
       else if cmp == .always then
         q.fault (CsrCause.improperReturnContext q.inSyscall q.inInterrupt csr)
       else
@@ -152,8 +164,9 @@ def executeJmpCsr (q : State) (csr : CsrReg) (cmp : CmpFlag) : State :=
     | .retir =>
       if cmp == .always && q.inInterrupt then
         let flags : CsrFlags := CsrFlags.dec q.intFlags
-        { ((q.writeReg .rscratch0 (q.intRscratch.extractLsb' 8 8)).writeReg
+        let q := ((q.writeReg .rscratch0 (q.intRscratch.extractLsb' 8 8)).writeReg
             .rscratch1 (q.intRscratch.extractLsb' 0 8)).writeFlags flags
+        { (q.writeSpecial .privs q.intPrivs)
           with pc := q.special csr, inInterrupt := false }
       else if cmp == .always then
         q.fault (CsrCause.improperReturnContext q.inSyscall q.inInterrupt csr)

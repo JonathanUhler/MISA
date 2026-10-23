@@ -15,6 +15,8 @@ inductive CsrReg where
   | retsc
   -- Interrupt extension
   | retir
+  -- Privilege extension
+  | privs
   deriving DecidableEq, Repr
 
 
@@ -24,7 +26,9 @@ def CsrReg.all : List CsrReg :=
     -- System call extension
     .retsc,
     -- Interrupt extension
-    .retir
+    .retir,
+    -- Privilege extension
+    .privs
   ]
 
 
@@ -38,6 +42,8 @@ def CsrReg.enc : CsrReg -> HalfWord
   | .retsc => 0b1000#4
   -- Interrupt extension
   | .retir => 0b1001#4
+  -- Privilege extension
+  | .privs => 0b1010#4
 
 
 def CsrReg.dec (n : HalfWord) : Option CsrReg :=
@@ -54,6 +60,8 @@ def CsrReg.name : CsrReg -> String
   | .retsc => "retsc"
   -- Interrupt extension
   | .retir => "retir"
+  -- Privilege extension
+  | .privs => "privs"
 
 
 structure CsrFlags where
@@ -112,7 +120,19 @@ def CsrReg.availableUnder (csr : CsrReg) (extns : CsrExtns) : Bool :=
   | .retsc => extns.syscall
   -- Interrupt extension
   | .retir => extns.interrupt
+  -- Privilege extension
+  | .privs => extns.privilege
   | _      => true
+
+
+def CsrReg.userReadable : CsrReg -> Bool
+  | .saddr | .raddr | .flags | .privs => true
+  | _                                 => false
+
+
+def CsrReg.userWritable : CsrReg -> Bool
+  | .saddr | .raddr | .flags => true
+  | _                        => false
 
 
 inductive FaultKind where
