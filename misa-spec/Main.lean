@@ -4,17 +4,30 @@ import MisaSpec
 open MisaSpec
 
 
-def hexDigit (n : Nat) : Char :=
-  if n < 10 then Char.ofNat (n + 48) else Char.ofNat (n + 87)
-
-
-def toHexAux : Nat -> Nat -> List Char -> List Char
-  | 0,      _, acc => acc
-  | d + 1,  v, acc => toHexAux d (v / 16) (hexDigit (v % 16) :: acc)
-
-
 def toHex (digits : Nat) (v : Nat) : String :=
-  String.mk (toHexAux digits v [])
+  String.mk (List.leftpad digits '0' (Nat.toDigits 16 v))
+
+
+def b64Digit (n : Nat) : Char :=
+  if      n < 26 then Char.ofNat (n + 'A'.toNat)
+  else if n < 52 then Char.ofNat (n - 26 + 'a'.toNat)
+  else if n < 62 then Char.ofNat (n - 52 + '0'.toNat)
+  else if n == 62 then '+'
+  else '/'
+
+
+def memBase64 (q : State) : String :=
+  let chars := (List.range 21846).foldl (fun acc g =>
+    let i   := g * 3
+    let rem := 65536 - i
+    let b0  := (q.memory (BitVec.ofNat 16 i)).toNat
+    let b1  := if rem ≥ 2 then (q.memory (BitVec.ofNat 16 (i + 1))).toNat else 0
+    let b2  := if rem ≥ 3 then (q.memory (BitVec.ofNat 16 (i + 2))).toNat else 0
+    let acc := acc.push (b64Digit (b0 / 4))
+    let acc := acc.push (b64Digit (b0 % 4 * 16 + b1 / 16))
+    let acc := acc.push (if rem ≥ 2 then b64Digit (b1 % 16 * 4 + b2 / 64) else '=')
+    acc.push (if rem ≥ 3 then b64Digit (b2 % 64) else '=')) (#[] : Array Char)
+  String.mk chars.toList
 
 
 def digitValue? (c : Char) : Option Nat :=
@@ -73,7 +86,9 @@ def dumpState (q : State) : String :=
   "special:\n" ++
   specLines ++
   "registers:\n" ++
-  regLines
+  regLines ++
+  "memory (base64):\n" ++
+  memBase64 q ++ "\n"
 
 
 def runAndDump (bytes : ByteArray) (stepsArg : String) (extns : SpecWord) : IO Unit := do
