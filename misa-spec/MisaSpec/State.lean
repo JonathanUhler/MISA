@@ -8,13 +8,16 @@ namespace MisaSpec
 
 
 structure State where
-  register  : GpReg -> DataWord
-  special   : CsrReg -> SpecWord
-  memory    : AddrWord -> DataWord
-  check     : CmpFlag -> Bool
-  pc        : AddrWord
-  inSyscall : Bool
-  halted    : Bool
+  register    : GpReg -> DataWord
+  special     : CsrReg -> SpecWord
+  memory      : AddrWord -> DataWord
+  check       : CmpFlag -> Bool
+  pc          : AddrWord
+  inSyscall   : Bool
+  inInterrupt : Bool
+  intRscratch : SpecWord
+  intFlags    : SpecWord
+  halted      : Bool
 
 
 def State.writeReg (q : State) (r : GpReg) (v : DataWord) : State :=
@@ -49,13 +52,16 @@ def State.first (bytes : ByteArray) (extns : SpecWord) : State :=
   let mem : AddrWord -> DataWord := fun a =>
     let i := a.toNat
     if i < bytes.size then BitVec.ofNat 8 (bytes.get! i).toNat else 0
-  { register  := fun _ => 0x00,
-    special   := fun c => if c.enc == CsrReg.extns.enc then extns else 0x00,
-    memory    := mem,
-    check     := CsrFlags.eval (CsrFlags.dec 0x0000),
-    pc        := mem 0xFFFF ++ mem 0xFFFE,
-    inSyscall := false,
-    halted    := false }
+  { register    := fun _ => 0x00#8,
+    special     := fun c => if c.enc == CsrReg.extns.enc then extns else 0x0000#16,
+    memory      := mem,
+    check       := CsrFlags.eval (CsrFlags.dec 0x0000#16),
+    pc          := mem 0xFFFF ++ mem 0xFFFE,
+    inSyscall   := false,
+    inInterrupt := false,
+    intRscratch := 0x0000#16,
+    intFlags    := 0x0000#16,
+    halted      := false }
 
 
 def State.next (q : State) : State :=
@@ -64,6 +70,18 @@ def State.next (q : State) : State :=
     q.fault CsrCause.pcOverflow
   else
     { q with pc := pc' }
+
+
+def State.canInterrupt (q : State) : Bool :=
+  (CsrExtns.dec (q.special .extns)).interrupt && !q.inInterrupt
+
+
+def State.interrupt (q : State) : State :=
+  { (q.writeSpecial .retir q.pc) with
+    intRscratch := q.register .rscratch0 ++ q.register .rscratch1,
+    intFlags    := q.special .flags,
+    inInterrupt := true,
+    pc          := q.memory 0xFFF9 ++ q.memory 0xFFF8 }
 
 
 end MisaSpec

@@ -27,8 +27,8 @@ def executeHalt (q : State) (rs : GpReg) : State :=
 
 
 def executeSyscall (q : State) (rs : GpReg) : State :=
-  if q.inSyscall then
-    q.fault (CsrCause.improperSystemCall q.inSyscall false)
+  if q.inSyscall || q.inInterrupt then
+    q.fault (CsrCause.improperSystemCall q.inSyscall q.inInterrupt)
   else
     let cause : CsrCause := CsrCause.haltInstruction (q.register rs)
     let target : AddrWord := q.memory 0xFFFB ++ q.memory 0xFFFA
@@ -142,10 +142,21 @@ def executeJmpCsr (q : State) (csr : CsrReg) (cmp : CmpFlag) : State :=
   if q.check cmp then
     match csr with
     | .retsc =>
-      if cmp == .always && q.inSyscall then
+      if cmp == .always && q.inSyscall && !q.inInterrupt then
         { q with pc := q.special csr, inSyscall := false }
       else if cmp == .always then
-        q.fault (CsrCause.improperReturnContext q.inSyscall false csr)
+        q.fault (CsrCause.improperReturnContext q.inSyscall q.inInterrupt csr)
+      else
+        q.fault (CsrCause.conditionalContextReturn cmp csr)
+    -- Interrupt extension
+    | .retir =>
+      if cmp == .always && q.inInterrupt then
+        let flags : CsrFlags := CsrFlags.dec q.intFlags
+        { ((q.writeReg .rscratch0 (q.intRscratch.extractLsb' 8 8)).writeReg
+            .rscratch1 (q.intRscratch.extractLsb' 0 8)).writeFlags flags
+          with pc := q.special csr, inInterrupt := false }
+      else if cmp == .always then
+        q.fault (CsrCause.improperReturnContext q.inSyscall q.inInterrupt csr)
       else
         q.fault (CsrCause.conditionalContextReturn cmp csr)
     | _      => { q with pc := q.special csr }

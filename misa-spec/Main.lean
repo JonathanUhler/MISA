@@ -53,13 +53,23 @@ partial def runUntilHalt (q : State) : State :=
 
 
 def dumpState (q : State) : String :=
-  let specLines := String.join (CsrReg.all.map fun c =>
+  let extns : CsrExtns := CsrExtns.dec (q.special .extns)
+  let specLines := String.join ((CsrReg.all.filter (·.availableUnder extns)).map fun c =>
     s!"  {c.name} = 0x{toHex 4 (q.special c).toNat}\n")
   let regLines := String.join (GpReg.all.map fun r =>
     s!"  {r.name} = 0x{toHex 2 (q.register r).toNat}\n")
-  s!"halted    = {q.halted}\n" ++
-  s!"inSyscall = {q.inSyscall}\n" ++
-  s!"pc        = 0x{toHex 4 q.pc.toNat}\n" ++
+  let syscallLines :=
+    if extns.syscall then s!"inSyscall   = {q.inSyscall}\n" else ""
+  let interruptLines :=
+    if extns.interrupt then
+      s!"inInterrupt = {q.inInterrupt}\n" ++
+      s!"intRscratch = 0x{toHex 4 q.intRscratch.toNat}\n" ++
+      s!"intFlags    = 0x{toHex 4 q.intFlags.toNat}\n"
+    else ""
+  s!"halted      = {q.halted}\n" ++
+  syscallLines ++
+  interruptLines ++
+  s!"pc          = 0x{toHex 4 q.pc.toNat}\n" ++
   "special:\n" ++
   specLines ++
   "registers:\n" ++
@@ -68,13 +78,13 @@ def dumpState (q : State) : String :=
 
 def runAndDump (bytes : ByteArray) (stepsArg : String) (extns : SpecWord) : IO Unit := do
   let q0 := State.first bytes extns
-  if stepsArg == "*" then
+  if stepsArg == "-" then
     IO.print (dumpState (runUntilHalt q0))
   else
     match stepsArg.toNat? with
     | some n => IO.print (dumpState (runSteps n q0))
     | none   =>
-      IO.eprintln s!"error: <steps> must be a non-negative integer or '*', got '{stepsArg}'"
+      IO.eprintln s!"error: <steps> must be a non-negative integer or '-', got '{stepsArg}'"
 
 
 def main (args : List String) : IO Unit := do
@@ -92,5 +102,5 @@ def main (args : List String) : IO Unit := do
   | _ =>
     IO.eprintln "usage: misa-spec <binary-file> <steps> [extns]"
     IO.eprintln "  <binary-file>  flat memory image to load at address 0x0000"
-    IO.eprintln "  <steps>        number of instructions to execute, or '*' to run until halt"
+    IO.eprintln "  <steps>        number of instructions to execute, or '-' to run until halt"
     IO.eprintln "  [extns]        optional EXTNS register value (decimal, 0x…, or 0b…); default 0x0000"

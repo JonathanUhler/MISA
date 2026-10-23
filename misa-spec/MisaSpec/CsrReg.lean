@@ -13,6 +13,8 @@ inductive CsrReg where
   | extns
   -- System call extension
   | retsc
+  -- Interrupt extension
+  | retir
   deriving DecidableEq, Repr
 
 
@@ -20,7 +22,9 @@ def CsrReg.all : List CsrReg :=
   [
     .saddr, .raddr, .flags, .cause, .extns,
     -- System call extension
-    .retsc
+    .retsc,
+    -- Interrupt extension
+    .retir
   ]
 
 
@@ -32,6 +36,8 @@ def CsrReg.enc : CsrReg -> HalfWord
   | .extns => 0b0101#4
   -- System call extension
   | .retsc => 0b1000#4
+  -- Interrupt extension
+  | .retir => 0b1001#4
 
 
 def CsrReg.dec (n : HalfWord) : Option CsrReg :=
@@ -46,6 +52,8 @@ def CsrReg.name : CsrReg -> String
   | .extns => "extns"
   -- System call extension
   | .retsc => "retsc"
+  -- Interrupt extension
+  | .retir => "retir"
 
 
 structure CsrFlags where
@@ -102,6 +110,8 @@ def CsrReg.availableUnder (csr : CsrReg) (extns : CsrExtns) : Bool :=
   match csr with
   -- System call extension
   | .retsc => extns.syscall
+  -- Interrupt extension
+  | .retir => extns.interrupt
   | _      => true
 
 
