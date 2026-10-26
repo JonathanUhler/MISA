@@ -68,26 +68,26 @@ partial def runUntilHalt (q : State) : State :=
 def dumpState (q : State) : String :=
   let extns : CsrExtns := CsrExtns.dec (q.special .extns)
   let specLines := String.join ((CsrReg.all.filter (·.availableUnder extns)).map fun c =>
-    s!"  {c.name} = 0x{toHex 4 (q.special c).toNat}\n")
+    s!"  {c.name} : 0x{toHex 4 (q.special c).toNat}\n")
   let regLines := String.join (GpReg.all.map fun r =>
-    s!"  {r.name} = 0x{toHex 2 (q.register r).toNat}\n")
+    s!"  {r.name} : 0x{toHex 2 (q.register r).toNat}\n")
   let syscallLines :=
-    if extns.syscall then s!"inSyscall   = {q.inSyscall}\n" else ""
+    if extns.syscall then s!"inSyscall   : {q.inSyscall}\n" else ""
   let interruptLines :=
     if extns.interrupt then
-      s!"inInterrupt = {q.inInterrupt}\n" ++
-      s!"intRscratch = 0x{toHex 4 q.intRscratch.toNat}\n" ++
-      s!"intFlags    = 0x{toHex 4 q.intFlags.toNat}\n"
+      s!"inInterrupt : {q.inInterrupt}\n" ++
+      s!"intRscratch : 0x{toHex 4 q.intRscratch.toNat}\n" ++
+      s!"intFlags    : 0x{toHex 4 q.intFlags.toNat}\n"
     else ""
-  s!"halted      = {q.halted}\n" ++
+  s!"halted      : {q.halted}\n" ++
   syscallLines ++
   interruptLines ++
-  s!"pc          = 0x{toHex 4 q.pc.toNat}\n" ++
+  s!"pc          : 0x{toHex 4 q.pc.toNat}\n" ++
   "special:\n" ++
   specLines ++
   "registers:\n" ++
   regLines ++
-  "memory (base64):\n" ++
+  "memory: " ++
   memBase64 q ++ "\n"
 
 
