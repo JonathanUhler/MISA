@@ -394,10 +394,16 @@ assembler macros.
 
 When the processor is taken out of the reset state, some internal state MUST be initialized:
 
+- Every general purpose register must be reset to the value `0x00`.
+- Every special register must be reset to the value `0x0000`, except `EXTNS` which may have a
+  non-zero value specifying the set of architecture extensions that are initially (or always)
+  enabled.
 - The reset vector address stored in memory at `0xFFFE - 0xFFFF` MUST be read and used to initialize
   the program counter.
-
-The state of general purpose registers and control and status registers is not defined.
+- If the System Call Extension is enabled, the processor must not be initialized to a system call
+  context on reset.
+- If the Interrupt Extension is enabled, the processor must not be initialized to an interrupt
+  context on reset.
 
 ## Faults
 

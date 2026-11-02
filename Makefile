@@ -32,7 +32,7 @@ CLI_TARGETS := $(patsubst cli/misa-%.py, $(INSTALL_DIR)/misa-%, $(CLI_SCRIPTS))
 install: $(CLI_TARGETS)
 	@mkdir -p $(INSTALL_DIR)
 	cp cli/helpers.py $(INSTALL_DIR)
-	cp misa-spec/.lake/build/bin/misa-spec $(INSTALL_DIR)
+	cp misa-spec/.lake/build/bin/misa-spec-exe $(INSTALL_DIR)
 	stack install --work-dir $(BUILD_DIR) --local-bin-path $(INSTALL_DIR)
 
 

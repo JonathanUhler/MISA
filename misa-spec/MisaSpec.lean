@@ -8,3 +8,4 @@ import MisaSpec.State
 import MisaSpec.Inst
 import MisaSpec.Fetch
 import MisaSpec.Execute
+import MisaSpec.Serialize

@@ -22,7 +22,7 @@ import shlex
 import subprocess
 from subprocess import CompletedProcess
 from tempfile import NamedTemporaryFile
-from helpers import SmartHelpFormatter, error, format_subprocess_output, sort_paths
+from helpers import SmartHelpFormatter, error, format_subprocess_output, sort_paths, get_extn_bits
 
 
 program_name: str = "misa-as"
@@ -114,30 +114,6 @@ def preprocess_all(src_paths: list, macros: list) -> list:
         processed_files.append(out_file)
 
     return processed_files
-
-
-def get_extn_bits(extensions: list) -> int:
-    """
-    Converts a list of extension names from the -e option to the integer value of the EXTNS register
-    that enables those specific extensions.
-
-    Args:
-      extensions (list): List of string extension names from the -e option.
-
-    Returns:
-      int: EXTNS register value for the enabled extensions.
-    """
-
-    extn_bits: int = 0
-    if ("dynamichw" in extensions):
-        extn_bits |= 0x0001
-    if ("syscall" in extensions):
-        extn_bits |= 0x0002
-    if ("privilege" in extensions):
-        extn_bits |= 0x0004
-    if ("interrupt" in extensions):
-        extn_bits |= 0x0008
-    return extn_bits
 
 
 def assemble(src_path: Path, out_path: Path, extn_bits: int) -> (bool, str):

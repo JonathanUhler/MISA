@@ -61,3 +61,27 @@ def extract_archives(archive_paths: list, extract_dir: TemporaryDirectory) -> (b
         if (not extracted):
             return False, format_subprocess_output(result)
     return True, ""
+
+
+def get_extn_bits(extensions: list) -> int:
+    """
+    Converts a list of extension names from the -e option to the integer value of the EXTNS register
+    that enables those specific extensions.
+
+    Args:
+      extensions (list): List of string extension names from the -e option.
+
+    Returns:
+      int: EXTNS register value for the enabled extensions.
+    """
+
+    extn_bits: int = 0
+    if ("dynamichw" in extensions):
+        extn_bits |= 0x0001
+    if ("syscall" in extensions):
+        extn_bits |= 0x0002
+    if ("privilege" in extensions):
+        extn_bits |= 0x0004
+    if ("interrupt" in extensions):
+        extn_bits |= 0x0008
+    return extn_bits
