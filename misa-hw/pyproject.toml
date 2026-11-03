@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "misa-hw"
+version = "0.1.0"
+description = "MISA processor hardware implementation in Amaranth, targeting TinyTapeout"
+requires-python = ">=3.11"
+dependencies = ["amaranth[builtin-yosys]~=0.5"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.setuptools]
+packages = ["misa_hw"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
