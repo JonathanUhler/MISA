@@ -10,6 +10,8 @@ from amaranth.sim import Simulator, SimulatorContext
 from misa_hw.qspi import QspiController, QspiMemModel, connect_qspi
 from misa_hw.core import Core
 
+from conftest import assemble, toolchain_dir
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "cosim"))
 from harness import spec_exe, parse_state, REG_NAMES  # noqa: E402
 
@@ -76,15 +78,13 @@ def test_qspi_write_then_read_back() -> None:
     assert out["v"] == 0x99
 
 
+@pytest.mark.skipif(toolchain_dir() is None, reason="misa-as toolchain not found")
 def test_core_runs_program_through_qspi() -> None:
-    # Same program as the Task 8 basic test, now fetched over QSPI.
-    img: list = [0] * 65536
-    img[0xFFFE] = 0x00
-    img[0xFFFF] = 0xC0            # reset vector -> 0xC000
-    img[0xC000] = 0x19
-    img[0xC001] = 0x2A            # SET RA 0x2A
-    img[0xC002] = 0x10
-    img[0xC003] = 0x00            # HALT RA
+    # The basic program, assembled and fetched over QSPI.
+    img: list = assemble("""
+        set ra 0x2a
+        halt ra
+    """)
 
     m: Module = Module()
     core: Core = Core()
@@ -122,24 +122,20 @@ def test_core_runs_program_through_qspi() -> None:
 
 
 @pytest.mark.skipif(spec_exe() is None, reason="misa-spec-exe oracle not found")
+@pytest.mark.skipif(toolchain_dir() is None, reason="misa-as toolchain not found")
 def test_qspi_core_matches_oracle_from_reset() -> None:
     # Exercise flash fetches plus a PSRAM store/load, then compare the whole register file and pc to
     # the oracle's canonical q0 run on the same image.
-    img: bytearray = bytearray(65536)
-
-    def put(a: int, w: int) -> None:
-        img[a] = w & 0xFF
-        img[a + 1] = (w >> 8) & 0xFF
-
-    put(0xFFFE, 0xC000)   # reset vector
-    put(0xC000, 0x0519)   # SET RA 0x05
-    put(0xC002, 0x0329)   # SET RB 0x03
-    put(0xC004, 0x2131)   # ADD RC RA RB          -> RC = 0x08
-    put(0xC006, 0x0249)   # SET RD 0x02           (base pair hi)
-    put(0xC008, 0x1059)   # SET RE 0x10           -> {RD,RE} = 0x0210 (PSRAM)
-    put(0xC00A, 0x043B)   # ST RC [RD:RE]+0       -> store 0x08 at 0x0210
-    put(0xC00C, 0x046A)   # LD RF [RD:RE]+0       -> RF = 0x08
-    put(0xC00E, 0x0060)   # HALT RF
+    img: list = assemble("""
+        set ra 0x05
+        set rb 0x03
+        add rc ra rb
+        set rd 0x02
+        set re 0x10
+        st rc rd 0
+        ld rf rd 0
+        halt rf
+    """)
 
     m: Module = Module()
     core: Core = Core(extns_reset=0x00)

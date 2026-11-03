@@ -1,9 +1,12 @@
+import pytest
 from amaranth import Module, Signal
 from amaranth.hdl import ClockDomain
 from amaranth.sim import Simulator, SimulatorContext
 
 from misa_hw.top import TtUmMisa, _SD_BITS, UIO_CS0, UIO_CS1, UIO_CS2, UIO_SCK
 from misa_hw.qspi import QspiMemModel
+
+from conftest import assemble, toolchain_dir
 
 
 def test_elaborates_to_verilog() -> None:
@@ -32,11 +35,12 @@ def _connect_board(m: Module, top: TtUmMisa, model: QspiMemModel) -> None:
     m.d.comb += top.uio_in.eq(uio_in)
 
 
+@pytest.mark.skipif(toolchain_dir() is None, reason="misa-as toolchain not found")
 def test_program_runs_end_to_end_on_pins() -> None:
-    img: list = [0] * 65536
-    img[0xFFFE], img[0xFFFF] = 0x00, 0xC0   # reset vector -> 0xC000
-    img[0xC000], img[0xC001] = 0x19, 0x2A   # SET RA 0x2A
-    img[0xC002], img[0xC003] = 0x10, 0x00   # HALT RA
+    img: list = assemble("""
+        set ra 0x2a
+        halt ra
+    """)
 
     m: Module = Module()
     # The board owns the clock domain so the chip and the external memory model share it.
