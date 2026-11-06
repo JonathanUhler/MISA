@@ -1,19 +1,12 @@
-"""Combinational instruction decoder.
+from amaranth import Cat, Module, Signal, Value
+from amaranth.lib.data import StructLayout
+from amaranth.lib.wiring import Component, In, Out
 
-Slices the 16-bit instruction word into the opcode, operand nibbles, immediates, comparison, and the
-bit-15 target/syscall selector, and flags structurally illegal encodings. Extension gating of CSRs
-is applied later by the control FSM where the live EXTNS is known.
-"""
-
-from amaranth import Module, Value
-from amaranth.lib import wiring, data
-from amaranth.lib.wiring import In, Out
-
-from .types import Opcode
+from .grammar import Csr, Op
 
 
-DecodedLayout: data.StructLayout = data.StructLayout({
-    "opcode": Opcode,
+DecodedLayout: StructLayout = StructLayout({
+    "op": Op,
     "n1": 4,
     "n2": 4,
     "n3": 4,
@@ -21,48 +14,44 @@ DecodedLayout: data.StructLayout = data.StructLayout({
     "imm4": 4,
     "cmp": 3,
     "csr_target": 1,
-    "syscall_bit": 1,
-    "illegal": 1,
+    "is_syscall": 1,
+    "illegal": 1
 })
 
 
-def _valid_csr(x: Value) -> Value:
-    return ((x == 1) | (x == 2) | (x == 3) | (x == 4) | (x == 5)
-            | (x == 8) | (x == 9) | (x == 10))
+class Decoder(Component):
 
-
-class Decoder(wiring.Component):
     inst: In(16)
+
     out: Out(DecodedLayout)
+
+
+    def _valid_csr(self, x: Value) -> Value:
+        return ((x == Csr.SADDR) | (x == Csr.RADDR) | (x == Csr.FLAGS) | (x == Csr.CAUSE) |
+                (x == Csr.EXTNS) | (x == Csr.RETSC) | (x == Csr.RETIR) | (x == Csr.PRIVS))
+
 
     def elaborate(self, platform: object) -> Module:
         m: Module = Module()
+
         inst: Value = self.inst
-        opcode: Value = inst[0:4]
-        n1: Value = inst[4:8]
-        n2: Value = inst[8:12]
-        n3: Value = inst[12:16]
-        cmp: Value = inst[12:15]
-        csr_target: Value = inst[15]
+        op: Value = inst[0 : 4]
 
         m.d.comb += [
-            self.out.opcode.eq(opcode),
-            self.out.n1.eq(n1),
-            self.out.n2.eq(n2),
-            self.out.n3.eq(n3),
-            self.out.imm8.eq(inst[8:16]),
-            self.out.imm4.eq(inst[12:16]),
-            self.out.cmp.eq(cmp),
-            self.out.csr_target.eq(csr_target),
-            self.out.syscall_bit.eq(inst[15]),
+            self.out.op.eq(op),
+            self.out.n1.eq(inst[4 : 8]),
+            self.out.n2.eq(inst[8 : 12]),
+            self.out.n3.eq(inst[12 : 16]),
+            self.out.imm8.eq(inst[8 : 16]),
+            self.out.imm4.eq(inst[12 : 16]),
+            self.out.cmp.eq(inst[12 : 15]),
+            self.out.csr_target.eq(inst[15]),
+            self.out.is_syscall.eq(inst[15])
         ]
 
-        rsr_wsr: Value = (opcode == Opcode.RSR) | (opcode == Opcode.WSR)
-        jmp_to_csr: Value = (opcode == Opcode.JMP) & csr_target
-        has_cmp: Value = (opcode == Opcode.JAL) | (opcode == Opcode.JMP)
-        m.d.comb += self.out.illegal.eq(
-            (rsr_wsr & ~_valid_csr(n3))
-            | (jmp_to_csr & ~_valid_csr(n1))
-            | (has_cmp & (cmp == 0b111))
-        )
+        illegal_csr: Value = ((op == Op.RSR) | (op == Op.WSR)) & ~self._valid_csr(self.out.n3)
+        illegal_jmp: Value = (op == Op.JMP) & self.out.csr_target & ~self._valid_csr(self.out.n1)
+        illegal_cmp: Value = ((op == Op.JAL) | (op == Op.JMP)) & (self.out.cmp == 0b111)
+        m.d.comb += self.out.illegal.eq(illegal_csr | illegal_jmp | illegal_cmp)
+
         return m

@@ -1,37 +1,38 @@
-"""The sixteen 8-bit general-purpose registers, with R0 hardwired to zero.
+from dataclasses import astuple
 
-One combinational read port and one synchronous write port; the multi-cycle core sequences operand
-accesses so a single port of each suffices.
-"""
+from amaranth import Array, Cat, Module, Signal, Value
+from amaranth.lib.wiring import Component, In, Out
 
-from amaranth import Module, Signal, Array
-from amaranth.lib import wiring
-from amaranth.lib.wiring import In, Out
+from .grammar import Reg
+from .init import RegInit
 
 
-class RegFile(wiring.Component):
-    raddr: In(4)
-    rdata: Out(8)
-    waddr: In(4)
-    wdata: In(8)
-    we: In(1)
+class RegFile(Component):
 
-    def __init__(self, init: list = None) -> None:
-        init: list = list(init) if init is not None else [0] * 16
-        # Signals are created here (not in elaborate) so a test harness can read them back.
-        self.regs: list = [Signal(8, init=init[i], name=f"gpr{i}") for i in range(16)]
+    read_reg: In(Reg, init = Reg.R0)
+    write_reg: In(Reg, init = Reg.R0)
+    write_data: In(8)
+    write_enable: In(1)
+
+    read_data: Out(8)
+
+
+    def __init__(self, init_data: RegInit = None) -> None:
+        if (init_data is None):
+            init_data = RegInit()
+        self.regs: Array = Array([Signal(8, init = data) for data in [0, *astuple(init_data)]])
         super().__init__()
+
 
     def elaborate(self, platform: object) -> Module:
         m: Module = Module()
-        regs: Array = Array(self.regs)
 
-        with m.If(self.raddr == 0):
-            m.d.comb += self.rdata.eq(0)
+        with m.If(self.read_reg == Reg.R0):
+            m.d.comb += self.read_data.eq(0)
         with m.Else():
-            m.d.comb += self.rdata.eq(regs[self.raddr])
+            m.d.comb += self.read_data.eq(self.regs[self.read_reg])
 
-        with m.If(self.we & (self.waddr != 0)):
-            m.d.sync += regs[self.waddr].eq(self.wdata)
+        with m.If(self.write_enable & (self.write_reg != Reg.R0)):
+            m.d.sync += self.regs[self.write_reg].eq(self.write_data)
 
         return m
