@@ -15,6 +15,8 @@ UIO_CS1: int = 6
 UIO_CS2: int = 7
 _SD_BITS: tuple = (UIO_SD0, UIO_SD1, UIO_SD2, UIO_SD3)
 
+UO_HALTED: int = 7     # uo_out[7] = halted status; uo_out[6:0] = low 7 bits of the HALT debug code
+
 
 class TtUmMisa(Component):
 
@@ -76,7 +78,8 @@ class TtUmMisa(Component):
 
         m.d.comb += [
             core.interrupt.eq(self.ui_in[0]),
-            self.uo_out.eq(core.halt_code)
+            self.uo_out[0:7].eq(core.halt_code[0:7]),
+            self.uo_out[UO_HALTED].eq(core.halted)
         ]
 
         return m
