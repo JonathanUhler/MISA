@@ -30,3 +30,17 @@ class RegInit:
     rt: int        = field(default_factory = int)
     rscratch0: int = field(default_factory = int)
     rscratch1: int = field(default_factory = int)
+
+
+@dataclass
+class CoreInit:
+    reg_init: RegInit  = field(default_factory = RegInit)
+    csr_init: CsrInit  = field(default_factory = CsrInit)
+    pc: int            = field(default_factory = int)
+    in_syscall: bool   = field(default_factory = bool)
+    in_interrupt: bool = field(default_factory = bool)
+    syscall_privs: int = field(default_factory = int)
+    int_rscratch: int  = field(default_factory = int)
+    int_flags: int     = field(default_factory = int)
+    int_privs: int     = field(default_factory = int)
+    halted: bool       = field(default_factory = bool)

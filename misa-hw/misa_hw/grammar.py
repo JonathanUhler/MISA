@@ -77,3 +77,23 @@ class Reg(IntEnum, shape = 4):
     RSCRATCH0 = 0b1110
     RSCRATCH1 = 0b1111
 
+
+class Flag(IntEnum, shape = 4):
+    Z = 0b0001
+    C = 0b0010
+    N = 0b0100
+    V = 0b1000
+
+
+class FaultKind(IntEnum, shape = 6):
+    NOTHING          = 0b000000
+    HALT             = 0b000001
+    ILLEGAL          = 0b001001
+    PRIV_INSTRUCTION = 0b010001
+    ADDR_OVERFLOW    = 0b000010
+    PC_OVERFLOW      = 0b001010
+    PRIV_ACCESS      = 0b010010
+    IMPROPER_RETURN  = 0b000011
+    COND_RETURN      = 0b001011
+    IMPROPER_SYSCALL = 0b010011
+
