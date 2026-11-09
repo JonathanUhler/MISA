@@ -1,3 +1,4 @@
+from amaranth import Value
 from amaranth.lib.enum import IntEnum
 
 
@@ -20,7 +21,7 @@ class Op(IntEnum, shape = 4):
     JMP  = 0b1111
 
 
-class ArithmeticOp(IntEnum, shape = 4):
+class AluOp(IntEnum, shape = 4):
     ADD = Op.ADD
     ADC = Op.ADC
     SUB = Op.SUB
@@ -31,7 +32,14 @@ class ArithmeticOp(IntEnum, shape = 4):
     RRC = Op.RRC
 
 
-class Cmp(IntEnum, shape = 3):
+class Flags(IntEnum, shape = 4):
+    Z = 0b0001
+    C = 0b0010
+    N = 0b0100
+    V = 0b1000
+
+
+class CmpFlag(IntEnum, shape = 3):
     ALWAYS        = 0b000
     EQUAL         = 0b001
     NOT_EQUAL     = 0b010
@@ -41,7 +49,7 @@ class Cmp(IntEnum, shape = 3):
     LESS_EQUAL    = 0b110
 
 
-class Csr(IntEnum, shape = 4):
+class CsrReg(IntEnum, shape = 4):
     SADDR = 0b0001
     RADDR = 0b0010
     FLAGS = 0b0011
@@ -59,7 +67,7 @@ class Extn(IntEnum, shape = 4):
     INTERRUPT = 0b1000
 
 
-class Reg(IntEnum, shape = 4):
+class GpReg(IntEnum, shape = 4):
     R0        = 0b0000
     RA        = 0b0001
     RB        = 0b0010
@@ -78,13 +86,6 @@ class Reg(IntEnum, shape = 4):
     RSCRATCH1 = 0b1111
 
 
-class Flag(IntEnum, shape = 4):
-    Z = 0b0001
-    C = 0b0010
-    N = 0b0100
-    V = 0b1000
-
-
 class FaultKind(IntEnum, shape = 6):
     NOTHING          = 0b000000
     HALT             = 0b000001
@@ -97,3 +98,9 @@ class FaultKind(IntEnum, shape = 6):
     COND_RETURN      = 0b001011
     IMPROPER_SYSCALL = 0b010011
 
+
+def in_enum(x: Value, enum: IntEnum) -> Value:
+    result: Value = Value.cast(0)
+    for member in enum:
+        result = result | (x == member)
+    return result

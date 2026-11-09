@@ -2,19 +2,7 @@ from dataclasses import dataclass, field
 
 
 @dataclass
-class CsrInit:
-    saddr: int = field(default_factory = int)
-    raddr: int = field(default_factory = int)
-    flags: int = field(default_factory = int)
-    cause: int = field(default_factory = int)
-    extns: int = field(default_factory = lambda: 0x0F)
-    retsc: int = field(default_factory = int)
-    retir: int = field(default_factory = int)
-    privs: int = field(default_factory = int)
-
-
-@dataclass
-class RegInit:
+class GpRegInit:
     ra: int        = field(default_factory = int)
     rb: int        = field(default_factory = int)
     rc: int        = field(default_factory = int)
@@ -33,14 +21,26 @@ class RegInit:
 
 
 @dataclass
+class CsrRegInit:
+    saddr: int = field(default_factory = int)
+    raddr: int = field(default_factory = int)
+    flags: int = field(default_factory = int)
+    cause: int = field(default_factory = int)
+    extns: int = field(default_factory = lambda: 0x0F)
+    retsc: int = field(default_factory = int)
+    retir: int = field(default_factory = int)
+    privs: int = field(default_factory = int)
+
+
+@dataclass
 class CoreInit:
-    reg_init: RegInit  = field(default_factory = RegInit)
-    csr_init: CsrInit  = field(default_factory = CsrInit)
-    pc: int            = field(default_factory = int)
-    in_syscall: bool   = field(default_factory = bool)
-    in_interrupt: bool = field(default_factory = bool)
-    syscall_privs: int = field(default_factory = int)
-    int_rscratch: int  = field(default_factory = int)
-    int_flags: int     = field(default_factory = int)
-    int_privs: int     = field(default_factory = int)
-    halted: bool       = field(default_factory = bool)
+    register: GpRegInit  = field(default_factory = GpRegInit)
+    special: CsrRegInit  = field(default_factory = CsrRegInit)
+    pc: int              = field(default_factory = int)
+    in_syscall: bool     = field(default_factory = bool)
+    in_interrupt: bool   = field(default_factory = bool)
+    int_rscratch: int    = field(default_factory = int)
+    int_flags: int       = field(default_factory = int)
+    syscall_privs: int   = field(default_factory = int)
+    int_privs: int       = field(default_factory = int)
+    halted: bool         = field(default_factory = bool)
