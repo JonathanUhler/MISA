@@ -109,7 +109,7 @@ data WideReg = RAB | RCD | REF | RUV | RWX | RYZ | RSCRATCH
 
 data CsrReg
   -- Core architecture
-  = SADDR | RADDR | FLAGS | CAUSE | EXTNS
+  = SADDR | RADDR | FLAGS | CAUSE | EXTNS | FAULT
   -- System call extension
   | RETSC
   -- Interrupt extension

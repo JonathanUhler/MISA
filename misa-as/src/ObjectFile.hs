@@ -289,6 +289,7 @@ packInst inst =
       FLAGS -> 0x3
       CAUSE -> 0x4
       EXTNS -> 0x5
+      FAULT -> 0x6
       -- System call extension
       RETSC -> 0x8
       -- Interrupt extension

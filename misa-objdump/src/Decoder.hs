@@ -209,6 +209,7 @@ decodeInst lo hi = inst
       0x3 -> Just FLAGS
       0x4 -> Just CAUSE
       0x5 -> Just EXTNS
+      0x6 -> Just FAULT
       0x8 -> Just RETSC
       0x9 -> Just RETIR
       0xA -> Just PRIVS

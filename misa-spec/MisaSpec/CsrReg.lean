@@ -11,6 +11,7 @@ inductive CsrReg where
   | flags
   | cause
   | extns
+  | fault
   -- System call extension
   | retsc
   -- Interrupt extension
@@ -22,7 +23,7 @@ inductive CsrReg where
 
 def CsrReg.all : List CsrReg :=
   [
-    .saddr, .raddr, .flags, .cause, .extns,
+    .saddr, .raddr, .flags, .cause, .extns, .fault,
     -- System call extension
     .retsc,
     -- Interrupt extension
@@ -38,6 +39,7 @@ def CsrReg.enc : CsrReg -> HalfWord
   | .flags => 0b0011#4
   | .cause => 0b0100#4
   | .extns => 0b0101#4
+  | .fault => 0b0110#4
   -- System call extension
   | .retsc => 0b1000#4
   -- Interrupt extension
@@ -56,6 +58,7 @@ def CsrReg.name : CsrReg -> String
   | .flags => "flags"
   | .cause => "cause"
   | .extns => "extns"
+  | .fault => "fault"
   -- System call extension
   | .retsc => "retsc"
   -- Interrupt extension

@@ -52,7 +52,7 @@ def State.writeSpecial (q : State) (c : CsrReg) (v : SpecWord) : State :=
 
 
 def State.fault (q : State) (cause : CsrCause) : State :=
-  let q := (q.writeSpecial .cause cause.enc).writeSpecial .privs 0x0000
+  let q := ((q.writeSpecial .cause cause.enc).writeSpecial .privs 0x0000).writeSpecial .fault q.pc
   { q with pc := q.memory 0xFFFD ++ q.memory 0xFFFC }
 
 

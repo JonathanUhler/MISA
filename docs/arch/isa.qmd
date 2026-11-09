@@ -89,6 +89,7 @@ When used as operands for instructions, the special registers are encoded as fol
 | `FLAGS` | 0011 |
 | `CAUSE` | 0100 |
 | `EXTNS` | 0101 |
+| `FAULT` | 0110 |
 | `RETSC` | 1000 (under System Call Extension) |
 | `RETIR` | 1001 (under Interrupt Extension) |
 | `PRIVS` | 1010 (under Privilege Extension) |
@@ -288,6 +289,32 @@ preventing the Dynamic Hardware Extension from disabling itself.
 | 2 | Privilege Extension |
 | 3 | Interrupt Extension |
 
+
+### `FAULT`
+
+The `FAULT` special register holds the value of the program counter at the time a fault occurs. It
+is closely related to the `CAUSE` special register, which gives information on why the fault at
+address `FAULT` occurred. The fault location is only set when fault behavior occurs during
+execution. Successful execution of the `HALT` and `SYSCALL` (under the System Call Extension)
+instructions will not update the `FAULT` register.
+
+`FAULT` SHOULD be used as a diagnostic tool to understand the nature of a fault condition, but
+SHOULD NOT be used as a branch target. Attempting to return to the address at `FAULT` does not
+restore any processor state, which can lead to unexpected behavior. Writes to `FAULT` are allowed,
+but have no particular purpose.
+
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        {"name": "FAULT", "bits": 16},
+    ],
+    "config": {"bits": 16}
+})).tostring())
+```
+
 ## Data Formats and Alignments
 
 The MISA architecture defined in this chapter only supports 8-bit signed integers using two's
@@ -413,10 +440,11 @@ Fault conditions occur when something goes wrong during program execution. This 
 - Overflow of the program counter
 - Etc.
 
-When a fault is detected, the processor MUST set the `CAUSE` register based on the type of fault and
-then set the program counter to the fault vector address stored in memory at `0xFFFC - 0xFFFD`.
-Execution MUST then continue in the fault handler, which is software-defined and MAY attempt
-recovery, dump diagnostic information, or simply halt.
+When a fault is detected, the processor MUST set the `CAUSE` register based on the type of fault,
+set the `FAULT` register to the address of the instruction that caused the fault (or the last
+instruction before a PC overflow), and then set the program counter to the fault vector address
+stored in memory at `0xFFFC - 0xFFFD`. Execution MUST then continue in the fault handler, which is
+software-defined and MAY attempt recovery, dump diagnostic information, or simply halt.
 
 ## Exceptions and Interrupts
 
@@ -732,9 +760,9 @@ Register[RD] = IMM;
 ### `LD`
 Usage: `LD RD RSB IMM`
 
-Description: Load the 8-bit word at the address formed by `{RSB, RSB + 1} + IMM` into `RD`. The
-base address is stored in two adjacent general purpose registers; the instruction names the high
-register `RSB`, and the low byte is taken from register `RSB + 1`.
+Description: Load the 8-bit word at the address formed by `{RSB, RSB + 1} + IMM` into `RD`. The base
+address is stored in two adjacent general purpose registers; the instruction names the high register
+`RSB`, and the low byte is taken from register `RSB + 1`.
 
 The encoding `0xF` for the base register `RSB` is reserved for stack operations and has a separate
 behavior.
@@ -772,9 +800,9 @@ If (RSB == 0xF) {
 ### `ST`
 Usage: `ST RD RSB IMM`
 
-Description: Store the 8-bit word in `RD` to the address formed by `{RSB, RSB + 1} + IMM`. The
-base address is stored in two adjacent general purpose registers; the instruction names the high
-register `RSB`, and the low byte is taken from register `RSB + 1`.
+Description: Store the 8-bit word in `RD` to the address formed by `{RSB, RSB + 1} + IMM`. The base
+address is stored in two adjacent general purpose registers; the instruction names the high register
+`RSB`, and the low byte is taken from register `RSB + 1`.
 
 The encoding `0xF` for the base register `RSB` is reserved for stack operations and has a separate
 behavior.
