@@ -55,6 +55,7 @@ class CsrReg(IntEnum, shape = 4):
     FLAGS = 0b0011
     CAUSE = 0b0100
     EXTNS = 0b0101
+    FAULT = 0b0110
     RETSC = 0b1000
     RETIR = 0b1001
     PRIVS = 0b1010

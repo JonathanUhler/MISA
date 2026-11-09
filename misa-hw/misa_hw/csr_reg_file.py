@@ -25,6 +25,7 @@ class CsrRegFile(Component):
         self.flags: Signal = Signal(4, init = init_data.flags)
         self.cause: Signal = Signal(16, init = init_data.cause)
         self.extns: Signal = Signal(4, init = init_data.extns)
+        self.fault: Signal = Signal(16, init = init_data.fault)
         self.retsc: Signal = Signal(16, init = init_data.retsc)
         self.retir: Signal = Signal(16, init = init_data.retir)
         self.privs: Signal = Signal(1, init = init_data.privs)
@@ -45,6 +46,8 @@ class CsrRegFile(Component):
                 m.d.comb += self.read_data.eq(self.cause)
             with m.Case(CsrReg.EXTNS):
                 m.d.comb += self.read_data.eq(self.extns)
+            with m.Case(CsrReg.FAULT):
+                m.d.comb += self.read_data.eq(self.fault)
             with m.Case(CsrReg.RETSC):
                 m.d.comb += self.read_data.eq(self.retsc)
             with m.Case(CsrReg.RETIR):
@@ -65,6 +68,8 @@ class CsrRegFile(Component):
                 with m.Case(CsrReg.EXTNS):
                     with m.If(self.extns & Extn.DYNAMICHW):
                         m.d.sync += self.extns.eq(Cat(0b1, self.write_data[1:4]))
+                with m.Case(CsrReg.FAULT):
+                    m.d.sync += self.fault.eq(self.write_data)
                 with m.Case(CsrReg.RETSC):
                     m.d.sync += self.retsc.eq(self.write_data)
                 with m.Case(CsrReg.RETIR):

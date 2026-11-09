@@ -27,6 +27,7 @@ class CsrRegInit:
     flags: int = field(default = 0x0000)
     cause: int = field(default = 0x0000)
     extns: int = field(default = 0x000F)
+    fault: int = field(default = 0x0000)
     retsc: int = field(default = 0x0000)
     retir: int = field(default = 0x0000)
     privs: int = field(default = 0x0000)
