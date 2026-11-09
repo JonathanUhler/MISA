@@ -2,6 +2,7 @@
 **/build
 **/install
 **/__pycache__
+**/*.egg-info
 *~
 **/venv
 *.bkp
