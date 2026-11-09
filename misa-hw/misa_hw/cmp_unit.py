@@ -6,7 +6,7 @@ from .grammar import CmpFlag
 
 class CmpUnit(Component):
 
-    cmp_flag: In(CmpFlag)
+    cmp_flag: In(CmpFlag, init = CmpFlag.ALWAYS)
     z: In(1)
     c: In(1)
     n: In(1)
@@ -33,5 +33,7 @@ class CmpUnit(Component):
                 m.d.comb += self.true.eq(~(self.n ^ self.v))
             with m.Case(CmpFlag.LESS_EQUAL):
                 m.d.comb += self.true.eq((self.n ^ self.v) | self.z)
+            with m.Default():
+                m.d.comb += self.true.eq(0)
 
         return m

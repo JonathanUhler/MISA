@@ -1,4 +1,4 @@
-from amaranth import Module, Signal, Value
+from amaranth import Module, Value
 from amaranth.lib.wiring import Component, In, Out
 
 from .grammar import Op, CsrReg, CmpFlag, in_enum
@@ -8,7 +8,7 @@ class DecoderUnit(Component):
 
     inst: In(16)
 
-    op: Out(Op)
+    op: Out(Op, init = Op.HALT)
     n1: Out(4)
     n2: Out(4)
     n3: Out(4)
@@ -31,16 +31,16 @@ class DecoderUnit(Component):
             self.imm4.eq(self.inst[12:16]),
             self.imm8.eq(self.inst[8:16]),
             self.cmp.eq(self.inst[12:15]),
-            self.is_jmp_csr.eq(self.inst[15]),
-            self.is_syscall.eq(self.inst[15])
+            self.is_jmp_csr.eq((self.op == Op.JMP) & self.inst[15]),
+            self.is_syscall.eq((self.op == Op.HALT) & self.inst[15])
         ]
 
-        is_illegal_csr: Signal = ((op == Op.RSR) | (op == Op.WSR)) & ~in_enum(self.n3, CsrReg)
-        is_illegal_jmp: Signal = (op == Op.JMP) & self.is_jmp_csr & ~in_enum(self.n1, CsrReg)
-        is_illegal_cmp: Signal = ((op == Op.JAL) | (op == Op.JMP)) & ~in_enum(self.cmp, CmpFlag)
-        m.d.comb += self.is_illegal(is_illegal_csr | is_illegal_jmp | is_illegal_cmp)
+        is_illegal_csr: Value = \
+            ((self.op == Op.RSR) | (self.op == Op.WSR)) & ~in_enum(self.n3, CsrReg)
+        is_illegal_jmp: Value = \
+            self.is_jmp_csr & ~in_enum(self.n1, CsrReg)
+        is_illegal_cmp: Value = \
+            ((self.op == Op.JAL) | (self.op == Op.JMP)) & ~in_enum(self.cmp, CmpFlag)
+        m.d.comb += self.is_illegal.eq(is_illegal_csr | is_illegal_jmp | is_illegal_cmp)
 
         return m
-    
-
-    

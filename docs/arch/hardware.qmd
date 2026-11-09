@@ -55,26 +55,27 @@ provided below to clarify the meaning of fields in-line.
 # Whether the processor is halted
 halted      : true|false
 
-# System Call Extension: Whether the processor is in a canonical system call context
+# System Call Extension: Whether the processor is in a canonical system call
+# context
 inSyscall   : true|false
 
-# System Call Extension & Privilege Extension: The state of the PRIVS register saved upon entering
-# the current system call context
+# System Call Extension & Privilege Extension: The state of the PRIVS register
+# saved upon entering the current system call context
 syscallPrivs: 0x0000-0xFFFF
 
 # Interrupt Extension: Whether the processor is in a canonical interrupt context
 inInterrupt : true|false
 
-# Interrupt Extension: The state of the RSCRATCH registers saved upon entering the current interrupt
-# context
+# Interrupt Extension: The state of the RSCRATCH registers saved upon entering
+# the current interrupt context
 intRscratch : 0x0000-0xFFFF
 
-# Interrupt Extension: The state of the FLAGS register saved upon entering the current interrupt
-# context
+# Interrupt Extension: The state of the FLAGS register saved upon entering the
+# current interrupt context
 intFlags    : 0x0000-0xFFFF
 
-# Interrupt Extension & Privilege Extension: The state of the PRIVS register saved upon entering
-# the current interrupt context
+# Interrupt Extension & Privilege Extension: The state of the PRIVS register
+# saved upon entering the current interrupt context
 intPrivs    : 0x0000-0xFFFF
 
 # The program counter
@@ -125,9 +126,6 @@ state file matches the output of `misa-spec memfile.bin -n n -e extns ...`.
 
 ## Hardware Reference
 
-The ultimate goal of the MISA project is to design, verify, and manufacture an ASIC that runs a
-complete implementation of the architecture. Tapeout shuttle programs that offer such a service
-often carry restrictive area and pinout requirements, so the intended design is a single-cycle
-processor sized for those constraints.
-
-The hardware reference is planned work.
+A simple implementation of the MISA core architecture and all four architectural extensions exists
+as `misa-hw`. It defines an unpipelined processor architecture with the Amaranth HDL library for
+Python, and can elaborate to Verilog.
