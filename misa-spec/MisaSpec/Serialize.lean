@@ -103,6 +103,7 @@ def State.serialize (q : State) : String :=
   let interruptLines :=
     if extns.interrupt then
       s!"inInterrupt : {q.inInterrupt}\n" ++
+      s!"intPending  : {q.intPending}\n" ++
       s!"intRscratch : 0x{toHex 4 q.intRscratch.toNat}\n" ++
       s!"intFlags    : 0x{toHex 4 q.intFlags.toNat}\n" ++
       s!"intPrivs    : 0x{toHex 4 q.intPrivs.toNat}\n"
@@ -174,12 +175,15 @@ def State.deserialize (content : String) : Option State := do
   let halted ← (lookup? p.scalars "halted").bind parseBool?
   let pcN    ← (lookup? p.scalars "pc").bind parseNumeral?
   let regFn : GpReg -> DataWord := fun r =>
-    match (lookup? p.registers r.name).bind parseNumeral? with
-    | some n => BitVec.ofNat 8 n
-    | none   => 0
+    match r with
+    | .r0 => 0
+    | _   =>
+      match (lookup? p.registers r.name).bind parseNumeral? with
+      | some n => BitVec.ofNat 8 n
+      | none   => 0
   let specFn : CsrReg -> SpecWord := fun c =>
     match (lookup? p.specials c.name).bind parseNumeral? with
-    | some n => BitVec.ofNat 16 n
+    | some n => BitVec.ofNat 16 n &&& c.writeMask
     | none   => 0
   let bytes := base64Decode p.memory
   let memFn : AddrWord -> DataWord := fun a =>
@@ -192,6 +196,7 @@ def State.deserialize (content : String) : Option State := do
     pc           := BitVec.ofNat 16 pcN,
     inSyscall    := scalarBool p.scalars "inSyscall"   false,
     inInterrupt  := scalarBool p.scalars "inInterrupt" false,
+    intPending   := scalarBool p.scalars "intPending"  false,
     intRscratch  := scalarWord p.scalars "intRscratch"  0,
     intFlags     := scalarWord p.scalars "intFlags"     0,
     syscallPrivs := scalarWord p.scalars "syscallPrivs" 0,

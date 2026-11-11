@@ -128,6 +128,21 @@ def CsrReg.availableUnder (csr : CsrReg) (extns : CsrExtns) : Bool :=
   | _      => true
 
 
+def CsrReg.writeMask : CsrReg -> SpecWord
+  | .saddr => 0xFFFF#16
+  | .raddr => 0xFFFF#16
+  | .flags => 0x000F#16
+  | .cause => 0xFF3F#16
+  | .extns => 0x000F#16
+  | .fault => 0xFFFF#16
+  -- System call extension
+  | .retsc => 0xFFFF#16
+  -- Interrupt extension
+  | .retir => 0xFFFF#16
+  -- Privilege extension
+  | .privs => 0x0001#16
+
+
 def CsrReg.userReadable : CsrReg -> Bool
   | .saddr | .raddr | .flags | .privs => true
   | _                                 => false
@@ -190,9 +205,6 @@ structure CsrCause where
 def CsrCause.enc (cause : CsrCause) : SpecWord :=
   cause.status ++ 0b00#2 ++ cause.kind.enc
 
-
-def CsrCause.nothing : CsrCause :=
-  { kind := .nothing, status := 0b00000000#8 }
 
 def CsrCause.haltInstruction (rs : DataWord) : CsrCause :=
   { kind := .haltInstruction, status := rs }

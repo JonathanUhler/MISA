@@ -66,6 +66,9 @@ syscallPrivs: 0x0000-0xFFFF
 # Interrupt Extension: Whether the processor is in a canonical interrupt context
 inInterrupt : true|false
 
+# Interrupt Extension: Whether an interrupt is pending for the next clock cycle
+intPending : true|false
+
 # Interrupt Extension: The state of the RSCRATCH registers saved upon entering
 # the current interrupt context
 intRscratch : 0x0000-0xFFFF

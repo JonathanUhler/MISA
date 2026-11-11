@@ -15,6 +15,7 @@ structure State where
   pc           : AddrWord
   inSyscall    : Bool
   inInterrupt  : Bool
+  intPending   : Bool
   intRscratch  : SpecWord
   intFlags     : SpecWord
   syscallPrivs : SpecWord
@@ -39,6 +40,7 @@ def State.writeFlags (q : State) (f : CsrFlags) : State :=
 
 
 def State.writeSpecial (q : State) (c : CsrReg) (v : SpecWord) : State :=
+  let v := v &&& c.writeMask
   match c with
   | .extns =>
     let cur := q.special .extns
@@ -61,12 +63,14 @@ def State.first (bytes : ByteArray) (extns : SpecWord) : State :=
     let i := a.toNat
     if i < bytes.size then BitVec.ofNat 8 (bytes.get! i).toNat else 0
   { register     := fun _ => 0x00#8,
-    special      := fun c => if c.enc == CsrReg.extns.enc then extns else 0x0000#16,
+    special      := fun c =>
+      if c.enc == CsrReg.extns.enc then extns &&& CsrReg.extns.writeMask else 0x0000#16,
     memory       := mem,
     check        := CsrFlags.eval (CsrFlags.dec 0x0000#16),
     pc           := mem 0xFFFF ++ mem 0xFFFE,
     inSyscall    := false,
     inInterrupt  := false,
+    intPending   := false,
     intRscratch  := 0x0000#16,
     intFlags     := 0x0000#16,
     syscallPrivs := 0x0000#16,
@@ -97,6 +101,7 @@ def State.interrupt (q : State) : State :=
     intFlags    := q.special .flags,
     intPrivs    := saved,
     inInterrupt := true,
+    intPending  := false,
     pc          := q.memory 0xFFF9 ++ q.memory 0xFFF8 }
 
 

@@ -62,7 +62,8 @@ def Inst.dec (w : InstWord) : Option Inst := do
   let target : Bool     := w.getLsbD 15
   match n0 with
   | 0b0000#4 =>
-    if target then
+    if w.extractLsb' 8 7 != 0#7 then failure
+    else if target then
       return .syscall (<- GpReg.dec n1)
     else
       return .halt (<- GpReg.dec n1)
@@ -73,16 +74,21 @@ def Inst.dec (w : InstWord) : Option Inst := do
   | 0b0101#4 => return .and (<- GpReg.dec n1) (<- GpReg.dec n2) (<- GpReg.dec n3)
   | 0b0110#4 => return .or  (<- GpReg.dec n1) (<- GpReg.dec n2) (<- GpReg.dec n3)
   | 0b0111#4 => return .xor (<- GpReg.dec n1) (<- GpReg.dec n2) (<- GpReg.dec n3)
-  | 0b1000#4 => return .rrc (<- GpReg.dec n1) (<- GpReg.dec n2)
+  | 0b1000#4 =>
+    if n3 != 0b0000#4 then failure
+    else return .rrc (<- GpReg.dec n1) (<- GpReg.dec n2)
   | 0b1001#4 => return .set (<- GpReg.dec n1) w1
   | 0b1010#4 => return .ld  (<- GpReg.dec n1) (<- GpReg.dec n2) n3
   | 0b1011#4 => return .st  (<- GpReg.dec n1) (<- GpReg.dec n2) n3
   | 0b1100#4 => return .rsr (<- GpReg.dec n1) (<- GpReg.dec n2) (<- CsrReg.dec n3)
   | 0b1101#4 => return .wsr (<- GpReg.dec n1) (<- GpReg.dec n2) (<- CsrReg.dec n3)
-  | 0b1110#4 => return .jal (<- GpReg.dec n1) (<- GpReg.dec n2) (<- CmpFlag.dec cmp)
+  | 0b1110#4 =>
+    if target then failure
+    else return .jal (<- GpReg.dec n1) (<- GpReg.dec n2) (<- CmpFlag.dec cmp)
   | 0b1111#4 =>
     if target then
-      return .jmpCsr (<- CsrReg.dec n1) (<- CmpFlag.dec cmp)
+      if n2 != 0b0000#4 then failure
+      else return .jmpCsr (<- CsrReg.dec n1) (<- CmpFlag.dec cmp)
     else
       return .jmp (<- GpReg.dec n1) (<- GpReg.dec n2) (<- CmpFlag.dec cmp)
   | _  => failure  -- Unreachable
@@ -95,13 +101,20 @@ def Inst.csrOperand : Inst -> Option CsrReg
   | _               => none
 
 
+def Inst.availableUnder (inst : Inst) (extns : CsrExtns) : Bool :=
+  match inst with
+  -- System call extension
+  | .syscall _ => extns.syscall
+  | _          =>
+    match inst.csrOperand with
+    | some csr => csr.availableUnder extns
+    | none     => true
+
+
 def Inst.decUnder (w : InstWord) (extns : CsrExtns) : Option Inst :=
   match Inst.dec w with
   | none      => none
-  | some inst =>
-    match inst.csrOperand with
-    | some csr => if csr.availableUnder extns then some inst else none
-    | none     => some inst
+  | some inst => if inst.availableUnder extns then some inst else none
 
 
 end MisaSpec

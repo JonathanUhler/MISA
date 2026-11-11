@@ -6,11 +6,11 @@ open MisaSpec
 
 def runSteps : Nat -> State -> State
   | 0,     q => q
-  | n + 1, q => if q.halted then q else runSteps n (execute q)
+  | n + 1, q => if q.halted then q else runSteps n (step q)
 
 
 partial def runUntilHalt (q : State) : State :=
-  if q.halted then q else runUntilHalt (execute q)
+  if q.halted then q else runUntilHalt (step q)
 
 
 def runFrom (q0 : State) (stepsArg : String) : IO UInt32 := do

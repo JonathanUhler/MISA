@@ -94,6 +94,18 @@ When used as operands for instructions, the special registers are encoded as fol
 | `RETIR` | 1001 (under Interrupt Extension) |
 | `PRIVS` | 1010 (under Privilege Extension) |
 
+A special register which is marked above as belonging to an architecture extension is only available
+when that extension is enabled. An instruction which names an unavailable special register as an
+operand fails to decode, and MUST raise a fault with the `CAUSE` Reason "Instruction usage" and the
+`CAUSE` Type "Illegal instruction". This applies to the `CSR` operand of `RSR`, `WSR`, and the
+special register variant of `JMP`. Note that under the Dynamic Hardware Extension this makes the
+legality of a fixed instruction word depend on the current value of the `EXTNS` register.
+
+Several of the special registers described below contain fields which are marked as reserved, and
+several specify a required width alongside further optional bits. Every bit of a special register
+which is reserved, or which an implementation does not provide because it chose a narrower width,
+MUST read as zero and MUST ignore writes.
+
 The following sub-sections describe the purpose and layout of each special register.
 
 ### `SADDR`
@@ -101,6 +113,10 @@ The following sub-sections describe the purpose and layout of each special regis
 The stack address or stack pointer. `SADDR` MUST be at least an 8-bit register (supporting stack
 addresses `0x00` - `0xFF` with a possible high 8-bit prefix) and MUST not be more than a 16-bit
 register.
+
+Because the bits of an unimplemented high byte ignore writes, stack arithmetic on an implementation
+with a narrow `SADDR` wraps within the implemented width instead of carrying into the unimplemented
+bits.
 
 ```{python}
 #| echo: false
@@ -140,8 +156,8 @@ SVG(wavedrom.render(str({
 ### `FLAGS`
 
 Conditional branching in the MISA architecture is based on ALU flag values for comparing integers.
-Both branching instructions, `JAL` and `JMP`, MUST these flags to make decisions on whether a branch
-will be taken.
+Both branching instructions, `JAL` and `JMP`, MUST use these flags to make decisions on whether a
+branch will be taken.
 
 `FLAGS` MUST be set based on the result of each ALU operation. The instructions which MUST update
 the `FLAGS` register are: `ADD`, `ADC`, `SUB`, `SBB`, `AND`, `OR`, `XOR`, `RRC`. Instructions which
@@ -160,7 +176,8 @@ and support the following:
 | `N` | 2 | Whether the last ALU operation's output was negative (MSB = 1).  |
 | `V` | 3 | Whether the last ALU operation's output overflowed (sign inversion). |
 
-The `C` and `V` flags must always be `0` after executing `AND`, `OR`, `XOR`, or `RRC`.
+The `C` and `V` flags must always be `0` after executing `AND`, `OR`, or `XOR`. The `V` flag must
+always be `0` after executing `RRC`, and the `C` flag must be set as described in its definition.
 
 ```{python}
 #| echo: false
@@ -190,6 +207,7 @@ assembler symbols:
 | `LESS` | `N ^ V` | 100 |
 | `GREATER_EQUAL` | `~(N ^ V)` | 101 |
 | `LESS_EQUAL` | `(N ^ V) | Z` | 110 |
+| Reserved | - | 111 |
 
 These comparison flags, when passed as a conditional branch instruction operand, MUST perform the
 specified boolean logic on the fields of the `FLAGS` register. If the result is `1`, the branch is
@@ -197,12 +215,26 @@ taken, otherwise the branch is not taken. The assumption is that a comparison of
 `RS2` is performed by invoking `SUB R0 RS1 RS2`, which sets the ALU flags appropriately for deciding
 `RS1 ? RS2` where `?` is a comparison operator.
 
+The comparison encoding `111` is reserved and MUST NOT be emitted by an assembler. An instruction
+which specifies the reserved comparison encoding fails to decode, and MUST raise a fault with the
+`CAUSE` Reason "Instruction usage" and the `CAUSE` Type "Illegal instruction".
+
+Note that the ordered comparisons `GREATER`, `LESS`, `GREATER_EQUAL`, and `LESS_EQUAL` are all
+signed comparisons, derived from `N ^ V`. This specification defines no unsigned ordered
+comparison.
+
 ### `CAUSE`
 
 The `CAUSE` special register holds information about the status of the processor during exceptions,
 faults, and termination. It MUST be set when the `HALT` instruction is executed, when syscalls are
 made under the System Call Extension, and when fault behavior (such as a malformed instruction
 decode) occurs during execution.
+
+The `CAUSE` register retains its value until the processor records a new cause or software
+overwrites it with `WSR`. The processor never returns `CAUSE` to the Reason "None" state, which is
+only its reset value. Reading `CAUSE` is therefore meaningful in response to a known event, such as
+entering the fault handler or the system call handler. Software which needs to distinguish a new
+cause from a stale one SHOULD clear `CAUSE` with `WSR CAUSE R0 R0` once it has been handled.
 
 `CAUSE` is a 16-bit register with the following fields:
 
@@ -230,7 +262,8 @@ SVG(wavedrom.render(str({
 
 #### `CAUSE` Reason: None
 The `CAUSE` register does not represent an exception, or represents an unknown/generic exception
-without a reason. If the reason is 000, the Type and Extended status fields have no significance.
+without a reason. This is the reset value of `CAUSE`, and the processor does not write it at any
+other time. If the reason is 000, the Type and Extended status fields have no significance.
 
 #### `CAUSE` Reason: Instruction Usage
 The exception cause is related to the use of a specific instruction or class of instructions. The
@@ -255,6 +288,21 @@ are:
 | Privileged access | 010 | An access to privileged memory was attempted while in User Mode (under Privilege Extension). |
 
 : {tbl-colwidths="[20, 15, 65]"}
+
+An implementation raises "Address overflow" both when a memory operation addresses memory that the
+implementation does not provide, and when the computation of an effective address leaves the 16-bit
+address range. The second case applies to every implementation, including one which maps the entire
+16-bit address range.
+
+The effective address of a `LD` or `ST` is the sum of a 16-bit base and a sign extended immediate
+offset, which MUST NOT wrap. If an effective address is calculated to be below `0x0000` or above
+`0xFFFF`, the processor MUST raise "Address overflow", and MUST NOT perform a memory access or
+update `SADDR`. For the stack variants of `LD` and `ST`, the same rule applies to the updated value
+of `SADDR`.
+
+Note that this differs from the program counter, where both passing `0xFFFF` on a sequential
+increment and fetching an instruction word at `0xFFFF` raise "PC overflow" rather than "Address
+overflow".
 
 #### `CAUSE` Reason: Control Event
 The exception cause is related to an exception or interrupt control flow event. The valid Type
@@ -431,20 +479,36 @@ When the processor is taken out of the reset state, some internal state MUST be 
   context on reset.
 - If the Interrupt Extension is enabled, the processor must not be initialized to an interrupt
   context on reset.
+- If the Interrupt Extension is enabled, any interrupt pin activity which occurred before the
+  processor was taken out of reset must be discarded, so that no interrupt is taken until the pin
+  is next asserted.
 
 ## Faults
 
-Fault conditions occur when something goes wrong during program execution. This includes:
+Fault conditions occur when something goes wrong during program execution. Two fault conditions are
+not specific to any one instruction and MUST be detected for every instruction:
 
-- Bad instruction decodes
-- Overflow of the program counter
-- Etc.
+- An instruction whose encoding fails to decode raises the `CAUSE` Reason "Instruction usage" with
+  the `CAUSE` Type "Illegal instruction".
+- An instruction which advances the program counter sequentially past the end of the address space
+  raises the `CAUSE` Reason "Memory usage" with the `CAUSE` Type "PC overflow". Instructions which
+  set the program counter from a branch target instead of advancing it sequentially cannot raise
+  this fault. The same fault is raised when the program counter is `0xFFFF`, because the high byte
+  of the instruction word would be fetched from outside the address space.
+
+The faults which are specific to individual instructions are enumerated under the "Faults" label of
+each instruction in the Base Instructions section.
 
 When a fault is detected, the processor MUST set the `CAUSE` register based on the type of fault,
 set the `FAULT` register to the address of the instruction that caused the fault (or the last
 instruction before a PC overflow), and then set the program counter to the fault vector address
 stored in memory at `0xFFFC - 0xFFFD`. Execution MUST then continue in the fault handler, which is
 software-defined and MAY attempt recovery, dump diagnostic information, or simply halt.
+
+A fault MUST NOT change whether the processor is in a system call context or an interrupt context.
+The fault handler executes in whichever context the faulting instruction was in. Because being in
+an interrupt context is what masks interrupts, a fault which occurs inside an interrupt context
+leaves interrupts masked for the duration of the fault handler.
 
 ## Exceptions and Interrupts
 
@@ -480,6 +544,18 @@ describing instruction behavior:
 - `SignExtN`: Copy the MSB of a narrow field to all bits added when converting to an `N`-bit field
 - `If`: Perform the encapsulated operations only if a condition is true
 
+The statements in a "Meaning" block are performed in the order written. Each statement observes the
+processor state left by the preceding statements, and where two statements write the same location,
+the later statement takes effect. The "Meaning" label describes the behavior of an instruction which
+executes successfully. An instruction which can raise a fault specific to itself additionally
+has a "Faults" label enumerating those faults and the conditions under which they occur. The two
+faults that apply to every instruction are described in the Faults section and are not repeated per
+instruction.
+
+Some instruction encodings contain a reserved field. Every bit of a reserved field MUST be zero. An
+instruction whose encoding has a non-zero reserved field fails to decode, and MUST raise a fault
+with the `CAUSE` Reason "Instruction usage" and the `CAUSE` Type "Illegal instruction".
+
 ### `HALT`
 Usage: `HALT RS`
 
@@ -494,7 +570,7 @@ SVG(wavedrom.render(str({
     "reg": [
         *[{"name": bit, "bits": 1} for bit in reversed("0000")],
         {"name": "RS", "bits": 4},
-        {"name": "Unused", "bits": 8}
+        {"name": "Reserved", "bits": 8}
     ],
     "config": {"bits": 16}
 })).tostring())
@@ -505,6 +581,10 @@ Meaning:
 Special[CAUSE] = Register[RS] << 8 | 0x01;
 Halt;
 ```
+
+Faults:
+
+- "Privileged instruction" if `HALT` is executed in User Mode under the Privilege Extension.
 
 ### `ADD`
 Usage: `ADD RD RS1 RS2`
@@ -614,7 +694,7 @@ SVG(wavedrom.render(str({
 
 Meaning:
 ```
-Regsiter[RD] = Register[RS1] + ~Register[RS2] + Special[FLAGS.C];
+Register[RD] = Register[RS1] + ~Register[RS2] + Special[FLAGS.C];
 Update Special[FLAGS];
 ```
 
@@ -669,7 +749,7 @@ SVG(wavedrom.render(str({
 
 Meaning:
 ```
-Regsiter[RD] = Register[RS1] | Register[RS2];
+Register[RD] = Register[RS1] | Register[RS2];
 Update Special[FLAGS];
 ```
 
@@ -697,7 +777,7 @@ SVG(wavedrom.render(str({
 
 Meaning:
 ```
-Regsiter[RD] = Register[RS1] ^ Register[RS2];
+Register[RD] = Register[RS1] ^ Register[RS2];
 Update Special[FLAGS];
 ```
 
@@ -719,7 +799,7 @@ SVG(wavedrom.render(str({
         *[{"name": bit, "bits": 1} for bit in reversed("1000")],
         {"name": "RD", "bits": 4},
         {"name": "RS", "bits": 4},
-        {"name": "Unused", "bits": 4}
+        {"name": "Reserved", "bits": 4}
     ],
     "config": {"bits": 16}
 })).tostring())
@@ -797,6 +877,14 @@ If (RSB == 0xF) {
 }
 ```
 
+Faults:
+
+- "Address overflow" if the effective address computation leaves the 16-bit address range, or if the
+  effective address is outside the memory the implementation provides. For the stack variant, the
+  same applies if the new value of `SADDR` overflows.
+- "Privileged access" if the effective address is in privileged memory and the load is performed in
+  User Mode under the Privilege Extension with a memory protection unit.
+
 ### `ST`
 Usage: `ST RD RSB IMM`
 
@@ -837,6 +925,14 @@ If (RSB == 0xF) {
 }
 ```
 
+Faults:
+
+- "Address overflow" if the effective address computation leaves the 16-bit address range, or if the
+  effective address is outside the memory the implementation provides. For the stack variant, the
+  same applies if the new values of `SADDR` overflows.
+- "Privileged access" if the effective address is in privileged memory and the store is performed in
+  User Mode under the Privilege Extension with a memory protection unit.
+
 ### `RSR`
 Usage: `RSR CSR RS1 RS2`
 
@@ -865,6 +961,11 @@ Register[RS1] = Special[CSR] >> 0x08;
 Register[RS2] = Special[CSR] & 0xFF;
 ```
 
+Faults:
+
+- "Privileged instruction" if `RSR` is executed in User Mode under the Privilege Extension on any
+  special register other than `SADDR`, `RADDR`, `FLAGS`, and `PRIVS`.
+
 ### `WSR`
 Usage: `WSR CSR RS1 RS2`
 
@@ -892,6 +993,12 @@ Meaning:
 Special[CSR] = (Register[RS1] << 0x08) | Register[RS2];
 ```
 
+Faults:
+
+- "Privileged instruction" if `WSR` is executed in User Mode under the Privilege Extension on any
+  special register other than `SADDR`, `RADDR`, and `FLAGS`. Note that `PRIVS` is readable but not
+  writable from User Mode.
+
 ### `JAL`
 Usage: `JAL CMP RS1 RS2`
 
@@ -910,7 +1017,7 @@ SVG(wavedrom.render(str({
         {"name": "RS1", "bits": 4},
         {"name": "RS2", "bits": 4},
         {"name": "CMP", "bits": 3},
-        {"name": "Unused", "bits": 1}
+        {"name": "Reserved", "bits": 1}
     ],
     "config": {"bits": 16}
 })).tostring())
@@ -974,7 +1081,7 @@ SVG(wavedrom.render(str({
     "reg": [
         *[{"name": bit, "bits": 1} for bit in reversed("1111")],
         {"name": "CSR", "bits": 4},
-        {"name": "Unused", "bits": 4},
+        {"name": "Reserved", "bits": 4},
         {"name": "CMP", "bits": 3},
         {"name": "1", "bits": 1},
     ],
@@ -988,6 +1095,15 @@ If (Check[CMP]) {
   PC = Special[CSR];
 }
 ```
+
+Faults:
+
+- "Conditional context return" if `CSR` is `RETSC` or `RETIR` and `CMP` is not `ALWAYS`. This fault
+  is a property of the instruction encoding, and MUST occur whether or not the comparison evaluates
+  true.
+- "Improper return context" if `CSR` is `RETSC` and the processor is either outside of a system call
+  context or inside of an interrupt context, or if `CSR` is `RETIR` and the processor is outside of
+  an interrupt context.
 
 ## Pseudo Instructions
 
@@ -1282,7 +1398,7 @@ SVG(wavedrom.render(str({
     "reg": [
         *[{"name": bit, "bits": 1} for bit in reversed("0000")],
         {"name": "RS", "bits": 4},
-        {"name": "Unused", "bits": 7},
+        {"name": "Reserved", "bits": 7},
         {"name": "E", "bits": 1}
     ],
     "config": {"bits": 16}
@@ -1296,9 +1412,18 @@ If (E == 0b0) {
   Halt;
 }
 If (E == 0b1) {
+  Special[RETSC] = PC + 0x02;
+  Special[PRIVS.R] = 0b0;
   PC = (Memory[0xFFFB] << 0x08) | Memory[0xFFFA];
 }
 ```
+
+Faults:
+
+- "Privileged instruction" if `E` is `0` and the instruction is executed in User Mode under the
+  Privilege Extension, as described for `HALT`.
+- "Improper system call" if `E` is `1` and the processor is already in a system call context or in
+  an interrupt context.
 
 #### `HALT`
 `HALT` functionality as defined in the core architecture is supported under the System Call

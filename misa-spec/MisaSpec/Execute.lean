@@ -21,6 +21,11 @@ def aluAdd (a : DataWord) (b : DataWord) (cin : Bool) : DataWord × CsrFlags :=
   (res, flags)
 
 
+def effAddr (base : AddrWord) (imm : HalfWord) : Option AddrWord :=
+  let wide : BitVec 17 := base.setWidth 17 + imm.signExtend 17
+  if wide.getLsbD 16 then none else some (wide.setWidth 16)
+
+
 def executeHalt (q : State) (rs : GpReg) : State :=
   if q.userMode then
     q.fault CsrCause.privilegedInstruction
@@ -98,25 +103,32 @@ def executeSet (q : State) (rd : GpReg) (imm : DataWord) : State :=
 def executeLd (q : State) (rd : GpReg) (rsb : GpReg) (imm : HalfWord) : State :=
   match rsb with
   | .rscratch1 =>
-    let saddr' : AddrWord := q.special .saddr + imm.signExtend 16
-    let q := q.writeSpecial .saddr saddr'
-    (q.writeReg rd (q.memory saddr')).next
+    match effAddr (q.special .saddr) imm with
+    | none        => q.fault CsrCause.addressOverflow
+    | some saddr' =>
+      let q := q.writeSpecial .saddr saddr'
+      (q.writeReg rd (q.memory saddr')).next
   | _ =>
     let lo := (GpReg.dec (rsb.enc + 1)).getD .r0
-    let addr : AddrWord := (q.register rsb ++ q.register lo) + imm.signExtend 16
-    (q.writeReg rd (q.memory addr)).next
+    match effAddr (q.register rsb ++ q.register lo) imm with
+    | none      => q.fault CsrCause.addressOverflow
+    | some addr => (q.writeReg rd (q.memory addr)).next
 
 
 def executeSt (q : State) (rd : GpReg) (rsb : GpReg) (imm : HalfWord) : State :=
   match rsb with
   | .rscratch1 =>
     let saddr : AddrWord := q.special .saddr
-    let q := q.writeMem saddr (q.register rd)
-    (q.writeSpecial .saddr (saddr + imm.signExtend 16)).next
+    match effAddr saddr imm with
+    | none        => q.fault CsrCause.addressOverflow
+    | some saddr' =>
+      let q := q.writeMem saddr (q.register rd)
+      (q.writeSpecial .saddr saddr').next
   | _ =>
     let lo := (GpReg.dec (rsb.enc + 1)).getD .r0
-    let addr : AddrWord := (q.register rsb ++ q.register lo) + imm.signExtend 16
-    (q.writeMem addr (q.register rd)).next
+    match effAddr (q.register rsb ++ q.register lo) imm with
+    | none      => q.fault CsrCause.addressOverflow
+    | some addr => (q.writeMem addr (q.register rd)).next
 
 
 def executeRsr (q : State) (rs1 : GpReg) (rs2 : GpReg) (csr : CsrReg) : State :=
@@ -150,34 +162,35 @@ def executeJmp (q : State) (rs1 : GpReg) (rs2 : GpReg) (cmp : CmpFlag) : State :
 
 
 def executeJmpCsr (q : State) (csr : CsrReg) (cmp : CmpFlag) : State :=
-  if q.check cmp then
-    match csr with
-    | .retsc =>
-      if cmp == .always && q.inSyscall && !q.inInterrupt then
-        { (q.writeSpecial .privs q.syscallPrivs)
-          with pc := q.special csr, inSyscall := false }
-      else if cmp == .always then
-        q.fault (CsrCause.improperReturnContext q.inSyscall q.inInterrupt csr)
-      else
-        q.fault (CsrCause.conditionalContextReturn cmp csr)
-    -- Interrupt extension
-    | .retir =>
-      if cmp == .always && q.inInterrupt then
-        let flags : CsrFlags := CsrFlags.dec q.intFlags
-        let q := ((q.writeReg .rscratch0 (q.intRscratch.extractLsb' 8 8)).writeReg
-            .rscratch1 (q.intRscratch.extractLsb' 0 8)).writeFlags flags
-        { (q.writeSpecial .privs q.intPrivs)
-          with pc := q.special csr, inInterrupt := false }
-      else if cmp == .always then
-        q.fault (CsrCause.improperReturnContext q.inSyscall q.inInterrupt csr)
-      else
-        q.fault (CsrCause.conditionalContextReturn cmp csr)
-    | _      => { q with pc := q.special csr }
-  else
-    q.next
+  match csr with
+  | .retsc =>
+    if cmp != .always then
+      q.fault (CsrCause.conditionalContextReturn cmp csr)
+    else if q.inSyscall && !q.inInterrupt then
+      { (q.writeSpecial .privs q.syscallPrivs)
+        with pc := q.special csr, inSyscall := false }
+    else
+      q.fault (CsrCause.improperReturnContext q.inSyscall q.inInterrupt csr)
+  -- Interrupt extension
+  | .retir =>
+    if cmp != .always then
+      q.fault (CsrCause.conditionalContextReturn cmp csr)
+    else if q.inInterrupt then
+      let flags : CsrFlags := CsrFlags.dec q.intFlags
+      let q := ((q.writeReg .rscratch0 (q.intRscratch.extractLsb' 8 8)).writeReg
+          .rscratch1 (q.intRscratch.extractLsb' 0 8)).writeFlags flags
+      { (q.writeSpecial .privs q.intPrivs)
+        with pc := q.special csr, inInterrupt := false }
+    else
+      q.fault (CsrCause.improperReturnContext q.inSyscall q.inInterrupt csr)
+  | _      =>
+    if q.check cmp then
+      { q with pc := q.special csr }
+    else
+      q.next
 
 
-def execute (q : State) : State :=
+def decodeAndExecute (q : State) : State :=
   let extns : CsrExtns := CsrExtns.dec (q.special .extns)
   match Inst.decUnder (fetch q) extns with
   | none      => q.fault CsrCause.illegalInstruction
@@ -200,8 +213,23 @@ def execute (q : State) : State :=
     | .jal     rs1 rs2 cmp => executeJal    q rs1 rs2 cmp
     | .jmp     rs1 rs2 cmp => executeJmp    q rs1 rs2 cmp
     | .jmpCsr  csr cmp     => executeJmpCsr q csr cmp
-    -- System call extension
-    | .syscall rs          => if extns.syscall then executeSyscall q rs else executeHalt q rs
+    | .syscall rs          => executeSyscall q rs
+
+
+def execute (q : State) : State :=
+  if q.pc == 0xFFFF#16 then
+    q.fault CsrCause.pcOverflow
+  else
+    decodeAndExecute q
+
+
+def step (q : State) : State :=
+  if q.halted then
+    q
+  else if q.intPending && q.canInterrupt then
+    q.interrupt
+  else
+    execute q
 
 
 end MisaSpec
