@@ -186,6 +186,7 @@ class MisaCore(Component):
         self.mem_issuer: Signal = Signal(MemIssuer)
 
         # Cross-module wiring
+        pass
 
 
     def perform_mem_issue(self, m: Module, addr: Value, *, issuer: MemIssuer,
