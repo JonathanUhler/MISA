@@ -171,15 +171,6 @@ inductive FaultKind where
   deriving Repr
 
 
-def FaultKind.all : List FaultKind :=
-  [
-    .nothing,
-    .haltInstruction, .illegalInstruction, .privilegedInstruction,
-    .addressOverflow, .pcOverflow, .privilegedAccess,
-    .improperReturnContext, .conditionalContextReturn, .improperSystemCall
-  ]
-
-
 def FaultKind.enc : FaultKind -> BitVec 6
   | .nothing                  => 0b000000#6
   | .haltInstruction          => 0b000001#6
@@ -191,10 +182,6 @@ def FaultKind.enc : FaultKind -> BitVec 6
   | .improperReturnContext    => 0b000011#6
   | .conditionalContextReturn => 0b001011#6
   | .improperSystemCall       => 0b010011#6
-
-
-def FaultKind.dec (n : BitVec 6) : Option FaultKind :=
-  FaultKind.all.find? (·.enc == n)
 
 
 structure CsrCause where
@@ -234,12 +221,6 @@ def CsrCause.conditionalContextReturn (cmp : CmpFlag) (csr : CsrReg) : CsrCause 
 def CsrCause.improperSystemCall (inSyscall inInterrupt : Bool) : CsrCause :=
   { kind   := .improperSystemCall,
     status := 0b000000#6 ++ BitVec.ofBool inInterrupt ++ BitVec.ofBool inSyscall }
-
-
-def CsrCause.dec (n : SpecWord) : Option CsrCause :=
-  match FaultKind.dec (n.extractLsb' 0 6) with
-  | none      => none
-  | some kind => some { kind := kind, status := n.extractLsb' 8 8 }
 
 
 end MisaSpec

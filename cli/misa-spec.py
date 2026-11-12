@@ -61,16 +61,26 @@ def steps_type(steps_str: str) -> str:
         raise ValueError("step count is not an integer literal or '-'") from e
 
 
-def run_from_q0(mem_path: Path, steps: str, extns: int) -> (bool, str):
-    result: CompletedProcess = \
-        subprocess.run(["misa-spec-exe", "q0", mem_path, steps, str(extns)], capture_output = True)
+def format_interrupts(steps: list) -> str:
+    if (not steps):
+        return "-"
+    return ",".join(str(step) for step in steps)
+
+
+def run_from_q0(mem_path: Path, steps: str, extns: int, ints: str) -> (bool, str):
+    result: CompletedProcess = subprocess.run(
+        ["misa-spec-exe", "q0", mem_path, steps, str(extns), ints],
+        capture_output = True
+    )
     ran: bool = result.returncode == 0
     return ran, format_subprocess_output(result)
 
 
-def run_from_qi(state_path: Path, steps: str) -> (bool, str):
-    result: CompletedProcess = \
-        subprocess.run(["misa-spec-exe", "qi", state_path, steps], capture_output = True)
+def run_from_qi(state_path: Path, steps: str, ints: str) -> (bool, str):
+    result: CompletedProcess = subprocess.run(
+        ["misa-spec-exe", "qi", state_path, steps, ints],
+        capture_output = True
+    )
     ran: bool = result.returncode == 0
     return ran, format_subprocess_output(result)
 
@@ -92,6 +102,9 @@ def main() -> None:
     q0_parser.add_argument("-e", "--extension", nargs = "*", metavar = "<extension>", default = [],
                            choices = {"dynamichw", "syscall", "privilege", "interrupt"},
                            help = "enable architecture extension <extension> in the simulator")
+    q0_parser.add_argument("-i", "--interrupt", nargs = "*", metavar = "<step>", default = [],
+                           type = int,
+                           help = "assert the interrupt pin before each state transition <step>")
     q0_parser.add_argument("-n", "--steps", type = steps_type, metavar = "<n>", default = "-",
                            help = "run for maximum <n> state transitions (default: until halt)")
     q0_parser.add_argument("-o", "--output", metavar = "<file>",
@@ -100,6 +113,9 @@ def main() -> None:
                            help = "initialize simulator memory from binary file <memfile>")
 
     qi_parser: ArgumentParser = subparsers.add_parser("qi")
+    qi_parser.add_argument("-i", "--interrupt", nargs = "*", metavar = "<step>", default = [],
+                           type = int,
+                           help = "assert the interrupt pin before each state transition <step>")
     qi_parser.add_argument("-n", "--steps", type = steps_type, metavar = "<n>", default = "-",
                            help = "run for maximum <n> state transitions (default: until halt)")
     qi_parser.add_argument("-o", "--output", metavar = "<file>",
@@ -111,9 +127,18 @@ def main() -> None:
 
     finished, output = False, ""
     if (args.command == "q0"):
-        finished, output = run_from_q0(args.memfile, args.steps, get_extn_bits(args.extension))
+        finished, output = run_from_q0(
+            args.memfile,
+            args.steps,
+            get_extn_bits(args.extension),
+            format_interrupts(args.interrupt)
+        )
     elif (args.command == "qi"):
-        finished, output = run_from_qi(args.statefile, args.steps)
+        finished, output = run_from_qi(
+            args.statefile,
+            args.steps,
+            format_interrupts(args.interrupt)
+        )
     else:
         error(program_name, f"unsupported action '{args.command}'")
 

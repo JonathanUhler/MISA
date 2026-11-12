@@ -90,27 +90,18 @@ def base64Decode (s : String) : ByteArray :=
 
 
 def State.serialize (q : State) : String :=
-  let extns : CsrExtns := CsrExtns.dec (q.special .extns)
-  let specLines := String.join ((CsrReg.all.filter (·.availableUnder extns)).map fun c =>
+  let specLines := String.join (CsrReg.all.map fun c =>
     s!"  {c.name} : 0x{toHex 4 (q.special c).toNat}\n")
   let regLines := String.join (GpReg.all.map fun r =>
     s!"  {r.name} : 0x{toHex 2 (q.register r).toNat}\n")
-  let syscallLines :=
-    if extns.syscall then
-      s!"inSyscall   : {q.inSyscall}\n" ++
-      s!"syscallPrivs: 0x{toHex 4 q.syscallPrivs.toNat}\n"
-    else ""
-  let interruptLines :=
-    if extns.interrupt then
-      s!"inInterrupt : {q.inInterrupt}\n" ++
-      s!"intPending  : {q.intPending}\n" ++
-      s!"intRscratch : 0x{toHex 4 q.intRscratch.toNat}\n" ++
-      s!"intFlags    : 0x{toHex 4 q.intFlags.toNat}\n" ++
-      s!"intPrivs    : 0x{toHex 4 q.intPrivs.toNat}\n"
-    else ""
   s!"halted      : {q.halted}\n" ++
-  syscallLines ++
-  interruptLines ++
+  s!"inSyscall   : {q.inSyscall}\n" ++
+  s!"syscallPrivs: 0x{toHex 4 q.syscallPrivs.toNat}\n" ++
+  s!"inInterrupt : {q.inInterrupt}\n" ++
+  s!"intPending  : {q.intPending}\n" ++
+  s!"intRscratch : 0x{toHex 4 q.intRscratch.toNat}\n" ++
+  s!"intFlags    : 0x{toHex 4 q.intFlags.toNat}\n" ++
+  s!"intPrivs    : 0x{toHex 4 q.intPrivs.toNat}\n" ++
   s!"pc          : 0x{toHex 4 q.pc.toNat}\n" ++
   "special:\n" ++
   specLines ++

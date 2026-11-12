@@ -7,8 +7,18 @@ implementation.
 
 `misa-spec` is the functional reference implementation of the MISA instruction set. It executes the
 flat binaries produced by the linker and models the processor as a single-cycle machine. The purpose
-of `misa-spec` is to provide a funtionally-correct model of the MISA semantics that other
-implementations can match. There are two primary modes of operation
+of `misa-spec` is to provide a functionally-correct model of the MISA semantics that other
+implementations can match.
+
+For architectural choices described in the previous chapter, `misa-spec` makes the following
+decisions:
+
+- `SADDR` is 16 bits, `FLAGS` is 4 bits, `PRIVS` is 1 bit, and `EXTNS` is 4 bits.
+- The entire 16-bit address space is mapped.
+- No memory protection unit is provided.
+- Every architecture extension is supported, including the Dynamic Hardware Extension.
+
+There are two primary modes of operation when using `misa-spec`.
 
 ### Running From Canonical Initial State
 
@@ -23,7 +33,7 @@ provided with the `-e` command line flag (by default, no extensions are enabled)
 The basic command line usage is:
 
 ```
-misa-spec q0 <memfile> [-e <extension ...>] [-n <steps>] [-o <outfile>]
+misa-spec q0 <memfile> [-e <extension ...>] [-i <step ...>] [-n <steps>] [-o <outfile>]
 ```
 
 ### Running From Arbitrary State
@@ -38,14 +48,28 @@ state of the machine, so nothing is left for the user to provide.
 The basic command line usage is:
 
 ```
-misa-spec qi <statefile> [-n <steps>] [-o <outfile>]
+misa-spec qi <statefile> [-i <step ...>] [-n <steps>] [-o <outfile>]
 ```
+
+### Interrupt Injection
+
+The interrupt pin is external to the processor, so it is not part of the state that a memory file or
+a state file describes. Both modes of operation instead take an explicit interrupt schedule. The
+`-i` flag lists the state transitions at which the interrupt pin is asserted, numbered from zero
+within the current run.
+
+An assertion is applied before the listed transition is taken, which models a pin edge arriving
+during the previous transition. The masking rules of the ISA manual then apply normally, so an
+assertion which the processor cannot take is discarded rather than deferred. With no `-i` flag, the
+pin is never asserted, and no interrupt is taken for the duration of the run.
 
 ### State File Grammar
 
 State files define key-value pairs for different components of the MISA state machine. Some keys
-only affect behavior if a particular architecture extension is enabled, and are optional if the
-extension is disabled.
+only affect behavior if a particular architecture extension is enabled. `misa-spec` nonetheless
+always writes every key, regardless of which extensions are enabled, so that a state file does not
+lose information. In a hand-written state file, every key except `halted` and `pc` MAY be omitted,
+and an omitted key defaluts to `false` or zero depending on the expected type.
 
 The full set of keys is below. The `|` character denotes choice, the `-` character denotes range,
 and the `...` string denotes repetition. Comments are not supported in state files, but are
@@ -55,30 +79,29 @@ provided below to clarify the meaning of fields in-line.
 # Whether the processor is halted
 halted      : true|false
 
-# System Call Extension: Whether the processor is in a canonical system call
-# context
+# Whether the processor is in a canonical system call context
 inSyscall   : true|false
 
-# System Call Extension & Privilege Extension: The state of the PRIVS register
-# saved upon entering the current system call context
+# The state of the PRIVS register saved upon entering the current system call
+# context
 syscallPrivs: 0x0000-0xFFFF
 
-# Interrupt Extension: Whether the processor is in a canonical interrupt context
+# Whether the processor is in a canonical interrupt context
 inInterrupt : true|false
 
-# Interrupt Extension: Whether an interrupt is pending for the next clock cycle
-intPending : true|false
+# Whether an interrupt is pending for the next clock cycle
+intPending  : true|false
 
-# Interrupt Extension: The state of the RSCRATCH registers saved upon entering
-# the current interrupt context
+# The state of the RSCRATCH registers saved upon entering the current
+# interrupt context
 intRscratch : 0x0000-0xFFFF
 
-# Interrupt Extension: The state of the FLAGS register saved upon entering the
-# current interrupt context
+# The state of the FLAGS register saved upon entering the current interrupt
+# context
 intFlags    : 0x0000-0xFFFF
 
-# Interrupt Extension & Privilege Extension: The state of the PRIVS register
-# saved upon entering the current interrupt context
+# The state of the PRIVS register saved upon entering the current interrupt
+# context
 intPrivs    : 0x0000-0xFFFF
 
 # The program counter
@@ -91,9 +114,10 @@ special:
   flags : 0x0000-0xFFFF
   cause : 0x0000-0xFFFF
   extns : 0x0000-0xFFFF
-  retsc : 0x0000-0xFFFF  # System Call Extension
-  retir : 0x0000-0xFFFF  # Interrupt Extension
-  privs : 0x0000-0xFFFF  # Privilege Extension
+  fault : 0x0000-0xFFFF
+  retsc : 0x0000-0xFFFF
+  retir : 0x0000-0xFFFF
+  privs : 0x0000-0xFFFF
 
 # The general purpose register file
 registers:
@@ -124,8 +148,9 @@ interrupt context on the same step. Running semantically incorrect state files w
 undefined behavior.
 
 A state file is considered semantically correct if and only if there exists an initial memory file
-`memfile.bin`, a set of extensions `extns ...`, and a step count `n` such that every field in the
-state file matches the output of `misa-spec memfile.bin -n n -e extns ...`.
+`memfile.bin`, a set of extensions `extns ...`, an interrupt schedule `ints ...`, and a step count
+`n` such that every field in the state file matches the output of
+`misa-spec q0 memfile.bin -n n -e extns ... -i ints ...`.
 
 ## Hardware Reference
 

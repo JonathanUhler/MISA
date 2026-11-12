@@ -229,7 +229,7 @@ def step (q : State) : State :=
   else if q.intPending && q.canInterrupt then
     q.interrupt
   else
-    execute q
+    execute { q with intPending := false }
 
 
 end MisaSpec

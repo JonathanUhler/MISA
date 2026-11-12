@@ -52,7 +52,7 @@ The following flags control how far the pipeline runs and how it behaves:
   and more than one source file are given together, the resulting objects are bundled into an
   archive at the output path.
 - `-e <extension ...>` enables architecture extensions in the assembler, chosen from `dynamichw`,
-  `syscall`, and `privilege`. No extensions are enabled by default.
+  `syscall`, `privilege`, and `interrupt`. No extensions are enabled by default.
 - `-D <key>=<val>` defines a preprocessor macro before assembling.
 - `-o <file>` sets the output path.
 - `-l <options>` passes a string of extra options through to the linker.
@@ -85,7 +85,8 @@ first instruction after the label. For example, consider the following code:
     SET RB 10
 loop:
     SET2 RYZ loop
-    JMP LESS RA RB
+    CMP RA RB
+    JMP LESS RYZ
 ```
 
 In this case, the label `loop` has the relative address in this code of 0x0004, and refers to

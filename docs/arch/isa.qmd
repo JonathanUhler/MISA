@@ -84,18 +84,22 @@ When used as operands for instructions, the special registers are encoded as fol
 
 | ABI Name | Encoding |
 |----------|------------------------------------|
+| Reserved | 0000 |
 | `SADDR` | 0001 |
 | `RADDR` | 0010 |
 | `FLAGS` | 0011 |
 | `CAUSE` | 0100 |
 | `EXTNS` | 0101 |
 | `FAULT` | 0110 |
+| Reserved | 0111 |
 | `RETSC` | 1000 (under System Call Extension) |
 | `RETIR` | 1001 (under Interrupt Extension) |
 | `PRIVS` | 1010 (under Privilege Extension) |
+| Reserved | 1011 - 1111 |
 
-A special register which is marked above as belonging to an architecture extension is only available
-when that extension is enabled. An instruction which names an unavailable special register as an
+The special register encodings marked as reserved MUST NOT be emitted by an assembler. A special
+register which is marked above as belonging to an architecture extension is only available when that
+extension is enabled. An instruction which names a reserved or unavailable special register as an
 operand fails to decode, and MUST raise a fault with the `CAUSE` Reason "Instruction usage" and the
 `CAUSE` Type "Illegal instruction". This applies to the `CSR` operand of `RSR`, `WSR`, and the
 special register variant of `JMP`. Note that under the Dynamic Hardware Extension this makes the
@@ -111,12 +115,13 @@ The following sub-sections describe the purpose and layout of each special regis
 ### `SADDR`
 
 The stack address or stack pointer. `SADDR` MUST be at least an 8-bit register (supporting stack
-addresses `0x00` - `0xFF` with a possible high 8-bit prefix) and MUST not be more than a 16-bit
+addresses `0x00` - `0xFF` with an optional high 8-bit prefix) and MUST not be more than a 16-bit
 register.
 
-Because the bits of an unimplemented high byte ignore writes, stack arithmetic on an implementation
-with a narrow `SADDR` wraps within the implemented width instead of carrying into the unimplemented
-bits.
+Stack arithmetic MUST NOT leave the implemented width of `SADDR`. On an implementation with a narrow
+`SADDR`, an update which would carry into an unimplemented bit raises the `CAUSE` Reason "Memory
+usage" with the `CAUSE` Type "Address overflow" instead of wrapping. The fault therefore acts as a
+hardware stack bounds protection.
 
 ```{python}
 #| echo: false
@@ -138,8 +143,9 @@ memory, which SHOULD be 16-bit.
 
 The return address special register is not used by specific base instructions, but provides a
 dedicated 16-bit-wide register for subroutine calling. The `JAL` instruction MUST set the `RADDR`
-register with the address of the instruction after the `JAL`. Returning to the location in `RADDR`
-can be done with a `RSR` and `JMP` or a `JMP` using `RADDR` as the branch target.
+register with the address of the instruction after the `JAL` when its branch is taken. A `JAL` whose
+comparison evaluates false does not modify `RADDR`. Returning to the location in `RADDR` can be done
+with a `RSR` and `JMP` or a `JMP` using `RADDR` as the branch target.
 
 ```{python}
 #| echo: false
@@ -159,12 +165,13 @@ Conditional branching in the MISA architecture is based on ALU flag values for c
 Both branching instructions, `JAL` and `JMP`, MUST use these flags to make decisions on whether a
 branch will be taken.
 
-`FLAGS` MUST be set based on the result of each ALU operation. The instructions which MUST update
-the `FLAGS` register are: `ADD`, `ADC`, `SUB`, `SBB`, `AND`, `OR`, `XOR`, `RRC`. Instructions which
-MUST NOT update the `FLAGS` register are: `HALT`, `SET`, `LD`, `ST`, `RSR`, `WSR` (MUST NOT update
-`FLAGS` asynchronously through the ALU output, but MUST update `FLAGS` if writing directly to it),
-`JAL`, `JMP`. A conditional branch that relies on `FLAGS` SHOULD be performed immediately after the
-conditional comparison or a `WSR` to `FLAGS`.
+`FLAGS` MUST be set from the output of the ALU for each ALU operation, and not from the contents of
+the destination register. The instructions which MUST update the `FLAGS` register are: `ADD`, `ADC`,
+`SUB`, `SBB`, `AND`, `OR`, `XOR`, `RRC`. Instructions which MUST NOT update the `FLAGS` register
+are: `HALT`, `SET`, `LD`, `ST`, `RSR`, `WSR` (MUST NOT update `FLAGS` asynchronously through the ALU
+output, but MUST update `FLAGS` if writing directly to it), `JAL`, `JMP`. A conditional branch that
+relies on `FLAGS` SHOULD be performed immediately after the conditional comparison or a `WSR` to
+`FLAGS`.
 
 The `FLAGS` special register is a flags register (one bit per flag) which MUST be at least 4 bits
 and support the following:
@@ -175,9 +182,6 @@ and support the following:
 | `C` | 1 | The adder carry out bit of the last ALU operation.  |
 | `N` | 2 | Whether the last ALU operation's output was negative (MSB = 1).  |
 | `V` | 3 | Whether the last ALU operation's output overflowed (sign inversion). |
-
-The `C` and `V` flags must always be `0` after executing `AND`, `OR`, or `XOR`. The `V` flag must
-always be `0` after executing `RRC`, and the `C` flag must be set as described in its definition.
 
 ```{python}
 #| echo: false
@@ -194,6 +198,51 @@ SVG(wavedrom.render(str({
     "config": {"bits": 16}
 })).tostring())
 ```
+
+#### Flag Results
+
+The four arithmetic instructions are all defined in terms of a single 8-bit adder. For operands `A`
+and `B` and a carry in `Cin`, the adder MUST produce the 9-bit value `{Cout, Result} = A + B + Cin`,
+where `Result` is the 8-bit value stored in the destination register.
+
+The flags are computed from the value the instruction produces, which is not necessarily the value
+stored in `RD`. When `RD` is `R0`, the computed value is discarded on the register write, but the
+flags are still set.
+
+Each arithmetic instruction uses the following ALU operands:
+
+| Instruction | `A` | `B` | `Cin` |
+|-------------|-------|--------|-------|
+| `ADD` | `RS1` | `RS2` | `0` |
+| `ADC` | `RS1` | `RS2` | `C` |
+| `SUB` | `RS1` | `~RS2` | `1` |
+| `SBB` | `RS1` | `~RS2` | `C` |
+
+Note that `SUB` and `SBB` subtract by adding the bitwise complement of `RS2`, so `C` is always a
+carry and never a borrow. A subtraction which requires no borrow produces `C == 1`, and one which
+requires a borrow produces `C == 0`.
+
+The flags are then set from the adder operands and its output:
+
+| Flag | Value |
+|------|-------------------------------------------------------------------------------------|
+| `Z` | `1` if `Result == 0x00`, otherwise `0` |
+| `C` | `Cout`, the carry out of bit 7 |
+| `N` | Bit 7 of `Result` |
+| `V` | `1` if bit 7 of `A` and bit 7 of `B` are equal and both differ from bit 7 of `Result` |
+
+: {tbl-colwidths="[10, 90]"}
+
+The remaining instructions which update `FLAGS` do not use the adder, and set the flags directly:
+
+| Instruction | `Z` | `C` | `N` | `V` |
+|--------------------|-------------------------|---------------|-------------------|-----|
+| `AND`, `OR`, `XOR` | `1` if `Result == 0x00` | `0` | Bit 7 of `Result` | `0` |
+| `RRC` | `1` if `Result == 0x00` | Bit 0 of `RS` | Bit 7 of `Result` | `0` |
+
+: {tbl-colwidths="[22, 26, 20, 22, 10]"}
+
+#### Flag Comparisons
 
 The `FLAGS` register can be accessed indirectly with the conditional jump instructions using special
 assembler symbols:
@@ -220,8 +269,7 @@ which specifies the reserved comparison encoding fails to decode, and MUST raise
 `CAUSE` Reason "Instruction usage" and the `CAUSE` Type "Illegal instruction".
 
 Note that the ordered comparisons `GREATER`, `LESS`, `GREATER_EQUAL`, and `LESS_EQUAL` are all
-signed comparisons, derived from `N ^ V`. This specification defines no unsigned ordered
-comparison.
+signed comparisons, derived from `N ^ V`. This specification defines no unsigned ordered comparison.
 
 ### `CAUSE`
 
@@ -298,7 +346,8 @@ The effective address of a `LD` or `ST` is the sum of a 16-bit base and a sign e
 offset, which MUST NOT wrap. If an effective address is calculated to be below `0x0000` or above
 `0xFFFF`, the processor MUST raise "Address overflow", and MUST NOT perform a memory access or
 update `SADDR`. For the stack variants of `LD` and `ST`, the same rule applies to the updated value
-of `SADDR`.
+of `SADDR`, except that the bound is the implemented width of `SADDR` rather than the full 16-bit
+address range. On an implementation with a 16-bit `SADDR` the two bounds are the same.
 
 Note that this differs from the program counter, where both passing `0xFFFF` on a sequential
 increment and fetching an instruction word at `0xFFFF` raise "PC overflow" rather than "Address
@@ -390,6 +439,11 @@ SVG(wavedrom.render(str({
 16-bit data types MAY be supported in software using the `ADC` and `SBB` instructions for
 arithmetic.
 
+Instruction words are not required to be aligned to any particular boundary. An instruction word is
+fetched as the two consecutive bytes beginning at the program counter, with the low byte at the
+lower address, and the program counter is then advanced by two. A branch to an odd address is
+therefore well-defined.
+
 ## Memory
 
 The MISA architecture MAY support up to a 16-bit address bus for memory operations, and memory MUST
@@ -415,6 +469,9 @@ The reset vector table contains the following function pointers:
 | `0xFFFA - 0xFFFB` | Syscall handler (under System Call Extension) |
 | `0xFFFC - 0xFFFD` | Fault handler |
 | `0xFFFE - 0xFFFF` | Reset handler |
+
+Every vector in this table stores its address as little-endian, with the low byte at the lower of
+the two addresses.
 
 ### Recommended Memory Map
 
@@ -480,8 +537,8 @@ When the processor is taken out of the reset state, some internal state MUST be 
 - If the Interrupt Extension is enabled, the processor must not be initialized to an interrupt
   context on reset.
 - If the Interrupt Extension is enabled, any interrupt pin activity which occurred before the
-  processor was taken out of reset must be discarded, so that no interrupt is taken until the pin
-  is next asserted.
+  processor was taken out of reset must be discarded, so that no interrupt is taken until the pin is
+  next asserted.
 
 ## Faults
 
@@ -494,21 +551,34 @@ not specific to any one instruction and MUST be detected for every instruction:
   raises the `CAUSE` Reason "Memory usage" with the `CAUSE` Type "PC overflow". Instructions which
   set the program counter from a branch target instead of advancing it sequentially cannot raise
   this fault. The same fault is raised when the program counter is `0xFFFF`, because the high byte
-  of the instruction word would be fetched from outside the address space.
+  of the instruction word would be fetched from outside the address space. A branch to `0xFFFF`
+  therefore does not fault at the branch itself, but on the following step when the instruction word
+  at `0xFFFF` is fetched.
 
 The faults which are specific to individual instructions are enumerated under the "Faults" label of
 each instruction in the Base Instructions section.
 
 When a fault is detected, the processor MUST set the `CAUSE` register based on the type of fault,
-set the `FAULT` register to the address of the instruction that caused the fault (or the last
-instruction before a PC overflow), and then set the program counter to the fault vector address
-stored in memory at `0xFFFC - 0xFFFD`. Execution MUST then continue in the fault handler, which is
-software-defined and MAY attempt recovery, dump diagnostic information, or simply halt.
+set the `FAULT` register to the program counter at the time the fault was detected, and then set the
+program counter to the fault vector address stored in memory at `0xFFFC - 0xFFFD`. Execution MUST
+then continue in the fault handler, which is software-defined and MAY attempt recovery, dump
+diagnostic information, or simply halt.
+
+For every fault other than a PC overflow, the program counter at the time of the fault is the
+address of the instruction which caused it. A PC overflow raised by a sequential increment records
+the address of the last instruction before the overflowing PC value. A PC overflow raised by a
+program counter of `0xFFFF` records `0xFFFF`, the address at which an instruction word could not be
+fetched.
+
+A fault which is detected before or during the execution of an instruction MUST leave the processor
+state unchanged apart from `CAUSE`, `FAULT`, `PRIVS.R`, and the program counter. The exception is a
+PC overflow raised by a sequential increment, which is detected only after the instruction has
+completed. In that case, the effects of the instruction MUST be retained.
 
 A fault MUST NOT change whether the processor is in a system call context or an interrupt context.
-The fault handler executes in whichever context the faulting instruction was in. Because being in
-an interrupt context is what masks interrupts, a fault which occurs inside an interrupt context
-leaves interrupts masked for the duration of the fault handler.
+The fault handler executes in whichever context the faulting instruction was in. Because being in an
+interrupt context is what masks interrupts, a fault which occurs inside an interrupt context leaves
+interrupts masked for the duration of the fault handler.
 
 ## Exceptions and Interrupts
 
@@ -543,13 +613,16 @@ describing instruction behavior:
 - `Update`: Update a value using a definition/ruleset provided elsewhere in this chapter
 - `SignExtN`: Copy the MSB of a narrow field to all bits added when converting to an `N`-bit field
 - `If`: Perform the encapsulated operations only if a condition is true
+- `Temporary`: A name bound by a statement whose left side is not a state location. A temporary
+  holds the value of its expression at the point it is bound, which allows a later statement to
+  observe a value from before a write to the same location
 
 The statements in a "Meaning" block are performed in the order written. Each statement observes the
 processor state left by the preceding statements, and where two statements write the same location,
 the later statement takes effect. The "Meaning" label describes the behavior of an instruction which
-executes successfully. An instruction which can raise a fault specific to itself additionally
-has a "Faults" label enumerating those faults and the conditions under which they occur. The two
-faults that apply to every instruction are described in the Faults section and are not repeated per
+executes successfully. An instruction which can raise a fault specific to itself additionally has a
+"Faults" label enumerating those faults and the conditions under which they occur. The two faults
+that apply to every instruction are described in the Faults section and are not repeated per
 instruction.
 
 Some instruction encodings contain a reserved field. Every bit of a reserved field MUST be zero. An
@@ -807,9 +880,10 @@ SVG(wavedrom.render(str({
 
 Meaning:
 ```
-Register[RD] = (Special[FLAGS.C] << 0x07) | (Register[RS] >> 0x01);
+Source = Register[RS];
+Register[RD] = (Special[FLAGS.C] << 0x07) | (Source >> 0x01);
 Update Special[FLAGS];
-Special[FLAGS.C] = Register[RS] & 0x01;
+Special[FLAGS.C] = Source & 0x01;
 ```
 
 ### `SET`
@@ -881,7 +955,7 @@ Faults:
 
 - "Address overflow" if the effective address computation leaves the 16-bit address range, or if the
   effective address is outside the memory the implementation provides. For the stack variant, the
-  same applies if the new value of `SADDR` overflows.
+  same applies if the updated value of `SADDR` leaves the implemented width of `SADDR`.
 - "Privileged access" if the effective address is in privileged memory and the load is performed in
   User Mode under the Privilege Extension with a memory protection unit.
 
@@ -929,7 +1003,7 @@ Faults:
 
 - "Address overflow" if the effective address computation leaves the 16-bit address range, or if the
   effective address is outside the memory the implementation provides. For the stack variant, the
-  same applies if the new values of `SADDR` overflows.
+  same applies if the updated value of `SADDR` leaves the implemented width of `SADDR`.
 - "Privileged access" if the effective address is in privileged memory and the store is performed in
   User Mode under the Privilege Extension with a memory protection unit.
 
@@ -1115,6 +1189,14 @@ The semantic meaning of pseudo instructions is given in terms of a sequence of b
 be executed in order. Implementations providing pseudo instructions MAY use a different definition,
 but the semantic behavior MUST match.
 
+Several pseudo instructions operate on 16-bit values held in register pairs. For these, the register
+pair named as the destination MUST either be identical to, or fully disjoint from, each register
+pair named as a source. Because the expansion of such a macro writes one half of the destination
+before reading the other half of a source, a partial overlap would make the result depend on the
+order of the expansion rather than on the 16-bit operation being described. Note that this
+restriction cannot be violated when the operands are written using the wide register names, whose
+pairs are always identical or disjoint.
+
 ### `ADD2`
 Usage: `ADD2 RD1 RD2 RS1 RS2 RS3 RS4`
 
@@ -1256,12 +1338,12 @@ OR RD1 RS1 RS3
 ### `POP`
 Usage: `POP RD`
 
+Description: Increment `SADDR` by 1 byte and then load the byte at the new stack address into `RD`.
+
 Meaning:
 ```
 LD RD RSCRATCH1 +1
 ```
-
-Description: Increment `SADDR` by 1 byte and then load the byte at the new stack address into `RD`.
 
 ### `POP2`
 Usage: `POP2 RD1 RD2`
@@ -1277,12 +1359,12 @@ LD RD2 RSCRATCH1 +1
 ### `PUSH`
 Usage: `PUSH RS`
 
+Description: Write `RS` onto the stack at `SADDR`, and then decrement `SADDR` by 1 byte.
+
 Meaning:
 ```
 ST RS RSCRATCH1 -1
 ```
-
-Description: Write `RS` onto the stack at `SADDR`, and then decrement `SADDR` by 1 byte.
 
 ### `PUSH2`
 Usage: `PUSH2 RS1 RS2`
@@ -1376,6 +1458,17 @@ Partial support of the Dynamic Hardware Extension is also allowed. That is, an i
 only permit enabling/disabling specific, but not every extension at runtime. In that case, writes to
 the bit of any extension that cannot be toggled MUST be ignored. Software should treat the lack of
 change in the target bit as a signal that the target extension is permanently enabled/disabled.
+
+Disabling an extension does not clear the special registers it defines, or any processor state
+associated with it. Their contents MUST persist while the extension is disabled and become
+accessible again when it is re-enabled. In particular, disabling the Privilege Extension does not
+clear `PRIVS`; while the extension is disabled, the processor behaves as though in Machine Mode
+regardless of the ring bit, and re-enabling the extension makes the stored ring bit effective again.
+
+Whether the processor is in a system call context or an interrupt context is likewise unaffected by
+disabling the corresponding extension. Because an instruction which names an unavailable special
+register fails to decode, software SHOULD NOT disable the System Call Extension while in a system
+call context, or the Interrupt Extension while in an interrupt context.
 
 ### System Call Extension
 
@@ -1495,6 +1588,11 @@ trigger an interrupt -- the rising or falling edge of the pin MUST cause the pro
 executing the current instruction and then set the program counter to the interrupt handler address
 at `0xFFF8 - 0xFFF9`.
 
+A pending interrupt is taken at an instruction boundary, before the next instruction is fetched or
+executed. The `RETIR` special register is set to the address of that next instruction, so returning
+from the interrupt resumes with the instruction which the interrupt preempted. An instruction which
+would have raised a fault is not executed, and raises its fault after the interrupt returns.
+
 When this happens, interrupts MUST be automatically disabled by the processor. If the interrupt pin
 is toggled, another interrupt MUST not be detected. Taking interrupts does not affect the `CAUSE`
 register like system calls or faults.
@@ -1568,6 +1666,9 @@ special register. These registers MUST be automatically saved by the processor w
 triggered and automatically restored when returning from the interrupt. On entry, `RSCRATCH` is
 therefore the only register the handler can freely use before saving anything.
 
+The saved copies of these registers are held in internal storage which is not addressable as a
+special register, and which software can neither read nor write.
+
 #### Returning From Interrupts
 To return from interrupts, the `RETIR` special register is defined, which stores the return address
 when an interrupt is triggered.
@@ -1607,11 +1708,20 @@ not guaranteed to complete steps 1 and 3.
 
 #### Masking Interrupts
 Interrupt masking MUST not be controlled by software. If the Interrupt Extension is supported,
-interrupts can always be triggered. Only two conditions prevent the processor from taking new
+interrupts can always be triggered. Only two conditions prevent a running processor from taking new
 interrupts:
 
 1. Disabling the Interrupt Extension through the Dynamic Hardware Extension.
 2. Being in an interrupt context.
+
+While either condition holds, interrupt pin activity MUST be discarded rather than retained. An
+assertion of the interrupt pin which cannot be taken is lost, and does not cause an interrupt to be
+taken once the masking condition no longer holds. An interrupt source which requires service
+therefore MUST reassert the interrupt pin, and SHOULD rely on the interrupt queue rather than the
+pin to track outstanding requests.
+
+A halted processor does not take interrupts. The `HALT` instruction is terminal, and an interrupt
+does not resume execution on a halted processor.
 
 The processor is canonically in an interrupt context under the following formal definition:
 
@@ -1700,6 +1810,13 @@ If a privilege error is detected, the processor MUST preempt the instruction whi
 discard any partial result of the instruction, and jump to the fault handler. The `CAUSE` special
 register MUST be set to indicate the privilege error for the instruction use or memory access.
 
+An implementation MAY provide a memory protection unit. This specification defines neither which
+addresses are privileged nor any architectural means of configuring them, so an implementation which
+provides a memory protection unit defines its own privileged regions, and software which relies on
+them is not portable between implementations. An implementation which provides no memory protection
+unit never raises the `CAUSE` Type "Privileged access", and the first three restrictions above are
+the whole of User Mode.
+
 #### Points of Privilege Change
 
 Under normal operation, the processor is expected to change privilege modes when the following
@@ -1722,3 +1839,11 @@ occur:
 
 All privilege changes MUST be performed automatically by the processor when an appropriate condition
 is detected, except for direct writes to `PRIVS` via `WSR` from Machine Mode.
+
+The values which the processor restores automatically are held in internal storage which is not
+addressable as a special register, and which software can neither read nor write. The `PRIVS` value
+saved on entry to a system call context and the `PRIVS` value saved on entry to an interrupt context
+occupy independent slots, so an interrupt taken inside a system call context does not disturb the
+value that the system call return will restore. Because the restore overwrites `PRIVS` entirely, a
+`WSR` to `PRIVS` performed inside a system call or interrupt context does not affect the ring bit
+after the corresponding return.
