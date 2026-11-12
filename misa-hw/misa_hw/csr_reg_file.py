@@ -64,7 +64,7 @@ class CsrRegFile(Component):
                 with m.Case(CsrReg.FLAGS):
                     m.d.sync += self.flags.eq(self.write_data)
                 with m.Case(CsrReg.CAUSE):
-                    m.d.sync += self.cause.eq(self.write_data)
+                    m.d.sync += self.cause.eq(self.write_data & 0xFF3F)
                 with m.Case(CsrReg.EXTNS):
                     with m.If(self.extns & Extn.DYNAMICHW):
                         m.d.sync += self.extns.eq(Cat(0b1, self.write_data[1:4]))

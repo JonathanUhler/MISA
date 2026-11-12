@@ -162,32 +162,35 @@ def executeJmp (q : State) (rs1 : GpReg) (rs2 : GpReg) (cmp : CmpFlag) : State :
 
 
 def executeJmpCsr (q : State) (csr : CsrReg) (cmp : CmpFlag) : State :=
-  match csr with
-  | .retsc =>
-    if cmp != .always then
-      q.fault (CsrCause.conditionalContextReturn cmp csr)
-    else if q.inSyscall && !q.inInterrupt then
-      { (q.writeSpecial .privs q.syscallPrivs)
-        with pc := q.special csr, inSyscall := false }
-    else
-      q.fault (CsrCause.improperReturnContext q.inSyscall q.inInterrupt csr)
-  -- Interrupt extension
-  | .retir =>
-    if cmp != .always then
-      q.fault (CsrCause.conditionalContextReturn cmp csr)
-    else if q.inInterrupt then
-      let flags : CsrFlags := CsrFlags.dec q.intFlags
-      let q := ((q.writeReg .rscratch0 (q.intRscratch.extractLsb' 8 8)).writeReg
-          .rscratch1 (q.intRscratch.extractLsb' 0 8)).writeFlags flags
-      { (q.writeSpecial .privs q.intPrivs)
-        with pc := q.special csr, inInterrupt := false }
-    else
-      q.fault (CsrCause.improperReturnContext q.inSyscall q.inInterrupt csr)
-  | _      =>
-    if q.check cmp then
-      { q with pc := q.special csr }
-    else
-      q.next
+  if q.userMode && !csr.userReadable then
+    q.fault CsrCause.privilegedInstruction
+  else
+    match csr with
+    | .retsc =>
+      if cmp != .always then
+        q.fault (CsrCause.conditionalContextReturn cmp csr)
+      else if q.inSyscall && !q.inInterrupt then
+        { (q.writeSpecial .privs q.syscallPrivs)
+          with pc := q.special csr, inSyscall := false }
+      else
+        q.fault (CsrCause.improperReturnContext q.inSyscall q.inInterrupt csr)
+    -- Interrupt extension
+    | .retir =>
+      if cmp != .always then
+        q.fault (CsrCause.conditionalContextReturn cmp csr)
+      else if q.inInterrupt then
+        let flags : CsrFlags := CsrFlags.dec q.intFlags
+        let q := ((q.writeReg .rscratch0 (q.intRscratch.extractLsb' 8 8)).writeReg
+            .rscratch1 (q.intRscratch.extractLsb' 0 8)).writeFlags flags
+        { (q.writeSpecial .privs q.intPrivs)
+          with pc := q.special csr, inInterrupt := false }
+      else
+        q.fault (CsrCause.improperReturnContext q.inSyscall q.inInterrupt csr)
+    | _      =>
+      if q.check cmp then
+        { q with pc := q.special csr }
+      else
+        q.next
 
 
 def decodeAndExecute (q : State) : State :=

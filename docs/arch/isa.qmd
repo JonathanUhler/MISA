@@ -1172,6 +1172,12 @@ If (Check[CMP]) {
 
 Faults:
 
+- "Privileged instruction" if `JMP` is executed in User Mode under the Privilege Extension on any
+  special register other than `SADDR`, `RADDR`, `FLAGS`, and `PRIVS`. These are the same special
+  registers that `RSR` can read from User Mode. User Mode has no legitimate use for a jump to
+  `RETSC` or `RETIR`, because the system call handler and the interrupt handler are both entered in
+  Machine Mode. This fault takes precedence over the two control event faults below, so a `JMP` to
+  `RETSC` or `RETIR` from User Mode raises "Privileged instruction" rather than either of them.
 - "Conditional context return" if `CSR` is `RETSC` or `RETIR` and `CMP` is not `ALWAYS`. This fault
   is a property of the instruction encoding, and MUST occur whether or not the comparison evaluates
   true.
@@ -1803,6 +1809,8 @@ When the processor is in User Mode, the following actions MUST cause a privilege
 - Execution of `HALT`
 - Execution of `RSR` except on `SADDR`, `RADDR`, `FLAGS`, and `PRIVS`
 - Execution of `WSR` except on `SADDR`, `RADDR`, and `FLAGS`
+- Execution of the special register variant of `JMP` except on `SADDR`, `RADDR`, `FLAGS`, and
+  `PRIVS`
 - Access to privileged memory, if a memory protection unit is used to manage access based on the
   ring bit
 
