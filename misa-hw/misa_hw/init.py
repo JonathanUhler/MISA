@@ -40,6 +40,7 @@ class CoreInit:
     pc: int              = field(default = 0x0000)
     in_syscall: bool     = field(default = False)
     in_interrupt: bool   = field(default = False)
+    int_pending: bool    = field(default = False)
     int_rscratch: int    = field(default = 0x0000)
     int_flags: int       = field(default = 0x0000)
     syscall_privs: int   = field(default = 0x0000)
