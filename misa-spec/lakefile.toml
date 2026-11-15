@@ -5,6 +5,9 @@ defaultTargets = ["misa-spec-exe"]
 [[lean_lib]]
 name = "MisaSpec"
 
+[[lean_lib]]
+name = "MisaProof"
+
 [[lean_exe]]
 name = "misa-spec-exe"
 root = "Main"
