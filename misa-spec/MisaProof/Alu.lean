@@ -1,6 +1,11 @@
 import MisaProof.Wf
 
 
+-- Destination register binders are named rd after the architecture's operand names, which collides
+-- with the GpReg.rd constructor
+set_option linter.constructorNameAsVariable false
+
+
 namespace MisaSpec
 
 

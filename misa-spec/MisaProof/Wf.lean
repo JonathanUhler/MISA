@@ -108,6 +108,99 @@ theorem State.writeReg_special (q : State) (r : GpReg) (v : DataWord) (c : CsrRe
   cases r <;> rfl
 
 
+-- A register write leaves the interrupt save slots, the system call slot, and the pending
+-- interrupt flag unchanged
+theorem State.writeReg_int_frame (q : State) (r : GpReg) (v : DataWord) :
+    (q.writeReg r v).intPending = q.intPending
+      /\ (q.writeReg r v).intRscratch = q.intRscratch
+      /\ (q.writeReg r v).intFlags = q.intFlags
+      /\ (q.writeReg r v).intPrivs = q.intPrivs
+      /\ (q.writeReg r v).syscallPrivs = q.syscallPrivs := by
+  cases r <;> exact And.intro rfl (And.intro rfl (And.intro rfl (And.intro rfl rfl)))
+
+
+-- A special register write leaves the interrupt save slots, the system call slot, and the pending
+-- interrupt flag unchanged
+theorem State.writeSpecial_int_frame (q : State) (c : CsrReg) (v : SpecWord) :
+    (q.writeSpecial c v).intPending = q.intPending
+      /\ (q.writeSpecial c v).intRscratch = q.intRscratch
+      /\ (q.writeSpecial c v).intFlags = q.intFlags
+      /\ (q.writeSpecial c v).intPrivs = q.intPrivs
+      /\ (q.writeSpecial c v).syscallPrivs = q.syscallPrivs := by
+  cases c
+  case extns =>
+    simp only [State.writeSpecial]
+    split
+    all_goals exact And.intro rfl (And.intro rfl (And.intro rfl (And.intro rfl rfl)))
+  all_goals exact And.intro rfl (And.intro rfl (And.intro rfl (And.intro rfl rfl)))
+
+
+-- Advancing the program counter leaves the interrupt save slots, the system call slot, and the
+-- pending interrupt flag unchanged, whether or not it overflows into a fault
+theorem State.next_int_frame (q : State) :
+    (State.next q).intPending = q.intPending
+      /\ (State.next q).intRscratch = q.intRscratch
+      /\ (State.next q).intFlags = q.intFlags
+      /\ (State.next q).intPrivs = q.intPrivs
+      /\ (State.next q).syscallPrivs = q.syscallPrivs := by
+  simp only [State.next, State.fault, State.writeSpecial]
+  repeat (any_goals split)
+  all_goals exact And.intro rfl (And.intro rfl (And.intro rfl (And.intro rfl rfl)))
+
+
+-- A register write leaves memory unchanged
+theorem State.writeReg_memory (q : State) (r : GpReg) (v : DataWord) (a : AddrWord) :
+    (q.writeReg r v).memory a = q.memory a := by
+  cases r <;> rfl
+
+
+-- A special register write leaves memory unchanged
+theorem State.writeSpecial_memory (q : State) (c : CsrReg) (v : SpecWord) (a : AddrWord) :
+    (q.writeSpecial c v).memory a = q.memory a := by
+  cases c
+  case extns =>
+    simp only [State.writeSpecial]
+    split
+    all_goals rfl
+  all_goals rfl
+
+
+-- A memory write leaves every other address unchanged
+theorem State.writeMem_other (q : State) (a : AddrWord) (a' : AddrWord) (v : DataWord)
+    (h : Ne a' a) : (q.writeMem a v).memory a' = q.memory a' := by
+  simp [State.writeMem, h]
+
+
+-- A special register write leaves the program counter unchanged
+theorem State.writeSpecial_pc (q : State) (c : CsrReg) (v : SpecWord) :
+    (q.writeSpecial c v).pc = q.pc := by
+  cases c
+  case extns =>
+    simp only [State.writeSpecial]
+    split
+    all_goals rfl
+  all_goals rfl
+
+
+-- A register write leaves every comparison unchanged
+theorem State.writeReg_check (q : State) (r : GpReg) (v : DataWord) (cmp : CmpFlag) :
+    (q.writeReg r v).check cmp = q.check cmp := by
+  cases r <;> rfl
+
+
+-- A special register write other than to FLAGS leaves every comparison unchanged
+theorem State.writeSpecial_check (q : State) (c : CsrReg) (v : SpecWord) (cmp : CmpFlag)
+    (h : Ne c CsrReg.flags) :
+    (q.writeSpecial c v).check cmp = q.check cmp := by
+  cases c
+  case flags => exact absurd rfl h
+  case extns =>
+    simp only [State.writeSpecial]
+    split
+    all_goals rfl
+  all_goals rfl
+
+
 -- A special register write leaves every register unchanged
 theorem State.writeSpecial_register (q : State) (c : CsrReg) (v : SpecWord) (r : GpReg) :
     (q.writeSpecial c v).register r = q.register r := by

@@ -127,7 +127,7 @@ theorem GpReg.dec_eq_decD (n : HalfWord) : GpReg.dec n = some (GpReg.decD n) := 
   unfold GpReg.decD
   cases hd : GpReg.dec n with
   | none    => simp [hd] at hs
-  | some r' => simp [hd]
+  | some r' => simp
 
 
 -- The encode of the GpReg a HalfWord decodes to is that HalfWord

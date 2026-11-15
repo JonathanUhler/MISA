@@ -5,7 +5,7 @@ namespace MisaSpec
 
 
 def toHex (digits : Nat) (v : Nat) : String :=
-  String.mk (List.leftpad digits '0' (Nat.toDigits 16 v))
+  String.ofList (List.leftpad digits '0' (Nat.toDigits 16 v))
 
 
 def b64Digit (n : Nat) : Char :=
@@ -27,7 +27,7 @@ def memBase64 (q : State) : String :=
     let acc := acc.push (b64Digit (b0 % 4 * 16 + b1 / 16))
     let acc := acc.push (if rem ≥ 2 then b64Digit (b1 % 16 * 4 + b2 / 64) else '=')
     acc.push (if rem ≥ 3 then b64Digit (b2 % 64) else '=')) (#[] : Array Char)
-  String.mk chars.toList
+  String.ofList chars.toList
 
 
 def digitValue? (c : Char) : Option Nat :=
@@ -119,11 +119,17 @@ structure Parsed where
   memory    : String
 
 
+-- Surrounding whitespace removed from a line or field of a state file. String.trimAscii returns a
+-- slice rather than a string, so the result is copied back out.
+def trimmed (s : String) : String :=
+  s.trimAscii.toString
+
+
 def splitFirstColon (s : String) : Option (String × String) :=
   match s.splitOn ":" with
   | []          => none
   | [_]         => none
-  | key :: rest => some (key.trim, (String.intercalate ":" rest).trim)
+  | key :: rest => some (trimmed key, trimmed (String.intercalate ":" rest))
 
 
 def lookup? (xs : List (String × String)) (k : String) : Option String :=
@@ -142,7 +148,7 @@ def scalarWord (xs : List (String × String)) (k : String) (d : SpecWord) : Spec
 
 def parseStateText (content : String) : Parsed :=
   (content.splitOn "\n").foldl (fun acc raw =>
-    let line := raw.trim
+    let line := trimmed raw
     if line.isEmpty then acc
     else match splitFirstColon line with
       | none        => acc

@@ -82,7 +82,7 @@ theorem rrc2_correct (cin : Bool) (aHi : DataWord) (aLo : DataWord) :
     let cMid := aHi.getLsbD 0
     let lo   := (if cMid then 0x80#8 else 0x00#8) ||| (aLo >>> 1)
     (hi ++ lo) = (BitVec.ofBool cin ++ aHi ++ aLo).extractLsb' 1 16 := by
-  cases cin <;> cases hm : aHi.getLsbD 0 <;> simp [hm] <;> bv_decide
+  cases cin <;> cases hm : aHi.getLsbD 0 <;> simp <;> bv_decide
 
 
 -- The carry left by a RRC2 is the bit shifted out of the seventeen bit value, so the macro chains

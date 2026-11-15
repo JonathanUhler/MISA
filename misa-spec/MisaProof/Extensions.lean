@@ -28,7 +28,8 @@ theorem extns_dynamic_write (q : State) (v : SpecWord)
     (h : (CsrExtns.dec (q.special CsrReg.extns)).dynamichw = true) :
     let e := CsrExtns.dec ((q.writeSpecial CsrReg.extns v).special CsrReg.extns)
     e.syscall = v.getLsbD 1 /\ e.privilege = v.getLsbD 2 /\ e.interrupt = v.getLsbD 3 := by
-  simp [State.writeSpecial, h, CsrExtns.dec, CsrReg.writeMask] <;> bv_decide
+  simp only [State.writeSpecial, h]
+  simp [CsrExtns.dec, CsrReg.writeMask] <;> bv_decide
 
 
 -- A write to EXTNS leaves every other special register unchanged, so disabling an extension does

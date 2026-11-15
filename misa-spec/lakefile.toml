@@ -1,12 +1,13 @@
 name = "misa-spec-exe"
 version = "0.1.0"
-defaultTargets = ["misa-spec-exe"]
+defaultTargets = ["misa-spec-exe", "MisaProof"]
 
 [[lean_lib]]
 name = "MisaSpec"
 
 [[lean_lib]]
 name = "MisaProof"
+globs = ["MisaProof.+"]
 
 [[lean_exe]]
 name = "misa-spec-exe"

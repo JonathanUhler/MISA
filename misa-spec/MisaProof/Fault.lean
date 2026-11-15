@@ -1,6 +1,11 @@
 import MisaProof.Wf
 
 
+-- Destination register binders are named rd after the architecture's operand names, which collides
+-- with the GpReg.rd constructor
+set_option linter.constructorNameAsVariable false
+
+
 namespace MisaSpec
 
 
@@ -78,6 +83,17 @@ theorem next_overflows (q : State) (h : 0xFFFE#16 <= q.pc) :
   split
   next => rfl
   next hc => exact absurd hn hc
+
+
+-- Below the end of the address space the program counter increment raises no fault, so it leaves
+-- every special register unchanged, including the three a fault would record into
+theorem next_special_of_lt (q : State) (c : CsrReg) (h : q.pc < 0xFFFE#16) :
+    (State.next q).special c = q.special c := by
+  have hn : Not ((q.pc + 2) < q.pc) := by bv_decide
+  simp only [State.next]
+  split
+  next hc => exact absurd hc hn
+  next => rfl
 
 
 -- A program counter of 0xFFFF raises a PC overflow recording 0xFFFF, because the high byte of the
@@ -328,6 +344,49 @@ theorem st_stack_order (q : State) (rd : GpReg) (imm : HalfWord) (s : AddrWord)
   next =>
     rw [next_saddr, State.writeSpecial_self _ CsrReg.saddr s (by decide)]
     simp [CsrReg.writeMask] <;> bv_decide
+
+
+-- A ST leaves every register unchanged
+theorem st_preserves_registers (q : State) (rd : GpReg) (rsb : GpReg) (imm : HalfWord)
+    (r : GpReg) :
+    (executeSt q rd rsb imm).register r = q.register r := by
+  simp only [executeSt]
+  repeat (any_goals split)
+  all_goals first
+    | exact (fault_frame q CsrCause.addressOverflow).1 r
+    | simp [State.next_register, State.writeSpecial_register, State.writeMem]
+
+
+-- A stack ST leaves every address other than the stack address unchanged
+theorem st_preserves_memory_other (q : State) (rd : GpReg) (imm : HalfWord) (a : AddrWord)
+    (h : Ne a (q.special CsrReg.saddr)) :
+    (executeSt q rd GpReg.rscratch1 imm).memory a = q.memory a := by
+  simp only [executeSt]
+  split
+  next => exact (fault_frame q CsrCause.addressOverflow).2.1 a
+  next => rw [next_memory, State.writeSpecial_memory, State.writeMem_other q _ a _ h]
+
+
+-- A LD leaves memory unchanged
+theorem ld_preserves_memory (q : State) (rd : GpReg) (rsb : GpReg) (imm : HalfWord)
+    (a : AddrWord) :
+    (executeLd q rd rsb imm).memory a = q.memory a := by
+  simp only [executeLd]
+  repeat (any_goals split)
+  all_goals first
+    | exact (fault_frame q CsrCause.addressOverflow).2.1 a
+    | simp [next_memory, State.writeReg_memory, State.writeSpecial_memory]
+
+
+-- A LD leaves every register other than its destination unchanged
+theorem ld_preserves_registers_other (q : State) (rd : GpReg) (rsb : GpReg) (imm : HalfWord)
+    (r : GpReg) (h : Ne r rd) :
+    (executeLd q rd rsb imm).register r = q.register r := by
+  simp only [executeLd]
+  repeat (any_goals split)
+  all_goals first
+    | exact (fault_frame q CsrCause.addressOverflow).1 r
+    | simp [State.next_register, State.writeReg_other _ rd r _ h, State.writeSpecial_register]
 
 
 -- A HALT leaves FLAGS unchanged
