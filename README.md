@@ -28,7 +28,9 @@ Building the MISA toolchain requires:
 
 - Stack 3.3.0 or later
 - A recent Haskell compiler
-- Python 3.10 or later
+- Lake 5.0.0 or later
+- A recent Lean compiler
+- Python 3.11 or later
 
 Typing `make` in the root directory of the cloned repository will build all components of the
 project.
@@ -41,18 +43,8 @@ made in the local `install` directory. A custom path can be set by specifying th
 
 The install directory will be populated with the following tools:
 
-- `misa-ar`, `misa-as`, `misa-ld`, `misa-nm`, `misa-objdump`, and `misa-pr`: CLI utilities written
-  in Python to make the usage of the Haskell binaries easier.
-- `misa-ar-exe`, `misa-as-exe`, `misa-ld-exe`, `misa-nm-exe`, `misa-objdump-exe`, and `misa-pr-exe`:
-  binaries built from the Haskell source that provide a very minimal command line interface for use
-  by the Python CLI wrappers.
-
-## Demonstration
-
-The `programs` directory includes a number of small programs that execute a handful of instructions
-to showcase some feature of the ISA. The `demos` directory includes several more complex programs.
-
-Using the core ISA, you can render a raytraced sphere as a PPM image over UART. Here's the output
-from the `demos/raytrace/` program (converted from PPM to PNG with `convert out.ppm out.png`):
-
-<img src="demos/raytrace/out.png" width="30%">
+- `misa-ar`, `misa-as`, `misa-ld`, `misa-nm`, `misa-objdump`, `misa-pr`, and `misa-spec`: CLI
+  utilities written in Python to make the usage of the Haskell and Lean binaries easier.
+- `misa-ar-exe`, `misa-as-exe`, `misa-ld-exe`, `misa-nm-exe`, `misa-objdump-exe`, `misa-pr-exe` and
+  `misa-spec-exe`: binaries built from the Haskell and Lean source that provide a very minimal
+  command line interface for use by the Python CLI wrappers.
