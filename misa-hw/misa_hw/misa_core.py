@@ -89,7 +89,9 @@ eff_addr    = Mux(stack_variant, Special[SADDR], base) + imm_sext, and its carry
 addr_fault  = eff_carry ^ imm_sext[15]. An effective address must not wrap, and this one XOR
               detects leaving [0x0000, 0xFFFF] in either direction (verified exhaustively over all
               65536 x 16 base/offset pairs).
-user_mode   = EXTNS.PRIVILEGE & PRIVS.R
+privilege_enabled = EXTNS.PRIVILEGE. A disabled extension keeps the contents of the registers it
+              defines, so this gates every automatic write to PRIVS as well as selecting the level.
+user_mode   = privilege_enabled & PRIVS.R
 vector_addr = Cat(byte_sel, vector_sel, 0b1111111111111). Every vector lives in 0xFFF8 - 0xFFFF,
               so selecting one costs no mux: VectorSelect indexes the table directly.
 
@@ -351,7 +353,8 @@ EXECUTE_JMP_CSR
   Every illegal or ill-contexted form was already rejected in DECODE, so only three good cases
   remain. A RETSC return fits in one state; RETIR needs two for its second GP write.
     If csr == RETSC
-      Special[PRIVS] <- syscall_privs
+      If privilege_enabled
+        Special[PRIVS] <- syscall_privs
       pc <- Special[RETSC], in_syscall <- 0
       Next FETCH_LO
     Elif csr == RETIR
@@ -363,7 +366,9 @@ EXECUTE_JMP_CSR
       ADVANCE
   RETSC and RETIR reached here only with ALWAYS, so they ignore the comparison. Their saved ring
   bits occupy independent slots, so an interrupt taken inside a system call restores the two values
-  independently.
+  independently. Both restores are gated: a handler which disabled the Privilege Extension must not
+  put a ring bit back into a register the extension no longer governs, since the bit would become
+  effective again the moment the extension was.
 
 EXECUTE_RETIR_HI
     Register[RSCRATCH0] <- int_rscratch[8:16]
@@ -372,7 +377,8 @@ EXECUTE_RETIR_HI
 
 EXECUTE_RETIR_LO
     Register[RSCRATCH1] <- int_rscratch[0:8]
-    Special[PRIVS] <- int_privs
+    If privilege_enabled
+      Special[PRIVS] <- int_privs
     pc <- Special[RETIR], in_interrupt <- 0
     Next FETCH_LO
   Leaving the interrupt context is what re-enables interrupts, so no separate mask exists. The two
@@ -413,7 +419,13 @@ TRAP_ENTER
   The shadows read the pre-write value of PRIVS and FLAGS while the same edge writes PRIVS, which
   is the intended order: a return restores the ring bit the trap displaced. Neither read goes
   through the CSR read port, because `CsrRegFile` exposes `flags_data` and `privs_data` directly.
-    Special[PRIVS] <- 0x0000
+
+  Only the write is gated by `privilege_enabled`. Without the extension the processor is already in
+  Machine Mode whatever PRIVS holds, so there is nothing to drop, and the register belongs to a
+  disabled extension and must keep its contents. The shadows are saved either way, so a handler
+  which re-enables the extension before returning restores the bit the trap actually displaced.
+    If privilege_enabled
+      Special[PRIVS] <- 0x0000
     Switch vector_sel
       Case FAULT
         Nothing further. A fault must not change either context flag.
@@ -631,6 +643,7 @@ class MisaCore(Component):
         self.eff_addr: Signal = Signal(16)
         self.eff_carry: Signal = Signal(1)
         self.addr_fault: Signal = Signal(1)
+        self.privilege_enabled: Signal = Signal(1)
         self.user_mode: Signal = Signal(1)
 
         pc_sum: Signal = Signal(17)
@@ -651,10 +664,8 @@ class MisaCore(Component):
             self.eff_carry.eq(eff_sum[16]),
             self.addr_fault.eq(self.eff_carry ^ self.imm_sext[15]),
 
-            self.user_mode.eq(
-                (self.csr_reg_file.extns_data & Extn.PRIVILEGE).any() &
-                self.csr_reg_file.privs_data
-            )
+            self.privilege_enabled.eq((self.csr_reg_file.extns_data & Extn.PRIVILEGE).any()),
+            self.user_mode.eq(self.privilege_enabled & self.csr_reg_file.privs_data)
         ]
 
         self.elaborate_interrupt_sampling(m)
@@ -1022,11 +1033,12 @@ class MisaCore(Component):
             m.d.comb += self.csr_reg_file.read_csr_reg.eq(self.decoder_unit.csr)
 
             with m.If(self.decoder_unit.csr == CsrReg.RETSC):
-                m.d.comb += [
-                    self.csr_reg_file.write_csr_reg.eq(CsrReg.PRIVS),
-                    self.csr_reg_file.write_data.eq(self.syscall_privs),
-                    self.csr_reg_file.write_enable.eq(1)
-                ]
+                with m.If(self.privilege_enabled):
+                    m.d.comb += [
+                        self.csr_reg_file.write_csr_reg.eq(CsrReg.PRIVS),
+                        self.csr_reg_file.write_data.eq(self.syscall_privs),
+                        self.csr_reg_file.write_enable.eq(1)
+                    ]
                 m.d.sync += [
                     self.pc.eq(self.csr_reg_file.read_data),
                     self.in_syscall.eq(0)
@@ -1062,12 +1074,14 @@ class MisaCore(Component):
 
                 self.gp_reg_file.write_gp_reg.eq(GpReg.RSCRATCH1),
                 self.gp_reg_file.write_data.eq(self.int_rscratch[0:8]),
-                self.gp_reg_file.write_enable.eq(1),
-
-                self.csr_reg_file.write_csr_reg.eq(CsrReg.PRIVS),
-                self.csr_reg_file.write_data.eq(self.int_privs),
-                self.csr_reg_file.write_enable.eq(1)
+                self.gp_reg_file.write_enable.eq(1)
             ]
+            with m.If(self.privilege_enabled):
+                m.d.comb += [
+                    self.csr_reg_file.write_csr_reg.eq(CsrReg.PRIVS),
+                    self.csr_reg_file.write_data.eq(self.int_privs),
+                    self.csr_reg_file.write_enable.eq(1)
+                ]
             m.d.sync += [
                 self.pc.eq(self.csr_reg_file.read_data),
                 self.in_interrupt.eq(0)
@@ -1135,11 +1149,12 @@ class MisaCore(Component):
 
     def elaborate_trap_enter(self, m: Module) -> None:
         with m.State(CoreState.TRAP_ENTER):
-            m.d.comb += [
-                self.csr_reg_file.write_csr_reg.eq(CsrReg.PRIVS),
-                self.csr_reg_file.write_data.eq(0x0000),
-                self.csr_reg_file.write_enable.eq(1)
-            ]
+            with m.If(self.privilege_enabled):
+                m.d.comb += [
+                    self.csr_reg_file.write_csr_reg.eq(CsrReg.PRIVS),
+                    self.csr_reg_file.write_data.eq(0x0000),
+                    self.csr_reg_file.write_enable.eq(1)
+                ]
             with m.Switch(self.vector_sel):
                 with m.Case(VectorSelect.SYSCALL):
                     m.d.sync += [

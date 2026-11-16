@@ -53,8 +53,13 @@ def State.writeSpecial (q : State) (c : CsrReg) (v : SpecWord) : State :=
   | _      => { q with special := fun c' => if c'.enc == c.enc then v else q.special c' }
 
 
+def State.privsUpdate (q : State) (v : SpecWord) : SpecWord :=
+  if (CsrExtns.dec (q.special .extns)).privilege then v else q.special .privs
+
+
 def State.fault (q : State) (cause : CsrCause) : State :=
-  let q := ((q.writeSpecial .cause cause.enc).writeSpecial .privs 0x0000).writeSpecial .fault q.pc
+  let cleared : SpecWord := q.privsUpdate 0x0000
+  let q := ((q.writeSpecial .cause cause.enc).writeSpecial .privs cleared).writeSpecial .fault q.pc
   { q with pc := q.memory 0xFFFD ++ q.memory 0xFFFC }
 
 
@@ -96,7 +101,8 @@ def State.userMode (q : State) : Bool :=
 
 def State.interrupt (q : State) : State :=
   let saved : SpecWord := q.special .privs
-  { ((q.writeSpecial .retir q.pc).writeSpecial .privs 0x0000) with
+  let cleared : SpecWord := q.privsUpdate 0x0000
+  { ((q.writeSpecial .retir q.pc).writeSpecial .privs cleared) with
     intRscratch := q.register .rscratch0 ++ q.register .rscratch1,
     intFlags    := q.special .flags,
     intPrivs    := saved,

@@ -1872,7 +1872,7 @@ the whole of User Mode.
 #### Points of Privilege Change
 
 Under normal operation, the processor is expected to change privilege modes when the following
-occur:
+occur and the Privilege Extension is enabled:
 
 - When any fault occurs which requires the processor to jump to the fault handler (including an User
   Mode privilege error), the processor must first set `PRIVS.R` to 0.

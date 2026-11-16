@@ -295,7 +295,7 @@ theorem State.writeMem_wf (q : State) (a : AddrWord) (v : DataWord) (h : q.WF) :
 -- Taking a fault preserves well-formedness
 theorem State.fault_wf (q : State) (c : CsrCause) (h : q.WF) : (q.fault c).WF := by
   have h1 := State.writeSpecial_wf q CsrReg.cause c.enc h
-  have h2 := State.writeSpecial_wf _ CsrReg.privs 0x0000 h1
+  have h2 := State.writeSpecial_wf _ CsrReg.privs (q.privsUpdate 0x0000) h1
   have h3 := State.writeSpecial_wf _ CsrReg.fault q.pc h2
   exact { zeroReg := h3.zeroReg, csrMasked := h3.csrMasked, checkSync := h3.checkSync }
 
@@ -311,7 +311,7 @@ theorem State.next_wf (q : State) (h : q.WF) : (State.next q).WF := by
 -- Taking an interrupt preserves well-formedness
 theorem State.interrupt_wf (q : State) (h : q.WF) : q.interrupt.WF := by
   have h1 := State.writeSpecial_wf q CsrReg.retir q.pc h
-  have h2 := State.writeSpecial_wf _ CsrReg.privs 0x0000 h1
+  have h2 := State.writeSpecial_wf _ CsrReg.privs (q.privsUpdate 0x0000) h1
   exact { zeroReg := h2.zeroReg, csrMasked := h2.csrMasked, checkSync := h2.checkSync }
 
 

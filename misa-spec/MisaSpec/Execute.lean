@@ -46,8 +46,9 @@ def executeSyscall (q : State) (rs : GpReg) : State :=
     let cause : CsrCause := CsrCause.haltInstruction (q.register rs)
     let target : AddrWord := q.memory 0xFFFB ++ q.memory 0xFFFA
     let saved : SpecWord := q.special .privs
+    let cleared : SpecWord := q.privsUpdate 0x0000
     let q := (q.writeSpecial .cause cause.enc).writeSpecial .retsc (q.pc + 2)
-    { (q.writeSpecial .privs 0x0000)
+    { (q.writeSpecial .privs cleared)
       with pc := target, inSyscall := true, syscallPrivs := saved }
 
 
@@ -175,7 +176,7 @@ def executeJmpCsr (q : State) (csr : CsrReg) (cmp : CmpFlag) : State :=
       if cmp != .always then
         q.fault (CsrCause.conditionalContextReturn cmp csr)
       else if q.inSyscall && !q.inInterrupt then
-        { (q.writeSpecial .privs q.syscallPrivs)
+        { (q.writeSpecial .privs (q.privsUpdate q.syscallPrivs))
           with pc := q.special csr, inSyscall := false }
       else
         q.fault (CsrCause.improperReturnContext q.inSyscall q.inInterrupt csr)
@@ -185,9 +186,10 @@ def executeJmpCsr (q : State) (csr : CsrReg) (cmp : CmpFlag) : State :=
         q.fault (CsrCause.conditionalContextReturn cmp csr)
       else if q.inInterrupt then
         let flags : CsrFlags := CsrFlags.dec q.intFlags
+        let restored : SpecWord := q.privsUpdate q.intPrivs
         let q := ((q.writeReg .rscratch0 (q.intRscratch.extractLsb' 8 8)).writeReg
             .rscratch1 (q.intRscratch.extractLsb' 0 8)).writeFlags flags
-        { (q.writeSpecial .privs q.intPrivs)
+        { (q.writeSpecial .privs restored)
           with pc := q.special csr, inInterrupt := false }
       else
         q.fault (CsrCause.improperReturnContext q.inSyscall q.inInterrupt csr)

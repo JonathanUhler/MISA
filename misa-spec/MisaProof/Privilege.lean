@@ -4,22 +4,115 @@ import MisaProof.Fault
 namespace MisaSpec
 
 
+-- Writing PRIVS back to the value it already holds is the identity, since a well formed state
+-- holds no bit the write mask drops
+theorem privs_mask_self (q : State) (hwf : q.WF) :
+    q.special CsrReg.privs &&& CsrReg.privs.writeMask = q.special CsrReg.privs := by
+  have hm := hwf.csrMasked CsrReg.privs
+  simp only [CsrReg.writeMask] at hm
+  simp only [CsrReg.writeMask]
+  bv_decide
+
+
+-- An automatic privilege change writes the ring bit it names while the Privilege Extension is
+-- enabled
+theorem privsUpdate_enabled (q : State) (v : SpecWord)
+    (h : (CsrExtns.dec (q.special CsrReg.extns)).privilege = true) :
+    q.privsUpdate v = v := by
+  unfold State.privsUpdate
+  split
+  next => rfl
+  next hc => simp [h] at hc
+
+
+-- An automatic privilege change writes the current ring bit back while the Privilege Extension is
+-- disabled, whatever ring bit it would otherwise have named
+theorem privsUpdate_disabled (q : State) (v : SpecWord)
+    (h : (CsrExtns.dec (q.special CsrReg.extns)).privilege = false) :
+    q.privsUpdate v = q.special CsrReg.privs := by
+  unfold State.privsUpdate
+  split
+  next hc => simp [h] at hc
+  next => rfl
+
+
+-- A state which took its PRIVS from an automatic clear is in Machine Mode: the clear lands while
+-- the Privilege Extension is enabled, and the level is Machine Mode whatever the ring bit holds
+-- while it is disabled
+theorem userMode_of_privsUpdate_zero (q : State) (q' : State)
+    (he : q'.special CsrReg.extns = q.special CsrReg.extns)
+    (hp : q'.special CsrReg.privs = q.privsUpdate 0x0000 &&& CsrReg.privs.writeMask) :
+    q'.userMode = false := by
+  simp only [State.userMode, he, hp]
+  unfold State.privsUpdate
+  split
+  next hc => simp [hc, CsrReg.writeMask]
+  next hc =>
+    have hf : (CsrExtns.dec (q.special CsrReg.extns)).privilege = false := by simpa using hc
+    simp [hf]
+
+
 -- Taking a fault leaves the processor in Machine Mode
 theorem fault_enters_machine_mode (q : State) (c : CsrCause) : (q.fault c).userMode = false := by
-  simp [State.userMode, State.fault, State.writeSpecial, CsrReg.enc, CsrReg.writeMask]
+  refine userMode_of_privsUpdate_zero q _ ?_ ?_
+  next => simp [State.fault, State.writeSpecial, CsrReg.enc]
+  next => simp [State.fault, State.writeSpecial, CsrReg.enc]
 
 
 -- A successful SYSCALL leaves the processor in Machine Mode
 theorem syscall_enters_machine_mode (q : State) (rs : GpReg)
     (hs : q.inSyscall = false) (hi : q.inInterrupt = false) :
     (executeSyscall q rs).userMode = false := by
-  simp [executeSyscall, hs, hi, State.userMode, State.writeSpecial, CsrReg.enc,
-        CsrReg.writeMask]
+  refine userMode_of_privsUpdate_zero q _ ?_ ?_
+  next => simp [executeSyscall, hs, hi, State.writeSpecial, CsrReg.enc]
+  next => simp [executeSyscall, hs, hi, State.writeSpecial, CsrReg.enc]
 
 
 -- Taking an interrupt leaves the processor in Machine Mode
 theorem interrupt_enters_machine_mode (q : State) : q.interrupt.userMode = false := by
-  simp [State.interrupt, State.userMode, State.writeSpecial, CsrReg.enc, CsrReg.writeMask]
+  refine userMode_of_privsUpdate_zero q _ ?_ ?_
+  next => simp [State.interrupt, State.writeSpecial, CsrReg.enc]
+  next => simp [State.interrupt, State.writeSpecial, CsrReg.enc]
+
+
+-- Taking a fault drops the ring bit through the automatic update
+theorem fault_privs_update (q : State) (c : CsrCause) :
+    (q.fault c).special CsrReg.privs = q.privsUpdate 0x0000 &&& CsrReg.privs.writeMask := by
+  simp [State.fault, State.writeSpecial, CsrReg.enc]
+
+
+-- Taking a fault leaves PRIVS alone while the Privilege Extension is disabled, since a disabled
+-- extension keeps the contents of the registers it defines until it is re-enabled. The processor
+-- is already in Machine Mode by the definition of the privilege level, so there is nothing for the
+-- trap to drop to
+theorem fault_preserves_privs_when_extension_disabled (q : State) (hwf : q.WF) (c : CsrCause)
+    (h : (CsrExtns.dec (q.special CsrReg.extns)).privilege = false) :
+    (q.fault c).special CsrReg.privs = q.special CsrReg.privs := by
+  rw [fault_privs_update q c, privsUpdate_disabled q 0x0000 h]
+  exact privs_mask_self q hwf
+
+
+-- Taking an interrupt leaves PRIVS alone while the Privilege Extension is disabled
+theorem interrupt_preserves_privs_when_extension_disabled (q : State) (hwf : q.WF)
+    (h : (CsrExtns.dec (q.special CsrReg.extns)).privilege = false) :
+    q.interrupt.special CsrReg.privs = q.special CsrReg.privs := by
+  have hv : q.interrupt.special CsrReg.privs
+      = q.privsUpdate 0x0000 &&& CsrReg.privs.writeMask := by
+    simp [State.interrupt, State.writeSpecial, CsrReg.enc]
+  rw [hv, privsUpdate_disabled q 0x0000 h]
+  exact privs_mask_self q hwf
+
+
+-- A SYSCALL leaves PRIVS alone while the Privilege Extension is disabled
+theorem syscall_preserves_privs_when_extension_disabled (q : State) (hwf : q.WF) (rs : GpReg)
+    (hs : q.inSyscall = false) (hi : q.inInterrupt = false)
+    (h : (CsrExtns.dec (q.special CsrReg.extns)).privilege = false) :
+    (executeSyscall q rs).special CsrReg.privs = q.special CsrReg.privs := by
+  have hv : (executeSyscall q rs).special CsrReg.privs
+      = q.privsUpdate 0x0000 &&& CsrReg.privs.writeMask := by
+    simp [executeSyscall, hs, hi, State.writeSpecial, CsrReg.enc]
+  rw [hv, privsUpdate_disabled q 0x0000 h]
+  exact privs_mask_self q hwf
 
 
 -- A special register write that names neither PRIVS nor EXTNS leaves the privilege level unchanged
@@ -433,16 +526,6 @@ theorem interrupt_saves_privs (q : State) : q.interrupt.intPrivs = q.special Csr
   rfl
 
 
--- A WSR to PRIVS inside an interrupt context does not survive the return, because the restore
--- overwrites PRIVS entirely
-theorem wsr_privs_does_not_survive_return (q : State) (hwf : q.WF) (rs1 : GpReg) (rs2 : GpReg)
-    (hu : q.userMode = false) (hi : q.inInterrupt = true) (hpc : q.pc < 0xFFF0#16) :
-    let q1 := executeWsr q rs1 rs2 CsrReg.privs
-    let q2 := executeJmpCsr q1 CsrReg.retir CmpFlag.always
-    q2.special CsrReg.privs = q.intPrivs &&& CsrReg.privs.writeMask :=
-  sorry
-
-
 -- Taking an interrupt sets RETIR to the address of the preempted instruction, so the return
 -- resumes with that instruction rather than skipping it
 theorem interrupt_saves_preempted_pc (q : State) :
@@ -478,13 +561,14 @@ theorem interrupt_preserves_cause (q : State) :
 
 
 -- A JMP to RETIR from an interrupt context restores the saved registers, flags, and PRIVS from the
--- internal slots, branches to the saved program counter, and leaves the context
+-- internal slots, branches to the saved program counter, and leaves the context. The ring bit goes
+-- through the automatic update, which is a no-op while the Privilege Extension is disabled
 theorem retir_restores (q : State) (hu : q.userMode = false) (hi : q.inInterrupt = true) :
     let q' := executeJmpCsr q CsrReg.retir CmpFlag.always
     q'.register GpReg.rscratch0 = q.intRscratch.extractLsb' 8 8
       /\ q'.register GpReg.rscratch1 = q.intRscratch.extractLsb' 0 8
       /\ q'.special CsrReg.flags = (CsrFlags.dec q.intFlags).enc
-      /\ q'.special CsrReg.privs = q.intPrivs &&& CsrReg.privs.writeMask
+      /\ q'.special CsrReg.privs = q.privsUpdate q.intPrivs &&& CsrReg.privs.writeMask
       /\ q'.pc = q.special CsrReg.retir
       /\ q'.inInterrupt = false := by
   simp only [executeJmpCsr]
@@ -507,6 +591,100 @@ theorem retir_restores (q : State) (hu : q.userMode = false) (hi : q.inInterrupt
       next => simp [State.writeFlags, State.writeReg_special, CsrReg.enc]
 
 
+-- Under the Privilege Extension a JMP to RETIR restores exactly the ring bit the interrupt
+-- displaced
+theorem retir_restores_privs (q : State) (hu : q.userMode = false) (hi : q.inInterrupt = true)
+    (h : (CsrExtns.dec (q.special CsrReg.extns)).privilege = true) :
+    (executeJmpCsr q CsrReg.retir CmpFlag.always).special CsrReg.privs
+      = q.intPrivs &&& CsrReg.privs.writeMask := by
+  rw [(retir_restores q hu hi).2.2.2.1, privsUpdate_enabled q q.intPrivs h]
+
+
+-- A JMP to RETIR leaves PRIVS alone while the Privilege Extension is disabled, so the saved ring
+-- bit stays in its slot instead of reappearing in a register the extension no longer governs
+theorem retir_preserves_privs_when_extension_disabled (q : State) (hwf : q.WF)
+    (hu : q.userMode = false) (hi : q.inInterrupt = true)
+    (h : (CsrExtns.dec (q.special CsrReg.extns)).privilege = false) :
+    (executeJmpCsr q CsrReg.retir CmpFlag.always).special CsrReg.privs
+      = q.special CsrReg.privs := by
+  rw [(retir_restores q hu hi).2.2.2.1, privsUpdate_disabled q q.intPrivs h]
+  exact privs_mask_self q hwf
+
+
+-- Under the Privilege Extension a JMP to RETIR from an interrupt context leaves PRIVS holding the
+-- saved ring bit, or a cleared one if the return was itself privileged because the context had
+-- raised the level to User Mode
+theorem retir_discards_privs (q : State) (hi : q.inInterrupt = true)
+    (he : (CsrExtns.dec (q.special CsrReg.extns)).privilege = true) :
+    (executeJmpCsr q CsrReg.retir CmpFlag.always).special CsrReg.privs
+        = q.intPrivs &&& CsrReg.privs.writeMask
+      \/ (executeJmpCsr q CsrReg.retir CmpFlag.always).special CsrReg.privs = 0x0000 := by
+  cases hum : q.userMode
+  next => exact Or.inl (retir_restores_privs q hum hi he)
+  next =>
+    refine Or.inr ?_
+    rw [jmpCsr_privilege_precedence_retir q CmpFlag.always hum, fault_privs_update,
+        privsUpdate_enabled q 0x0000 he]
+    bv_decide
+
+
+-- A WSR to PRIVS inside an interrupt context does not survive the return. A cleared ring bit
+-- leaves the return to restore the saved one, and a set ring bit enters User Mode, where the
+-- return is a privileged instruction and the fault it raises clears the bit again.
+theorem wsr_privs_does_not_survive_return (q : State) (_hwf : q.WF) (rs1 : GpReg) (rs2 : GpReg)
+    (hu : q.userMode = false) (hi : q.inInterrupt = true) (hpc : q.pc < 0xFFF0#16)
+    (he : (CsrExtns.dec (q.special CsrReg.extns)).privilege = true) :
+    let q1 := executeWsr q rs1 rs2 CsrReg.privs
+    let q2 := executeJmpCsr q1 CsrReg.retir CmpFlag.always
+    q2.special CsrReg.privs = q.intPrivs &&& CsrReg.privs.writeMask
+      \/ q2.special CsrReg.privs = 0x0000 := by
+  -- the WSR commits its value and advances, since the program counter is far from the end of the
+  -- address space
+  have hlt : (q.writeSpecial CsrReg.privs (q.register rs1 ++ q.register rs2)).pc < 0xFFFE#16 := by
+    rw [State.writeSpecial_pc]
+    bv_decide
+  have hw : executeWsr q rs1 rs2 CsrReg.privs
+      = State.next (q.writeSpecial CsrReg.privs (q.register rs1 ++ q.register rs2)) := by
+    simp [executeWsr, hu]
+  simp only [hw]
+  -- the WSR reaches neither EXTNS nor the interrupt context nor the saved ring bit, so the return
+  -- it runs into is the one the interrupt set up
+  have hex : (State.next (q.writeSpecial CsrReg.privs (q.register rs1 ++ q.register rs2))).special
+      CsrReg.extns = q.special CsrReg.extns := by
+    rw [next_special_of_lt _ CsrReg.extns hlt,
+        State.writeSpecial_other q CsrReg.privs CsrReg.extns _ (by decide)]
+  have hin : (State.next (q.writeSpecial CsrReg.privs
+      (q.register rs1 ++ q.register rs2))).inInterrupt = true := by
+    simp only [State.next]
+    split
+    next => rw [(fault_preserves_context _ CsrCause.pcOverflow).2]; exact hi
+    next => exact hi
+  have hip : (State.next (q.writeSpecial CsrReg.privs
+      (q.register rs1 ++ q.register rs2))).intPrivs = q.intPrivs := by
+    rw [(State.next_int_frame _).2.2.2.1, (State.writeSpecial_int_frame q CsrReg.privs _).2.2.2.1]
+  have hor := retir_discards_privs _ hin (by rw [hex]; exact he)
+  rw [hip] at hor
+  exact hor
+
+
+-- An interrupt and its immediate return are a round trip on the ring bit either way the Privilege
+-- Extension is set: the return replays the saved bit while the extension is enabled, and neither
+-- the entry nor the return touches PRIVS while it is disabled
+theorem interrupt_privs_round_trip (q : State) (hwf : q.WF) :
+    q.interrupt.privsUpdate q.interrupt.intPrivs &&& CsrReg.privs.writeMask
+      = q.special CsrReg.privs := by
+  have he : q.interrupt.special CsrReg.extns = q.special CsrReg.extns := by
+    simp [State.interrupt, State.writeSpecial, CsrReg.enc]
+  unfold State.privsUpdate
+  rw [he]
+  split
+  next => exact privs_mask_self q hwf
+  next hc =>
+    have hd : (CsrExtns.dec (q.special CsrReg.extns)).privilege = false := by simpa using hc
+    rw [interrupt_preserves_privs_when_extension_disabled q hwf hd]
+    exact privs_mask_self q hwf
+
+
 -- An interrupt that returns immediately restores RSCRATCH0, RSCRATCH1, FLAGS, PRIVS, and the
 -- program counter, so an empty interrupt handler is transparent
 theorem interrupt_transparent (q : State) (hwf : q.WF) :
@@ -521,14 +699,8 @@ theorem interrupt_transparent (q : State) (hwf : q.WF) :
   have hir : q.interrupt.intRscratch
       = q.register GpReg.rscratch0 ++ q.register GpReg.rscratch1 := rfl
   have hif : q.interrupt.intFlags = q.special CsrReg.flags := rfl
-  have hip : q.interrupt.intPrivs = q.special CsrReg.privs := rfl
   have hfl : (CsrFlags.dec (q.special CsrReg.flags)).enc = q.special CsrReg.flags :=
     CsrFlags.enc_dec (q.special CsrReg.flags) (hwf.csrMasked CsrReg.flags)
-  have hpv : q.special CsrReg.privs &&& CsrReg.privs.writeMask = q.special CsrReg.privs := by
-    have hm := hwf.csrMasked CsrReg.privs
-    simp only [CsrReg.writeMask] at hm
-    simp only [CsrReg.writeMask]
-    bv_decide
   refine And.intro ?_ (And.intro ?_ (And.intro ?_ (And.intro ?_
     (And.intro ?_ hr.2.2.2.2.2))))
   next =>
@@ -538,7 +710,9 @@ theorem interrupt_transparent (q : State) (hwf : q.WF) :
     rw [hr.2.1, hir]
     bv_decide
   next => rw [hr.2.2.1, hif, hfl]
-  next => rw [hr.2.2.2.1, hip, hpv]
+  next =>
+    rw [hr.2.2.2.1]
+    exact interrupt_privs_round_trip q hwf
   next =>
     rw [hr.2.2.2.2.1]
     exact interrupt_saves_preempted_pc q
@@ -577,14 +751,36 @@ theorem retir_improper_context (q : State) (hu : q.userMode = false) (h : q.inIn
 
 
 -- A JMP to RETSC from a system call context leaves the context, branches to RETSC, and restores
--- the saved PRIVS value
+-- the saved PRIVS value through the automatic update, which is a no-op while the Privilege
+-- Extension is disabled
 theorem retsc_leaves_syscall_context (q : State) (_hwf : q.WF) (hu : q.userMode = false)
     (hs : q.inSyscall = true) (hi : q.inInterrupt = false) :
     let q' := executeJmpCsr q CsrReg.retsc CmpFlag.always
     q'.inSyscall = false
       /\ q'.pc = q.special CsrReg.retsc
-      /\ q'.special CsrReg.privs = q.syscallPrivs &&& CsrReg.privs.writeMask := by
+      /\ q'.special CsrReg.privs = q.privsUpdate q.syscallPrivs &&& CsrReg.privs.writeMask := by
   simp [executeJmpCsr, hu, hs, hi, State.writeSpecial]
+
+
+-- Under the Privilege Extension a JMP to RETSC restores exactly the ring bit the SYSCALL displaced
+theorem retsc_restores_privs (q : State) (hwf : q.WF) (hu : q.userMode = false)
+    (hs : q.inSyscall = true) (hi : q.inInterrupt = false)
+    (h : (CsrExtns.dec (q.special CsrReg.extns)).privilege = true) :
+    (executeJmpCsr q CsrReg.retsc CmpFlag.always).special CsrReg.privs
+      = q.syscallPrivs &&& CsrReg.privs.writeMask := by
+  rw [(retsc_leaves_syscall_context q hwf hu hs hi).2.2, privsUpdate_enabled q q.syscallPrivs h]
+
+
+-- A JMP to RETSC leaves PRIVS alone while the Privilege Extension is disabled, so a handler which
+-- disables the extension cannot return a set ring bit into a register the extension no longer
+-- governs and have a later fault lose it
+theorem retsc_preserves_privs_when_extension_disabled (q : State) (hwf : q.WF)
+    (hu : q.userMode = false) (hs : q.inSyscall = true) (hi : q.inInterrupt = false)
+    (h : (CsrExtns.dec (q.special CsrReg.extns)).privilege = false) :
+    (executeJmpCsr q CsrReg.retsc CmpFlag.always).special CsrReg.privs
+      = q.special CsrReg.privs := by
+  rw [(retsc_leaves_syscall_context q hwf hu hs hi).2.2, privsUpdate_disabled q q.syscallPrivs h]
+  exact privs_mask_self q hwf
 
 
 -- Taking an interrupt does not change whether the processor is in a system call context
@@ -628,16 +824,6 @@ theorem interrupt_preempts_instruction (q : State) (h : q.halted = false)
     (hp : q.intPending = true) (hc : q.canInterrupt = true) :
     step q = q.interrupt := by
   simp [step, h, hp, hc]
-
-
--- Taking a fault clears PRIVS even when the Privilege Extension is disabled, which contradicts the
--- rule that a disabled extension's registers keep their contents. EXPECTED TO FAIL: needs a
--- specification decision on whether the points of privilege change apply while the extension is
--- disabled, since nothing ever restores the ring bit lost on the fault path.
-theorem fault_preserves_privs_when_extension_disabled (q : State)
-    (h : (CsrExtns.dec (q.special CsrReg.extns)).privilege = false) (c : CsrCause) :
-    (q.fault c).special CsrReg.privs = q.special CsrReg.privs :=
-  sorry
 
 
 end MisaSpec
