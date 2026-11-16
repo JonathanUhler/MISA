@@ -336,7 +336,7 @@ valid Type fields are:
 |------------------------|----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Halt instruction | 000 | The `HALT` instruction was executed. Extended status is the value of the `RS` operand register. Under the System Call Extension, this reason indicates that the `SYSCALL` instruction was executed. |
 | Illegal instruction | 001 | An ill-formed instruction failed to decode. Extended status is not used.  |
-| Privileged instruction | 010 | A privileged instruction was executed while in User Mode (under Privilege Extension).  |
+| Privileged instruction | 010 | A privileged instruction was executed while in User Mode (under Privilege Extension). Extended status is not used. |
 
 : {tbl-colwidths="[20, 15, 65]"}
 
@@ -346,9 +346,10 @@ are:
 
 | Type | Encoding | Commentary |
 |-------------------|----------|----------------------------------------------------------------------------------------------|
-| Address overflow | 000 | A memory operation attempted to access an address which is outside the mapped memory space.  |
-| PC overflow | 001 | The program counter overflowed an unsigned 16-bit value.  |
-| Privileged access | 010 | An access to privileged memory was attempted while in User Mode (under Privilege Extension). |
+| Address overflow | 000 | A memory operation attempted to access an address which is outside the mapped memory space. Extended status is not used. |
+| PC overflow | 001 | The program counter overflowed an unsigned 16-bit value. Extended status is not used. |
+| Privileged access | 010 | An access to privileged memory was attempted while in User Mode (under Privilege Extension). Extended status is not used. |
+| Vector write | 011 | A `ST` instruction attempted to write an address between `0xFFF0` and `0xFFFF`, inclusive, which is the reset vector table. The extended status is set as follows: bits 0-3 = the low nibble of the address the store would have written, bits 4-7 = reserved. |
 
 : {tbl-colwidths="[20, 15, 65]"}
 
@@ -498,6 +499,19 @@ which are required by all maps.
 The region 0xFFF0 - 0xFFFF MUST be reserved for a reset vector table. When the processor is taken
 out of reset, the program counter MUST be initialized to the address stored in memory at 0xFFFE -
 0xFFFF and begin execution there.
+
+The reset vector table MUST never be writable by any software, in any privilege level and under any
+set of extensions. If a `ST` instruction attempts to write an address in the range
+`0xFFF0 - 0xFFFF`, a fault MUST occur with the `CAUSE` Reason "Memory usage" and the `CAUSE` Type
+"Vector write". The write MUST be ignored, and `SADDR` MUST not be updated (if executing the stack
+variant of `ST`).
+
+The address this fault tests is the address the store would write, which is not always the effective
+address. For the register base variant of `ST` the two are the same. For the stack variant the store
+writes the current value of `SADDR` and applies the immediate offset to `SADDR` afterwards, so the
+address tested is the current value of `SADDR` and not the updated one. A push which writes outside
+the table MUST be performed even if the updated `SADDR` is within the table, and a push which writes
+inside the table MUST fault even if the updated `SADDR` is outside the table.
 
 The reset vector table contains the following function pointers:
 
@@ -1046,6 +1060,9 @@ Faults:
 - "Address overflow" if the effective address computation leaves the 16-bit address range, or if the
   effective address is outside the memory the implementation provides. For the stack variant, the
   same applies if the updated value of `SADDR` leaves the implemented width of `SADDR`.
+- "Vector write" if the address the store would write is in the reset vector table at
+  `0xFFF0 - 0xFFFF`. For the stack variant this is the current value of `SADDR`, the address the
+  store writes, rather than the updated value. "Address overflow" takes precedence.
 - "Privileged access" if the effective address is in privileged memory and the store is performed in
   User Mode under the Privilege Extension with a memory protection unit.
 
@@ -1868,6 +1885,10 @@ provides a memory protection unit defines its own privileged regions, and softwa
 them is not portable between implementations. An implementation which provides no memory protection
 unit never raises the `CAUSE` Type "Privileged access", and the first three restrictions above are
 the whole of User Mode.
+
+The reset vector table is MUST NOT be writable in either privilege level. Faults when writing to
+the vector table are described in the Required Memory Regions subsection, and MUST occur regardless
+of privilege mode.
 
 #### Points of Privilege Change
 

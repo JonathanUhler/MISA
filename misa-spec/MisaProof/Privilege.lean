@@ -1,4 +1,4 @@
-import MisaProof.Fault
+import MisaProof.Vector
 
 
 namespace MisaSpec
@@ -329,28 +329,23 @@ theorem execute_contained (s : State) (hu : s.userMode = true) :
 
 
 -- A step taken in User Mode either stays in User Mode or ends up in one of the three trap
--- handlers, so User Mode cannot raise its own privilege. The memory hypothesis names the
--- guarantee the architecture is missing: nothing stops a User Mode store from repointing the
--- vector table, and the fault would then enter Machine Mode at an address the program chose.
+-- handlers, so User Mode cannot raise its own privilege. The handler it lands in is the one the
+-- program started with, because a store into the reset vector table faults instead of writing;
+-- without that guarantee a User Mode store could repoint a vector and the trap would then enter
+-- Machine Mode at an address the program chose.
 theorem user_cannot_escalate (q : State) (_hwf : q.WF) (hh : q.halted = false)
-    (hu : q.userMode = true)
-    (hmem : forall a : AddrWord, 0xFFF8#16 <= a -> (step q).memory a = q.memory a) :
+    (hu : q.userMode = true) :
     (step q).userMode = true
       \/ (step q).pc = q.faultVector
       \/ (step q).pc = q.syscallVector
       \/ (step q).pc = q.intVector := by
   -- the vector table the step lands on is the one the program started with
-  have hfv : (step q).faultVector = q.faultVector := by
-    simp only [State.faultVector]
-    rw [hmem 0xFFFD (by bv_decide), hmem 0xFFFC (by bv_decide)]
-  have hsv : (step q).syscallVector = q.syscallVector := by
-    simp only [State.syscallVector]
-    rw [hmem 0xFFFB (by bv_decide), hmem 0xFFFA (by bv_decide)]
-  have hiv : (step q).intVector = q.intVector := by
-    simp only [State.intVector]
-    rw [hmem 0xFFF9 (by bv_decide), hmem 0xFFF8 (by bv_decide)]
-  -- the step lands in whichever handler the state it reaches reads, which the hypothesis above
-  -- ties back to the table the program started with
+  have hvt := step_preserves_vector_table q
+  have hfv : (step q).faultVector = q.faultVector := hvt.1
+  have hsv : (step q).syscallVector = q.syscallVector := hvt.2.1
+  have hiv : (step q).intVector = q.intVector := hvt.2.2.1
+  -- the step lands in whichever handler the state it reaches reads, which the vector table result
+  -- above ties back to the table the program started with
   have hpost : (step q).userMode = true
       \/ (step q).pc = (step q).faultVector
       \/ (step q).pc = (step q).syscallVector

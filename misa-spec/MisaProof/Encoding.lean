@@ -338,6 +338,7 @@ theorem FaultKind.reason_type_table (k : FaultKind) :
         | .addressOverflow          => (0b010#3, 0b000#3)
         | .pcOverflow               => (0b010#3, 0b001#3)
         | .privilegedAccess         => (0b010#3, 0b010#3)
+        | .vectorWrite              => (0b010#3, 0b011#3)
         | .improperReturnContext    => (0b011#3, 0b000#3)
         | .conditionalContextReturn => (0b011#3, 0b001#3)
         | .improperSystemCall       => (0b011#3, 0b010#3) := by
@@ -378,6 +379,16 @@ theorem CsrCause.conditionalContextReturn_status (cmp : CmpFlag) (csr : CsrReg) 
       /\ s.getLsbD 3 = false
       /\ s.extractLsb' 4 4 = csr.enc := by
   cases cmp <;> cases csr <;> decide
+
+
+-- The extended status of a vector write holds the low nibble of the address the store would have
+-- written, which names the vector it tried to overwrite
+theorem CsrCause.vectorWrite_status (addr : AddrWord) :
+    let s := (CsrCause.vectorWrite addr).status
+    s.extractLsb' 0 4 = addr.extractLsb' 0 4
+      /\ s.extractLsb' 4 4 = 0b0000#4 := by
+  simp only [CsrCause.vectorWrite]
+  bv_decide
 
 
 -- The extended status of an improper system call holds the two context bits and nothing else

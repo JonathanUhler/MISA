@@ -95,6 +95,7 @@ class FaultKind(IntEnum, shape = 6):
     ADDR_OVERFLOW    = 0b000010
     PC_OVERFLOW      = 0b001010
     PRIV_ACCESS      = 0b010010
+    VECTOR_WRITE     = 0b011010
     IMPROPER_RETURN  = 0b000011
     COND_RETURN      = 0b001011
     IMPROPER_SYSCALL = 0b010011

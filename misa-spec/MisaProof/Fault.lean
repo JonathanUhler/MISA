@@ -240,6 +240,14 @@ theorem effAddr_eq_none (base : AddrWord) (imm : HalfWord) :
   next hc => simpa using hc
 
 
+-- An address lies outside the reset vector table exactly when it is below the base of the table,
+-- since the table runs to the end of the address space
+theorem inVectorTable_eq_false_iff (addr : AddrWord) :
+    inVectorTable addr = false <-> addr < 0xFFF0#16 := by
+  simp only [inVectorTable, decide_eq_false_iff_not]
+  bv_decide
+
+
 -- Advancing the program counter leaves SADDR unchanged, whether or not it overflows into a fault
 theorem next_saddr (q : State) :
     (State.next q).special CsrReg.saddr = q.special CsrReg.saddr := by
@@ -331,19 +339,23 @@ theorem ld_stack_order (q : State) (rd : GpReg) (imm : HalfWord) (s : AddrWord)
     exact State.writeReg_self _ rd _ hrd
 
 
--- A stack ST writes to the old stack address and then updates SADDR
+-- A stack ST outside the reset vector table writes to the old stack address and then updates SADDR
 theorem st_stack_order (q : State) (rd : GpReg) (imm : HalfWord) (s : AddrWord)
+    (hv : inVectorTable (q.special CsrReg.saddr) = false)
     (h : effAddr (q.special CsrReg.saddr) imm = some s) :
     let q' := executeSt q rd GpReg.rscratch1 imm
     q'.memory (q.special CsrReg.saddr) = q.register rd /\ q'.special CsrReg.saddr = s := by
   simp only [executeSt, h]
-  refine And.intro ?_ ?_
+  split
+  next hc => simp [hv] at hc
   next =>
-    rw [next_memory]
-    simp [State.writeSpecial, State.writeMem, CsrReg.enc]
-  next =>
-    rw [next_saddr, State.writeSpecial_self _ CsrReg.saddr s (by decide)]
-    simp [CsrReg.writeMask] <;> bv_decide
+    refine And.intro ?_ ?_
+    next =>
+      rw [next_memory]
+      simp [State.writeSpecial, State.writeMem, CsrReg.enc]
+    next =>
+      rw [next_saddr, State.writeSpecial_self _ CsrReg.saddr s (by decide)]
+      simp [CsrReg.writeMask] <;> bv_decide
 
 
 -- A ST leaves every register unchanged
@@ -364,7 +376,10 @@ theorem st_preserves_memory_other (q : State) (rd : GpReg) (imm : HalfWord) (a :
   simp only [executeSt]
   split
   next => exact (fault_frame q CsrCause.addressOverflow).2.1 a
-  next => rw [next_memory, State.writeSpecial_memory, State.writeMem_other q _ a _ h]
+  next =>
+    split
+    next => exact (fault_frame q _).2.1 a
+    next => rw [next_memory, State.writeSpecial_memory, State.writeMem_other q _ a _ h]
 
 
 -- A LD leaves memory unchanged

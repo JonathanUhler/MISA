@@ -164,6 +164,7 @@ inductive FaultKind where
   | addressOverflow
   | pcOverflow
   | privilegedAccess
+  | vectorWrite
   -- Reason: Control Event
   | improperReturnContext
   | conditionalContextReturn
@@ -179,6 +180,7 @@ def FaultKind.enc : FaultKind -> BitVec 6
   | .addressOverflow          => 0b000010#6
   | .pcOverflow               => 0b001010#6
   | .privilegedAccess         => 0b010010#6
+  | .vectorWrite              => 0b011010#6
   | .improperReturnContext    => 0b000011#6
   | .conditionalContextReturn => 0b001011#6
   | .improperSystemCall       => 0b010011#6
@@ -210,6 +212,9 @@ def CsrCause.pcOverflow : CsrCause :=
 
 def CsrCause.privilegedAccess : CsrCause :=
   { kind := .privilegedAccess, status := 0b00000000#8 }
+
+def CsrCause.vectorWrite (addr : AddrWord) : CsrCause :=
+  { kind := .vectorWrite, status := 0b0000#4 ++ addr.extractLsb' 0 4 }
 
 def CsrCause.improperReturnContext (inSyscall inInterrupt : Bool) (csr : CsrReg) : CsrCause :=
   { kind   := .improperReturnContext,

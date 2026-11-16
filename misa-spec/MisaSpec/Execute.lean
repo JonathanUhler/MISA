@@ -31,6 +31,10 @@ def effAddr (base : AddrWord) (imm : HalfWord) : Option AddrWord :=
   if wide.getLsbD 16 then none else some (wide.setWidth 16)
 
 
+def inVectorTable (addr : AddrWord) : Bool :=
+  0xFFF0#16 <= addr
+
+
 def executeHalt (q : State) (rs : GpReg) : State :=
   if q.userMode then
     q.fault CsrCause.privilegedInstruction
@@ -128,13 +132,20 @@ def executeSt (q : State) (rd : GpReg) (rsb : GpReg) (imm : HalfWord) : State :=
     match effAddr saddr imm with
     | none        => q.fault CsrCause.addressOverflow
     | some saddr' =>
-      let q := q.writeMem saddr (q.register rd)
-      (q.writeSpecial .saddr saddr').next
+      if inVectorTable saddr then
+        q.fault (CsrCause.vectorWrite saddr)
+      else
+        let q := q.writeMem saddr (q.register rd)
+        (q.writeSpecial .saddr saddr').next
   | _ =>
     let lo := (GpReg.dec (rsb.enc + 1)).getD .r0
     match effAddr (q.register rsb ++ q.register lo) imm with
     | none      => q.fault CsrCause.addressOverflow
-    | some addr => (q.writeMem addr (q.register rd)).next
+    | some addr =>
+      if inVectorTable addr then
+        q.fault (CsrCause.vectorWrite addr)
+      else
+        (q.writeMem addr (q.register rd)).next
 
 
 def executeRsr (q : State) (rs1 : GpReg) (rs2 : GpReg) (csr : CsrReg) : State :=

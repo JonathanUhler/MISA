@@ -166,8 +166,10 @@ theorem call_ret_roundtrip (q : State) (hwf : q.WF) (rs1 : GpReg) (rs2 : GpReg) 
   simp [executeJmpCsr, CsrReg.userReadable, h1, h2]
 
 
--- A PUSH writes its source register at the current stack address and then decrements SADDR
-theorem push_decrements_saddr (q : State) (rs : GpReg) (h : 0 < (q.special CsrReg.saddr).toNat) :
+-- A PUSH onto a stack outside the reset vector table writes its source register at the current
+-- stack address and then decrements SADDR
+theorem push_decrements_saddr (q : State) (rs : GpReg) (h : 0 < (q.special CsrReg.saddr).toNat)
+    (hv : inVectorTable (q.special CsrReg.saddr) = false) :
     let q' := executeSt q rs GpReg.rscratch1 (-1)
     q'.memory (q.special CsrReg.saddr) = q.register rs
       /\ q'.special CsrReg.saddr = q.special CsrReg.saddr - 1 := by
@@ -179,7 +181,7 @@ theorem push_decrements_saddr (q : State) (rs : GpReg) (h : 0 < (q.special CsrRe
     have hc : ((q.special CsrReg.saddr).setWidth 17 + (-1 : HalfWord).signExtend 17).getLsbD 16
         = false := by bv_decide
     simp [effAddr] <;> bv_decide
-  exact st_stack_order q rs (-1) (q.special CsrReg.saddr - 1) heff
+  exact st_stack_order q rs (-1) (q.special CsrReg.saddr - 1) hv heff
 
 
 -- A POP increments SADDR and then reads into its destination register from the new stack address
@@ -202,7 +204,8 @@ theorem pop_increments_saddr (q : State) (rd : GpReg) (h : Ne rd GpReg.r0)
 -- A POP after a PUSH recovers the pushed value and restores SADDR
 theorem push_pop_roundtrip (q : State) (rs : GpReg) (rd : GpReg)
     (hrd : Ne rd GpReg.r0)
-    (hs : 0 < (q.special CsrReg.saddr).toNat) :
+    (hs : 0 < (q.special CsrReg.saddr).toNat)
+    (hv : inVectorTable (q.special CsrReg.saddr) = false) :
     let q1 := executeSt q rs GpReg.rscratch1 (-1)
     let q2 := executeLd q1 rd GpReg.rscratch1 1
     q2.register rd = q.register rs
@@ -211,7 +214,7 @@ theorem push_pop_roundtrip (q : State) (rs : GpReg) (rd : GpReg)
     intro he
     rw [he] at hs
     simp at hs
-  have hp := push_decrements_saddr q rs hs
+  have hp := push_decrements_saddr q rs hs hv
   have heff : effAddr ((executeSt q rs GpReg.rscratch1 (-1)).special CsrReg.saddr) 1
       = some (q.special CsrReg.saddr) := by
     rw [hp.2]
@@ -229,7 +232,8 @@ theorem push_pop_roundtrip (q : State) (rs : GpReg) (rd : GpReg)
 -- the ordering the two macros have to agree on
 theorem push2_pop2_roundtrip (q : State) (rs1 : GpReg) (rs2 : GpReg) (rd1 : GpReg) (rd2 : GpReg)
     (hrd1 : Ne rd1 GpReg.r0) (hrd2 : Ne rd2 GpReg.r0) (hrd : Ne rd1 rd2)
-    (hs : 1 < (q.special CsrReg.saddr).toNat) :
+    (hs : 1 < (q.special CsrReg.saddr).toNat)
+    (hv : inVectorTable (q.special CsrReg.saddr) = false) :
     let q1 := executeSt q rs2 GpReg.rscratch1 (-1)
     let q2 := executeSt q1 rs1 GpReg.rscratch1 (-1)
     let q3 := executeLd q2 rd1 GpReg.rscratch1 1
@@ -246,8 +250,13 @@ theorem push2_pop2_roundtrip (q : State) (rs1 : GpReg) (rs2 : GpReg) (rd1 : GpRe
     rw [he] at hs
     simp at hs
   have h0 : 0 < (q.special CsrReg.saddr).toNat := by omega
+  -- the byte below the stack address is outside the vector table too, so neither push faults
+  have hv2 : inVectorTable (q.special CsrReg.saddr - 1) = false := by
+    rw [inVectorTable_eq_false_iff] at hv
+    rw [inVectorTable_eq_false_iff]
+    bv_decide
   -- the first push stores RS2 at the stack address and steps SADDR down
-  have p1 := push_decrements_saddr q rs2 h0
+  have p1 := push_decrements_saddr q rs2 h0 hv
   -- the second push stores RS1 one below it
   have heff2 : effAddr (q.special CsrReg.saddr - 1) (-1)
       = some (q.special CsrReg.saddr - 1 - 1) := by
@@ -255,7 +264,7 @@ theorem push2_pop2_roundtrip (q : State) (rs1 : GpReg) (rs2 : GpReg) (rd1 : GpRe
         + (-1 : HalfWord).signExtend 17).getLsbD 16 = false := by bv_decide
     simp [effAddr] <;> bv_decide
   have p2 := st_stack_order (executeSt q rs2 GpReg.rscratch1 (-1)) rs1 (-1)
-      (q.special CsrReg.saddr - 1 - 1) (by rw [p1.2]; exact heff2)
+      (q.special CsrReg.saddr - 1 - 1) (by rw [p1.2]; exact hv2) (by rw [p1.2]; exact heff2)
   -- the first pop reads RS1 back
   have heff3 : effAddr (q.special CsrReg.saddr - 1 - 1) 1
       = some (q.special CsrReg.saddr - 1) := by

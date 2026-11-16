@@ -89,6 +89,12 @@ eff_addr    = Mux(stack_variant, Special[SADDR], base) + imm_sext, and its carry
 addr_fault  = eff_carry ^ imm_sext[15]. An effective address must not wrap, and this one XOR
               detects leaving [0x0000, 0xFFFF] in either direction (verified exhaustively over all
               65536 x 16 base/offset pairs).
+store_addr  = Mux(stack_variant, Special[SADDR], eff_addr), the address a ST writes. A push writes
+              the current stack address and applies the offset afterwards, so for the stack variant
+              this is not eff_addr.
+vector_write = store_addr[4:16] == 0xFFF, that is, store_addr lies in the reset vector table at
+              0xFFF0 - 0xFFFF. The table is not writable by software, so a ST which names it faults
+              instead of storing, at the cost of one twelve bit compare.
 privilege_enabled = EXTNS.PRIVILEGE. A disabled extension keeps the contents of the registers it
               defines, so this gates every automatic write to PRIVS as well as selecting the level.
 user_mode   = privilege_enabled & PRIVS.R
@@ -294,9 +300,14 @@ EXECUTE_ST_DATA
     Next EXECUTE_ST
 
 EXECUTE_ST
+  The vector table check is behind the range check, so a store which both leaves the address range
+  and names the table reports the address overflow. The register base variant has no choice about
+  that order, since a wrapped sum has no address to check, and the stack variant below follows it.
     gp_reg_a = n2, gp_reg_b = n2 + 1
     If addr_fault
       TRAP(ADDR_OVERFLOW, status = 0x00)
+    Elif vector_write
+      TRAP(VECTOR_WRITE, status = Cat(store_addr[0:4], C(0, 4)))
     Else
       mem_addr = eff_addr, mem_write_data = data_buf, mem_write_enable = 1, mem_request = 1
       If mem_ready
@@ -305,10 +316,14 @@ EXECUTE_ST
 EXECUTE_ST_STK
   A push writes to the current stack address and then applies the offset, the mirror of a pop. Only
   one GP read is needed, so no data staging. Note that the bound check is on the updated SADDR
-  while the access uses the old one, and a faulting push must not store.
+  while the access uses the old one, and a faulting push must not store. The vector table check is
+  on the old one for the same reason: it is the address the push would write.
     read_csr_reg = SADDR
     If addr_fault
       TRAP(ADDR_OVERFLOW, status = 0x00)
+    Elif vector_write
+      Neither the store nor the SADDR update is enabled, so the push has no effect at all.
+      TRAP(VECTOR_WRITE, status = Cat(store_addr[0:4], C(0, 4)))
     Else
       mem_addr = Special[SADDR], mem_write_data = Register[n1], mem_write_enable = 1
       mem_request = 1
@@ -643,6 +658,8 @@ class MisaCore(Component):
         self.eff_addr: Signal = Signal(16)
         self.eff_carry: Signal = Signal(1)
         self.addr_fault: Signal = Signal(1)
+        self.store_addr: Signal = Signal(16)
+        self.vector_write: Signal = Signal(1)
         self.privilege_enabled: Signal = Signal(1)
         self.user_mode: Signal = Signal(1)
 
@@ -663,6 +680,13 @@ class MisaCore(Component):
             self.eff_addr.eq(eff_sum[0:16]),
             self.eff_carry.eq(eff_sum[16]),
             self.addr_fault.eq(self.eff_carry ^ self.imm_sext[15]),
+
+            # A push writes the current stack address and offsets SADDR afterwards, so the address
+            # a store writes is not the effective address for the stack variant
+            self.store_addr.eq(
+                Mux(self.stack_variant, self.csr_reg_file.read_data, self.eff_addr)
+            ),
+            self.vector_write.eq(self.store_addr[4:16] == 0xFFF),
 
             self.privilege_enabled.eq((self.csr_reg_file.extns_data & Extn.PRIVILEGE).any()),
             self.user_mode.eq(self.privilege_enabled & self.csr_reg_file.privs_data)
@@ -938,6 +962,8 @@ class MisaCore(Component):
             ]
             with m.If(self.addr_fault):
                 self.trap(m, FaultKind.ADDR_OVERFLOW, C(0x00, 8))
+            with m.Elif(self.vector_write):
+                self.trap(m, FaultKind.VECTOR_WRITE, Cat(self.store_addr[0:4], C(0, 4)))
             with m.Else():
                 m.d.comb += [
                     self.mem_addr.eq(self.eff_addr),
@@ -957,6 +983,10 @@ class MisaCore(Component):
             ]
             with m.If(self.addr_fault):
                 self.trap(m, FaultKind.ADDR_OVERFLOW, C(0x00, 8))
+            with m.Elif(self.vector_write):
+                # Neither the store nor the SADDR update is enabled here, so a push into the vector
+                # table leaves the stack exactly where it was
+                self.trap(m, FaultKind.VECTOR_WRITE, Cat(self.store_addr[0:4], C(0, 4)))
             with m.Else():
                 m.d.comb += [
                     self.mem_addr.eq(self.csr_reg_file.read_data),
