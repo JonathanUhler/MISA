@@ -43,10 +43,10 @@ class CmpFlag(IntEnum, shape = 3):
     ALWAYS        = 0b000
     EQUAL         = 0b001
     NOT_EQUAL     = 0b010
-    GREATER       = 0b011
+    BELOW         = 0b011
     LESS          = 0b100
     GREATER_EQUAL = 0b101
-    LESS_EQUAL    = 0b110
+    ABOVE_EQUAL   = 0b110
 
 
 class CsrReg(IntEnum, shape = 4):

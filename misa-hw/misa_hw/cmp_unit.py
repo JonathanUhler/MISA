@@ -25,14 +25,14 @@ class CmpUnit(Component):
                 m.d.comb += self.true.eq(self.z)
             with m.Case(CmpFlag.NOT_EQUAL):
                 m.d.comb += self.true.eq(~self.z)
-            with m.Case(CmpFlag.GREATER):
-                m.d.comb += self.true.eq(~((self.n ^ self.v) | self.z))
+            with m.Case(CmpFlag.BELOW):
+                m.d.comb += self.true.eq(~self.c)
             with m.Case(CmpFlag.LESS):
                 m.d.comb += self.true.eq(self.n ^ self.v)
             with m.Case(CmpFlag.GREATER_EQUAL):
                 m.d.comb += self.true.eq(~(self.n ^ self.v))
-            with m.Case(CmpFlag.LESS_EQUAL):
-                m.d.comb += self.true.eq((self.n ^ self.v) | self.z)
+            with m.Case(CmpFlag.ABOVE_EQUAL):
+                m.d.comb += self.true.eq(self.c)
             with m.Default():
                 m.d.comb += self.true.eq(0)
 

@@ -126,20 +126,41 @@ theorem executeSub_check (q : State) (rd : GpReg) (rs1 : GpReg) (rs2 : GpReg) (c
   simp [executeSub, State.next_check, State.writeFlags, subFlags]
 
 
--- The six non-ALWAYS comparisons after a CMP decide the six signed relations on its operands,
--- which is the assumption the manual makes about comparing registers with SUB R0 RS1 RS2
+-- EQUAL and NOT_EQUAL after a CMP decide equality of its operands, which is the assumption the
+-- manual makes about comparing registers with SUB R0 RS1 RS2
+theorem cmp_check_equality (q : State) (rs1 : GpReg) (rs2 : GpReg) :
+    let a := q.register rs1
+    let b := q.register rs2
+    let q' := executeSub q GpReg.r0 rs1 rs2
+    q'.check .equal     = (a == b)
+      /\ q'.check .notEqual = (a != b) := by
+  simp only [executeSub_check, subFlags, aluAdd, CsrFlags.eval]
+  refine And.intro ?_ ?_
+  all_goals bv_decide
+
+
+-- LESS and GREATER_EQUAL after a CMP decide the signed relations on its operands
 theorem cmp_check_signed (q : State) (rs1 : GpReg) (rs2 : GpReg) :
     let a := q.register rs1
     let b := q.register rs2
     let q' := executeSub q GpReg.r0 rs1 rs2
-    q'.check .equal        = (a == b)
-      /\ q'.check .notEqual     = (a != b)
-      /\ q'.check .less         = BitVec.slt a b
-      /\ q'.check .greaterEqual = BitVec.sle b a
-      /\ q'.check .greater      = BitVec.slt b a
-      /\ q'.check .lessEqual    = BitVec.sle a b := by
+    q'.check .less        = BitVec.slt a b
+      /\ q'.check .greaterEqual = BitVec.sle b a := by
   simp only [executeSub_check, subFlags, aluAdd, CsrFlags.eval]
-  refine And.intro ?_ (And.intro ?_ (And.intro ?_ (And.intro ?_ (And.intro ?_ ?_))))
+  refine And.intro ?_ ?_
+  all_goals bv_decide
+
+
+-- BELOW and ABOVE_EQUAL after a CMP decide the unsigned relations on its operands, so the unsigned
+-- predicate carried in C is reachable from a conditional jump
+theorem cmp_check_unsigned (q : State) (rs1 : GpReg) (rs2 : GpReg) :
+    let a := q.register rs1
+    let b := q.register rs2
+    let q' := executeSub q GpReg.r0 rs1 rs2
+    q'.check .below       = BitVec.ult a b
+      /\ q'.check .aboveEqual = BitVec.ule b a := by
+  simp only [executeSub_check, subFlags, aluAdd, CsrFlags.eval]
+  refine And.intro ?_ ?_
   all_goals bv_decide
 
 
@@ -147,25 +168,27 @@ theorem cmp_check_signed (q : State) (rs1 : GpReg) (rs2 : GpReg) :
 -- restructuring code
 theorem cmpFlag_closed_under_negation (f : CsrFlags) :
     f.eval .less  = ! f.eval .greaterEqual
-      /\ f.eval .greater = ! f.eval .lessEqual
-      /\ f.eval .equal   = ! f.eval .notEqual := by
+      /\ f.eval .below = ! f.eval .aboveEqual
+      /\ f.eval .equal = ! f.eval .notEqual := by
   cases f with
   | mk z c n v => cases z <;> cases c <;> cases n <;> cases v <;> decide
 
 
--- No comparison decides unsigned ordering, so the unsigned predicate carried in C after a SUB is
--- not reachable from a conditional jump
-theorem no_cmpFlag_is_unsigned_lt (f : CmpFlag) :
-    Exists fun a : DataWord => Exists fun b : DataWord =>
-      Ne ((subFlags a b).eval f) (BitVec.ult a b) := by
-  cases f
-  case always       => exact Exists.intro 0x00#8 (Exists.intro 0x00#8 (by decide))
-  case equal        => exact Exists.intro 0x00#8 (Exists.intro 0x00#8 (by decide))
-  case notEqual     => exact Exists.intro 0x01#8 (Exists.intro 0x00#8 (by decide))
-  case greater      => exact Exists.intro 0x01#8 (Exists.intro 0x00#8 (by decide))
-  case less         => exact Exists.intro 0x80#8 (Exists.intro 0x00#8 (by decide))
-  case greaterEqual => exact Exists.intro 0x80#8 (Exists.intro 0x80#8 (by decide))
-  case lessEqual    => exact Exists.intro 0x80#8 (Exists.intro 0x80#8 (by decide))
+-- Only four of the eight ordered relations have a comparison flag, but reversing the operand order
+-- of the CMP reaches the other four, so every signed and unsigned ordering is decidable
+theorem cmpFlag_covers_orderings (a : DataWord) (b : DataWord) :
+    (subFlags a b).eval .less         = BitVec.slt a b
+      /\ (subFlags a b).eval .greaterEqual = BitVec.sle b a
+      /\ (subFlags b a).eval .less         = BitVec.slt b a
+      /\ (subFlags b a).eval .greaterEqual = BitVec.sle a b
+      /\ (subFlags a b).eval .below        = BitVec.ult a b
+      /\ (subFlags a b).eval .aboveEqual   = BitVec.ule b a
+      /\ (subFlags b a).eval .below        = BitVec.ult b a
+      /\ (subFlags b a).eval .aboveEqual   = BitVec.ule a b := by
+  simp only [subFlags, aluAdd, CsrFlags.eval]
+  refine And.intro ?_ (And.intro ?_ (And.intro ?_ (And.intro ?_ (And.intro ?_
+    (And.intro ?_ (And.intro ?_ ?_))))))
+  all_goals bv_decide
 
 
 -- An AND sets Z and N from its result and clears C and V

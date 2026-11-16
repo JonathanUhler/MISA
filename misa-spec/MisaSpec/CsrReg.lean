@@ -90,10 +90,10 @@ def CsrFlags.eval (flags : CsrFlags) : CmpFlag -> Bool
   | .always       => true
   | .equal        => flags.z
   | .notEqual     => !flags.z
-  | .greater      => !((flags.n != flags.v) || flags.z)
+  | .below        => !flags.c
   | .less         => flags.n != flags.v
   | .greaterEqual => !(flags.n != flags.v)
-  | .lessEqual    => (flags.n != flags.v) || flags.z
+  | .aboveEqual   => flags.c
 
 
 structure CsrExtns where

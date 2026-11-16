@@ -252,24 +252,39 @@ assembler symbols:
 | `ALWAYS` | `1` | 000 |
 | `EQUAL` | `Z` | 001 |
 | `NOT_EQUAL` | `~Z` | 010 |
-| `GREATER` | `~((N ^ V) | Z)` | 011 |
+| `BELOW` | `~C` | 011 |
 | `LESS` | `N ^ V` | 100 |
 | `GREATER_EQUAL` | `~(N ^ V)` | 101 |
-| `LESS_EQUAL` | `(N ^ V) | Z` | 110 |
+| `ABOVE_EQUAL` | `C` | 110 |
 | Reserved | - | 111 |
 
 These comparison flags, when passed as a conditional branch instruction operand, MUST perform the
 specified boolean logic on the fields of the `FLAGS` register. If the result is `1`, the branch is
 taken, otherwise the branch is not taken. The assumption is that a comparison of registers `RS1` and
 `RS2` is performed by invoking `SUB R0 RS1 RS2`, which sets the ALU flags appropriately for deciding
-`RS1 ? RS2` where `?` is a comparison operator.
+`RS1 ? RS2` where `?` is a comparison operator. `LESS` and `GREATER_EQUAL` are signed comparisons
+and `BELOW` and `ABOVE_EQUAL` are the corresponding unsigned comparisons.
 
 The comparison encoding `111` is reserved and MUST NOT be emitted by an assembler. An instruction
 which specifies the reserved comparison encoding fails to decode, and MUST raise a fault with the
 `CAUSE` Reason "Instruction usage" and the `CAUSE` Type "Illegal instruction".
 
-Note that the ordered comparisons `GREATER`, `LESS`, `GREATER_EQUAL`, and `LESS_EQUAL` are all
-signed comparisons, derived from `N ^ V`. This specification defines no unsigned ordered comparison.
+Only four of the eight possible signed/unsigned inequalities have hardware support. The remaining
+inequalities MUST be obtained by reversing the operand order of the comparison. Given a comparison
+written as `RS1 ? RS2`:
+
+| Relation | Signedness | Comparison | Flag |
+|------------|------------|------------------|-----------------|
+| `RS1 < RS2` | Signed | `CMP RS1 RS2` | `LESS` |
+| `RS1 >= RS2` | Signed | `CMP RS1 RS2` | `GREATER_EQUAL` |
+| `RS1 > RS2` | Signed | `CMP RS2 RS1` | `LESS` |
+| `RS1 <= RS2` | Signed | `CMP RS2 RS1` | `GREATER_EQUAL` |
+| `RS1 < RS2` | Unsigned | `CMP RS1 RS2` | `BELOW` |
+| `RS1 >= RS2` | Unsigned | `CMP RS1 RS2` | `ABOVE_EQUAL` |
+| `RS1 > RS2` | Unsigned | `CMP RS2 RS1` | `BELOW` |
+| `RS1 <= RS2` | Unsigned | `CMP RS2 RS1` | `ABOVE_EQUAL` |
+
+: {tbl-colwidths="[22, 18, 28, 32]"}
 
 ### `CAUSE`
 
@@ -1253,7 +1268,9 @@ WSR FLAGS R0 R0
 Usage: `CMP RS1 RS2`
 
 Description: Perform an arithmetic operation which will set the `FLAGS` register such that the
-boolean operation `?` can be performed on `RS1 ? RS2`.
+boolean operation `?` can be performed on `RS1 ? RS2`. Only four of the eight ordered inequalities
+have a comparison flag, so the inequalities which do not MUST be obtained by reversing the operand
+order of this instruction, as described in the Flag Comparisons section.
 
 Meaning:
 ```

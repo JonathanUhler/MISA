@@ -438,10 +438,10 @@ theorem CsrFlags.eval_table (f : CsrFlags) :
     f.eval .always       = true
       /\ f.eval .equal        = f.z
       /\ f.eval .notEqual     = ! f.z
-      /\ f.eval .greater      = ! ((f.n ^^ f.v) || f.z)
+      /\ f.eval .below        = ! f.c
       /\ f.eval .less         = (f.n ^^ f.v)
       /\ f.eval .greaterEqual = ! (f.n ^^ f.v)
-      /\ f.eval .lessEqual    = ((f.n ^^ f.v) || f.z) := by
+      /\ f.eval .aboveEqual   = f.c := by
   cases f with
   | mk z c n v => cases z <;> cases c <;> cases n <;> cases v <;> decide
 

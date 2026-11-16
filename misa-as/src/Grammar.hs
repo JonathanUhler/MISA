@@ -119,7 +119,7 @@ data CsrReg
   deriving (Show, Enum, Bounded, Eq)
 
 
-data CmpFlag = ALWAYS | EQUAL | NOT_EQUAL | GREATER | LESS | GREATER_EQUAL | LESS_EQUAL
+data CmpFlag = ALWAYS | EQUAL | NOT_EQUAL | BELOW | LESS | GREATER_EQUAL | ABOVE_EQUAL
   deriving (Show, Enum, Bounded, Eq)
 
 

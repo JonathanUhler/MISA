@@ -47,19 +47,30 @@ theorem sub2_c_is_unsigned_ge (aHi : DataWord) (aLo : DataWord) (bHi : DataWord)
   bv_decide
 
 
--- The four ordered comparisons after a SUB2 decide the signed relations on the sixteen bit
--- operands. LESS and GREATER_EQUAL do hold, because N and V after the high byte SBB describe the
--- full difference. EXPECTED TO FAIL: GREATER and LESS_EQUAL also read Z, which reflects the high
--- byte alone, so subtracting 0xFFFF from 0x00FE leaves a high byte of zero and reads as not
--- greater. Needs the decision on whether ADC and SBB accumulate Z.
+-- LESS and GREATER_EQUAL after a SUB2 decide the signed relations on the sixteen bit operands,
+-- because N and V after the high byte SBB describe the full difference and neither comparison
+-- reads Z
 theorem sub2_check_signed16 (aHi : DataWord) (aLo : DataWord) (bHi : DataWord) (bLo : DataWord) :
     let c1 := (subFlags aLo bLo).c
     let f2 := (aluAdd aHi (~~~ bHi) c1).2
     f2.eval .less         = BitVec.slt (aHi ++ aLo) (bHi ++ bLo)
-      /\ f2.eval .greaterEqual = BitVec.sle (bHi ++ bLo) (aHi ++ aLo)
-      /\ f2.eval .greater      = BitVec.slt (bHi ++ bLo) (aHi ++ aLo)
-      /\ f2.eval .lessEqual    = BitVec.sle (aHi ++ aLo) (bHi ++ bLo) :=
-  sorry
+      /\ f2.eval .greaterEqual = BitVec.sle (bHi ++ bLo) (aHi ++ aLo) := by
+  simp only [subFlags, aluAdd, CsrFlags.eval]
+  refine And.intro ?_ ?_
+  all_goals bv_decide
+
+
+-- BELOW and ABOVE_EQUAL after a SUB2 decide the unsigned relations on the sixteen bit operands,
+-- because C after the high byte SBB is the unsigned greater-or-equal predicate on the full
+-- operands
+theorem sub2_check_unsigned16 (aHi : DataWord) (aLo : DataWord) (bHi : DataWord) (bLo : DataWord) :
+    let c1 := (subFlags aLo bLo).c
+    let f2 := (aluAdd aHi (~~~ bHi) c1).2
+    f2.eval .below        = BitVec.ult (aHi ++ aLo) (bHi ++ bLo)
+      /\ f2.eval .aboveEqual = BitVec.ule (bHi ++ bLo) (aHi ++ aLo) := by
+  simp only [subFlags, aluAdd, CsrFlags.eval]
+  refine And.intro ?_ ?_
+  all_goals bv_decide
 
 
 -- EQUAL after a SUB2 does not decide sixteen bit equality, because Z reflects the high byte alone.

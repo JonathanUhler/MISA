@@ -218,8 +218,8 @@ decodeInst lo hi = inst
       0x0 -> Just ALWAYS
       0x1 -> Just EQUAL
       0x2 -> Just NOT_EQUAL
-      0x3 -> Just GREATER
+      0x3 -> Just BELOW
       0x4 -> Just LESS
       0x5 -> Just GREATER_EQUAL
-      0x6 -> Just LESS_EQUAL
+      0x6 -> Just ABOVE_EQUAL
       _   -> Nothing

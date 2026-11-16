@@ -54,14 +54,16 @@ theorem clr_zeroes_flags (q : State) (hwf : q.WF) :
     simp [CsrReg.writeMask] <;> bv_decide
 
 
--- A CLR leaves GREATER and GREATER_EQUAL taken, because zeroed flags read as a positive non-zero
--- result, so a CLR followed by a branch on GREATER is an unconditional branch
-theorem clr_leaves_greater_taken (q : State) (hwf : q.WF) :
+-- A CLR leaves GREATER_EQUAL and BELOW taken, because zeroed flags read as a non-negative result
+-- which also required a borrow, so a CLR followed by a branch on either is an unconditional
+-- branch. The two are not contradictory: zeroed flags describe no actual subtraction
+theorem clr_leaves_greaterEqual_and_below_taken (q : State) (hwf : q.WF) :
     let q' := executeWsr q GpReg.r0 GpReg.r0 CsrReg.flags
-    q'.check .greater = true
-      /\ q'.check .greaterEqual = true
+    q'.check .greaterEqual = true
+      /\ q'.check .below = true
       /\ q'.check .equal = false
-      /\ q'.check .less = false := by
+      /\ q'.check .less = false
+      /\ q'.check .aboveEqual = false := by
   have hv : (q.register GpReg.r0 ++ q.register GpReg.r0) = 0x0000#16 := by
     rw [hwf.zeroReg]
     bv_decide
@@ -69,7 +71,7 @@ theorem clr_leaves_greater_taken (q : State) (hwf : q.WF) :
   split
   next hg => simp [CsrReg.userWritable] at hg
   next =>
-    refine And.intro ?_ (And.intro ?_ (And.intro ?_ ?_))
+    refine And.intro ?_ (And.intro ?_ (And.intro ?_ (And.intro ?_ ?_)))
     all_goals
       rw [State.next_check, State.writeSpecial_flags_sync, hv]
       simp [CsrReg.writeMask, CsrFlags.dec, CsrFlags.eval] <;> decide
