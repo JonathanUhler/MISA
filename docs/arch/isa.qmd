@@ -429,8 +429,9 @@ SVG(wavedrom.render(str({
 
 ## Data Formats and Alignments
 
-The MISA architecture defined in this chapter only supports 8-bit signed integers using two's
-complement encoding, where the value of an integer is given by the sum of its active bits:
+The MISA architecture defined in this chapter only supports 8-bit signed and unsigned integers.
+Signed integers MUST use two's complement encoding, where the value of an integer is given by the
+sum of its active bits:
 
 ```{python}
 #| echo: false
@@ -450,6 +451,32 @@ SVG(wavedrom.render(str({
     "config": {"bits": 8}
 })).tostring())
 ```
+
+The value of unsigned integers are given by a similar sum, but with these bit values:
+
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        {"name": "1", "bits": 1},
+        {"name": "2", "bits": 1},
+        {"name": "4", "bits": 1},
+        {"name": "8", "bits": 1},
+        {"name": "16", "bits": 1},
+        {"name": "32", "bits": 1},
+        {"name": "64", "bits": 1},
+        {"name": "128", "bits": 1}
+    ],
+    "config": {"bits": 8}
+})).tostring())
+```
+
+Arithmetic instructions do not depend on the software-level signedness of an integer. Only the
+`CMP` pseudo instruction (and conditional branches using it) have a semantic difference based on
+the signedness of operands. See the Flag Comparisons section for more information on signed and
+unsigned comparisons.
 
 16-bit data types MAY be supported in software using the `ADC` and `SBB` instructions for
 arithmetic.
