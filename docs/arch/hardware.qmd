@@ -26,9 +26,9 @@ Running `misa-spec` from the canonical initial state will load general purpose r
 registers, extension-specific values, and the program counter according to the Reset section of the
 ISA manual.
 
-Only the memory and `EXTNS` special register are initialized based on user-provided data. The
-entire 64kB address space must be provided as a binary file, and extensions can be optionally
-provided with the `-e` command line flag (by default, no extensions are enabled).
+Only the memory and `EXTNS` special register are initialized based on user-provided data. The entire
+64kB address space must be provided as a binary file, and extensions can be optionally provided with
+the `-e` command line flag (by default, no extensions are enabled).
 
 The basic command line usage is:
 
@@ -72,8 +72,8 @@ lose information. In a hand-written state file, every key except `halted` and `p
 and an omitted key defaluts to `false` or zero depending on the expected type.
 
 The full set of keys is below. The `|` character denotes choice, the `-` character denotes range,
-and the `...` string denotes repetition. Comments are not supported in state files, but are
-provided below to clarify the meaning of fields in-line.
+and the `...` string denotes repetition. Comments are not supported in state files, but are provided
+below to clarify the meaning of fields in-line.
 
 ```yaml
 # Whether the processor is halted
@@ -149,11 +149,153 @@ undefined behavior.
 
 A state file is considered semantically correct if and only if there exists an initial memory file
 `memfile.bin`, a set of extensions `extns ...`, an interrupt schedule `ints ...`, and a step count
-`n` such that every field in the state file matches the output of
-`misa-spec q0 memfile.bin -n n -e extns ... -i ints ...`.
+`n` such that every field in the state file matches the output of `misa-spec q0 memfile.bin -n n -e
+extns ... -i ints ...`.
 
 ## Hardware Reference
 
 A simple implementation of the MISA core architecture and all four architectural extensions exists
 as `misa-hw`. It defines an unpipelined processor architecture with the Amaranth HDL library for
 Python, and can elaborate to Verilog.
+
+### Architecture Overview
+
+`misa-hw` is structured into a number of hardware modules (which are children of the `Component`
+class in Amaranth). They are as follows.
+
+#### `AluUnit`
+
+Performs the arithmetic operations of the `ADD`, `ADC`, `SUB`, `SBB`, `AND`, `OR`, `XOR`, and `RRC`
+instructions. Produces the 8-bit result of the given ALU operator and the new values of the `FLAGS`
+special register.
+
+| Port | Width | Direction | Purpose |
+|----------|-------|-----------|--------------------------------------------------------------------|
+| `alu_op` | 4 | In | The ISA opcode of the operation to be performed.  |
+| `a` | 8 | In | The left-hand side operand.  |
+| `b` | 8 | In | The right-hand side operand.  |
+| `cin` | 1 | In | The adder carry-in bit (which is the previous value of `FLAGS.C`). |
+| `y` | 8 | Out | The resultant.  |
+| `z` | 1 | Out | The new value of `FLAGS.Z` based on the operation and resultant.  |
+| `c` | 1 | Out | The new value of `FLAGZ.C` based on the operation and resultant.  |
+| `n` | 1 | Out | The new value of `FLAGS.N` based on the operation and resultant.  |
+| `v` | 1 | Out | The new value of `FLAGS.V` based on the operation and resultant.  |
+
+#### `CmpUnit`
+
+Computes the truth values of every ISA inequality operator given the current value of the `FLAGS`
+special register.
+
+| Port | Width | Direction | Purpose |
+|------------|-------|-----------|-----------------------------------------------------------------|
+| `cmp_flag` | 3 | In | The ISA comparison operator to compute.  |
+| `z` | 1 | In | The value of `FLAGS.Z`.  |
+| `c` | 1 | In | The value of `FLAGZ.C`.  |
+| `n` | 1 | In | The value of `FLAGS.N`.  |
+| `v` | 1 | In | The value of `FLAGS.V`.  |
+| `true` | 1 | Out | Whether the comparison being evaluated is true given the flags. |
+
+#### `CsrRegFile`
+
+The special register file, which supports up to one read and one write per cycle. Some registers are
+always accessible through additional output ports.
+
+| Port | Width | Direction | Purpose |
+|-----------------|-------|-----------|----------------------------------------------------------------------------------------------------|
+| `read_csr_reg` | 4 | In | The ISA encoding of the special register to read on the current cycle.  |
+| `write_csr_reg` | 4 | In | The ISA encoding of the special register to write on the current cycle, if `write_enable` is high. |
+| `write_data` | 16 | In | Data to write to `write_csr_reg` on the current cycle, if `write_enable` is high.  |
+| `write_enable` | 1 | In | Whether to write `write_data` into `write_csr_reg` on the current cycle.  |
+| `read_data` | 16 | Out | The contents of `read_csr_reg` from the current cycle.  |
+| `flags_data` | 4 | Out | The contents of the `FLAGS` register on the current cycle.  |
+| `extns_data` | 4 | Out | The contents of the `EXTNS` register on the current cycle.  |
+| `privs_data` | 1 | Out | The contents of the `PRIVS` register on the current cycle.  |
+
+#### `DecoderUnit`
+
+Decodes an instruction into all its possible components and determines whether the instruction is
+legal under the current set of enabled architecture extensions.
+
+| Port | Width | Direction | Purpose |
+|---------------------|-------|-----------|---------------------------------------------------------------------------------------------------|
+| `inst` | 16 | In | The instruction word fetched from memory.  |
+| `extns` | 4 | In | The current value of the `EXTNS` special register.  |
+| `op` | 4 | Out | The ISA opcode of the decoded instruction.  |
+| `n1` | 4 | Out | The third-from-highest nibble of the instruction word.  |
+| `n2` | 4 | Out | The second-from-highest nibble of the instruction word.  |
+| `n3` | 4 | Out | The highest nibble of the instruction word.  |
+| `imm4` | 4 | Out | The highest nibble of the instruction word.  |
+| `imm8` | 8 | Out | The highest byte of the instruction word.  |
+| `cmp` | 3 | Out | The ISA comparison flag for instruction words which use one.  |
+| `csr` | 4 | Out | The ISA special register for instruction words which use one.  |
+| `csr_user_readable` | 1 | Out | Whether `csr` is readable in User Mode.  |
+| `csr_user_writable` | 1 | Out | Whether `csr` is writable in User Mode.  |
+| `is_jmp_csr` | 1 | Out | Whether the instruction word is a `JMP` instruction with a special register target.  |
+| `is_syscall` | 1 | Out | Whether the instruction word is a `SYSCALL`.  |
+| `is_illegal` | 1 | Out | Whether the instruction word is illegal under the current set of enabled architecture extensions. |
+
+#### `GpRegFile`
+
+The general-purpose register file, which supports up to two reads and one write per cycle.
+
+| Port | Width | Direction | Purpose |
+|-----------------|-------|-----------|------------------------------------------------------------------------------------------------------------|
+| `read_gp_reg_a` | 4 | In | The ISA encoding of the first general-purpose register to read on the current cycle.  |
+| `read_gp_reg_b` | 4 | In | The ISA encoding of the second general-purpose register to read on the current cycle.  |
+| `write_gp_reg` | 4 | In | The ISA encoding of the general-purpose register to write on the current cycle, if `write_enable` is high. |
+| `write_data` | 8 | In | The data to write to `write_gp_reg` on the current cycle, if `write_enable` is high.  |
+| `write_enable` | 1 | In | Whether to write `write_data` to `write_gp_reg` on the current cycle.  |
+| `read_data_a` | 8 | Out | The value stored in `read_gp_reg_a` on the current cycle.  |
+| `read_data_b` | 8 | Out | The value stored in `read_gp_reg_b` on the current cycle.  |
+
+#### `MisaCore`
+
+The finite state machine which coordinates instruction fetch, decode, and execution. The core also
+manages other control flow behavior like jumping to addresses in the vector table, determining fault
+conditions, monitoring for interrupts, etc.
+
+The port I/O interface for the core is mostly used to interact with the on-die memory controller.
+Memory bus interactions are described more in the next subsection.
+
+| Port | Width | Direction | Purpose |
+|--------------------|-------|-----------|-----------------------------------------------------------------------------------------------|
+| `mem_ready` | 1 | In | Whether the memory controller has set `mem_read_data` in response to the last memory request. |
+| `mem_read_data` | 8 | In | When `mem_ready` is high, the value of the requested byte of memory at `mem_addr`.  |
+| `mem_addr`.  | 16 | Out | The address to perform a memory transaction on when `mem_request` is set high.  |
+| `mem_write_data` | 8 | Out | The data to write to `mem_addr` if `mem_write_enable` is high when `mem_request` is set high. |
+| `mem_write_enable` | 1 | Out | Whether the memory transaction when `mem_request` is set high shall be a write.  |
+| `halted` | 1 | Out | Whether the core is currently halted.  |
+| `halt_code` | 7 | Out | If `halted` is high, the lower 7 bits of `CAUSE.ExtendedStatus`.  |
+
+### Memory Bus Architecture
+
+The `MisaCore` state machine relies on a separate memory controller component, and uses a
+controller-agnostic memory handshake to read and write data in single-byte transactions. The process
+for each kind of memory transaction is shown below. In both cases, `MisaCore` is the master that
+initiates memory transactions, and the attached controller responds.
+
+Memory transactions are driven combinationally, and thus only apply for the cycle(s) in which a
+state making a memory transaction is active. Memory-related states will self-loop until the memory
+controller responds to the request.
+
+Each numbered step below is one clock cycle.
+
+#### Memory Read
+
+1. `mem_addr` $\leftarrow$ absolute read address, `mem_write_enable` $\leftarrow 0$,
+   `mem_request` $\leftarrow 1$
+2. **while** `mem_ready` $= 0$
+   1. hold every bus output unchanged, and wait for the controller to set `mem_ready` $\leftarrow 1$
+3. **on the first cycle where** `mem_ready` $= 1$
+   1. local storage $\leftarrow$ `mem_read_data`
+   2. the transaction is complete, and the core leaves the accessing state on that clock edge
+
+#### Memory Write
+
+1. `mem_addr` $\leftarrow$ absolute write address, `mem_write_data` $\leftarrow$ data to write,
+   `mem_write_enable` $\leftarrow 1$, `mem_request` $\leftarrow 1$
+2. **while** `mem_ready` $= 0$
+   1. hold every bus output unchanged, and wait for the controller to set `mem_ready` $\leftarrow 1$
+3. **on the first cycle where** `mem_ready` $= 1$
+   1. the byte has been committed by the controller, and the core leaves the accessing state on that
+      clock edge
