@@ -78,31 +78,37 @@ class MisaCore(Component):
         self.elaborate_submodules(m)
         self.elaborate_datapath(m)
 
+        states: list = [
+            (CoreState.VECTOR_LO,        self.elaborate_vector_lo),
+            (CoreState.VECTOR_HI,        self.elaborate_vector_hi),
+            (CoreState.FETCH_LO,         self.elaborate_fetch_lo),
+            (CoreState.FETCH_HI,         self.elaborate_fetch_hi),
+            (CoreState.DECODE,           self.elaborate_decode),
+            (CoreState.EXECUTE_ALU,      self.elaborate_execute_alu),
+            (CoreState.EXECUTE_SET,      self.elaborate_execute_set),
+            (CoreState.EXECUTE_LD,       self.elaborate_execute_ld),
+            (CoreState.EXECUTE_LD_STK,   self.elaborate_execute_ld_stk),
+            (CoreState.EXECUTE_ST_DATA,  self.elaborate_execute_st_data),
+            (CoreState.EXECUTE_ST,       self.elaborate_execute_st),
+            (CoreState.EXECUTE_ST_STK,   self.elaborate_execute_st_stk),
+            (CoreState.EXECUTE_RSR_HI,   self.elaborate_execute_rsr_hi),
+            (CoreState.EXECUTE_RSR_LO,   self.elaborate_execute_rsr_lo),
+            (CoreState.EXECUTE_WSR,      self.elaborate_execute_wsr),
+            (CoreState.EXECUTE_BRANCH,   self.elaborate_execute_branch),
+            (CoreState.EXECUTE_JMP_CSR,  self.elaborate_execute_jmp_csr),
+            (CoreState.EXECUTE_RETIR_HI, self.elaborate_execute_retir_hi),
+            (CoreState.EXECUTE_RETIR_LO, self.elaborate_execute_retir_lo),
+            (CoreState.EXECUTE_HALT,     self.elaborate_execute_halt),
+            (CoreState.HALTED,           self.elaborate_halted),
+            (CoreState.TRAP_CAUSE,       self.elaborate_trap_cause),
+            (CoreState.TRAP_LINK,        self.elaborate_trap_link),
+            (CoreState.TRAP_ENTER,       self.elaborate_trap_enter)
+        ]
+
         with m.FSM(init = self.init_state):
-            self.elaborate_vector_lo(m)
-            self.elaborate_vector_hi(m)
-            self.elaborate_fetch_lo(m)
-            self.elaborate_fetch_hi(m)
-            self.elaborate_decode(m)
-            self.elaborate_execute_alu(m)
-            self.elaborate_execute_set(m)
-            self.elaborate_execute_ld(m)
-            self.elaborate_execute_ld_stk(m)
-            self.elaborate_execute_st_data(m)
-            self.elaborate_execute_st(m)
-            self.elaborate_execute_st_stk(m)
-            self.elaborate_execute_rsr_hi(m)
-            self.elaborate_execute_rsr_lo(m)
-            self.elaborate_execute_wsr(m)
-            self.elaborate_execute_branch(m)
-            self.elaborate_execute_jmp_csr(m)
-            self.elaborate_execute_retir_hi(m)
-            self.elaborate_execute_retir_lo(m)
-            self.elaborate_execute_halt(m)
-            self.elaborate_halted(m)
-            self.elaborate_trap_cause(m)
-            self.elaborate_trap_link(m)
-            self.elaborate_trap_enter(m)
+            for state, elaborator in states:
+                with m.State(state):
+                    elaborator(m)
 
         return m
 
@@ -245,56 +251,52 @@ class MisaCore(Component):
 
 
     def elaborate_vector_lo(self, m: Module) -> None:
-        with m.State(CoreState.VECTOR_LO):
-            m.d.comb += [
-                self.mem_addr.eq(self.vector_addr(0)),
-                self.mem_request.eq(1)
-            ]
-            with m.If(self.mem_ready):
-                m.d.sync += self.inst[0:8].eq(self.mem_read_data)
-                m.next = CoreState.VECTOR_HI
+        m.d.comb += [
+            self.mem_addr.eq(self.vector_addr(0)),
+            self.mem_request.eq(1)
+        ]
+        with m.If(self.mem_ready):
+            m.d.sync += self.inst[0:8].eq(self.mem_read_data)
+            m.next = CoreState.VECTOR_HI
 
 
     def elaborate_vector_hi(self, m: Module) -> None:
-        with m.State(CoreState.VECTOR_HI):
-            m.d.comb += [
-                self.mem_addr.eq(self.vector_addr(1)),
-                self.mem_request.eq(1)
-            ]
-            with m.If(self.mem_ready):
-                m.d.sync += self.pc.eq(Cat(self.inst[0:8], self.mem_read_data))
-                m.next = CoreState.FETCH_LO
+        m.d.comb += [
+            self.mem_addr.eq(self.vector_addr(1)),
+            self.mem_request.eq(1)
+        ]
+        with m.If(self.mem_ready):
+            m.d.sync += self.pc.eq(Cat(self.inst[0:8], self.mem_read_data))
+            m.next = CoreState.FETCH_LO
 
 
     def elaborate_fetch_lo(self, m: Module) -> None:
-        with m.State(CoreState.FETCH_LO):
-            with m.If(self.int_pending & self.can_interrupt):
-                m.d.comb += self.boundary_passed.eq(1)
-                m.d.sync += self.vector_sel.eq(VectorSelect.INTERRUPT)
-                m.next = CoreState.TRAP_LINK
-            with m.Elif(self.pc == 0xFFFF):
-                m.d.comb += self.boundary_passed.eq(1)
-                self.trap(m, FaultKind.PC_OVERFLOW, C(0x00, 8))
-            with m.Else():
-                m.d.comb += [
-                    self.mem_addr.eq(self.pc),
-                    self.mem_request.eq(1)
-                ]
-                with m.If(self.mem_ready):
-                    m.d.comb += self.boundary_passed.eq(1)
-                    m.d.sync += self.inst[0:8].eq(self.mem_read_data)
-                    m.next = CoreState.FETCH_HI
-
-
-    def elaborate_fetch_hi(self, m: Module) -> None:
-        with m.State(CoreState.FETCH_HI):
+        with m.If(self.int_pending & self.can_interrupt):
+            m.d.comb += self.boundary_passed.eq(1)
+            m.d.sync += self.vector_sel.eq(VectorSelect.INTERRUPT)
+            m.next = CoreState.TRAP_LINK
+        with m.Elif(self.pc == 0xFFFF):
+            m.d.comb += self.boundary_passed.eq(1)
+            self.trap(m, FaultKind.PC_OVERFLOW, C(0x00, 8))
+        with m.Else():
             m.d.comb += [
-                self.mem_addr.eq(self.pc + 1),
+                self.mem_addr.eq(self.pc),
                 self.mem_request.eq(1)
             ]
             with m.If(self.mem_ready):
-                m.d.sync += self.inst[8:16].eq(self.mem_read_data)
-                m.next = CoreState.DECODE
+                m.d.comb += self.boundary_passed.eq(1)
+                m.d.sync += self.inst[0:8].eq(self.mem_read_data)
+                m.next = CoreState.FETCH_HI
+
+
+    def elaborate_fetch_hi(self, m: Module) -> None:
+        m.d.comb += [
+            self.mem_addr.eq(self.pc + 1),
+            self.mem_request.eq(1)
+        ]
+        with m.If(self.mem_ready):
+            m.d.sync += self.inst[8:16].eq(self.mem_read_data)
+            m.next = CoreState.DECODE
 
 
     def elaborate_decode(self, m: Module) -> None:
@@ -313,391 +315,371 @@ class MisaCore(Component):
             ((decoder.csr == CsrReg.RETIR) & ~self.in_interrupt)
         )
 
-        with m.State(CoreState.DECODE):
-            m.d.comb += self.gp_reg_file.read_gp_reg_a.eq(decoder.n1)
+        m.d.comb += self.gp_reg_file.read_gp_reg_a.eq(decoder.n1)
 
-            with m.If(decoder.is_illegal):
-                self.trap(m, FaultKind.ILLEGAL, C(0x00, 8))
-            with m.Elif(self.user_mode & is_priv_fault):
-                self.trap(m, FaultKind.PRIV_INSTRUCTION, C(0x00, 8))
-            with m.Elif(decoder.is_syscall & (self.in_syscall | self.in_interrupt)):
-                self.trap(
-                    m, FaultKind.IMPROPER_SYSCALL,
-                    Cat(self.in_syscall, self.in_interrupt, C(0, 6))
-                )
-            with m.Elif(is_context_return & (decoder.cmp != CmpFlag.ALWAYS)):
-                self.trap(
-                    m, FaultKind.COND_RETURN,
-                    Cat(decoder.cmp, C(0, 1), decoder.csr)
-                )
-            with m.Elif(is_bad_context):
-                self.trap(
-                    m, FaultKind.IMPROPER_RETURN,
-                    Cat(self.in_syscall, self.in_interrupt, C(0, 2), decoder.csr)
-                )
-            with m.Else():
-                with m.Switch(decoder.op):
-                    with m.Case(Op.ADD, Op.ADC, Op.SUB, Op.SBB, Op.AND, Op.OR, Op.XOR, Op.RRC):
-                        m.next = CoreState.EXECUTE_ALU
-                    with m.Case(Op.SET):
-                        m.next = CoreState.EXECUTE_SET
-                    with m.Case(Op.LD):
-                        with m.If(self.stack_variant):
-                            m.next = CoreState.EXECUTE_LD_STK
-                        with m.Else():
-                            m.next = CoreState.EXECUTE_LD
-                    with m.Case(Op.ST):
-                        with m.If(self.stack_variant):
-                            m.next = CoreState.EXECUTE_ST_STK
-                        with m.Else():
-                            m.next = CoreState.EXECUTE_ST_DATA
-                    with m.Case(Op.RSR):
-                        m.next = CoreState.EXECUTE_RSR_HI
-                    with m.Case(Op.WSR):
-                        m.next = CoreState.EXECUTE_WSR
-                    with m.Case(Op.JAL, Op.JMP):
-                        with m.If(decoder.is_jmp_csr):
-                            m.next = CoreState.EXECUTE_JMP_CSR
-                        with m.Else():
-                            m.next = CoreState.EXECUTE_BRANCH
-                    with m.Case(Op.HALT):
-                        with m.If(decoder.is_syscall):
-                            m.d.sync += [
-                                self.cause.eq(self.cause_value(
-                                    FaultKind.HALT, self.gp_reg_file.read_data_a
-                                )),
-                                self.vector_sel.eq(VectorSelect.SYSCALL)
-                            ]
-                            m.next = CoreState.TRAP_CAUSE
-                        with m.Else():
-                            m.next = CoreState.EXECUTE_HALT
+        with m.If(decoder.is_illegal):
+            self.trap(m, FaultKind.ILLEGAL, C(0x00, 8))
+        with m.Elif(self.user_mode & is_priv_fault):
+            self.trap(m, FaultKind.PRIV_INSTRUCTION, C(0x00, 8))
+        with m.Elif(decoder.is_syscall & (self.in_syscall | self.in_interrupt)):
+            self.trap(
+                m, FaultKind.IMPROPER_SYSCALL,
+                Cat(self.in_syscall, self.in_interrupt, C(0, 6))
+            )
+        with m.Elif(is_context_return & (decoder.cmp != CmpFlag.ALWAYS)):
+            self.trap(
+                m, FaultKind.COND_RETURN,
+                Cat(decoder.cmp, C(0, 1), decoder.csr)
+            )
+        with m.Elif(is_bad_context):
+            self.trap(
+                m, FaultKind.IMPROPER_RETURN,
+                Cat(self.in_syscall, self.in_interrupt, C(0, 2), decoder.csr)
+            )
+        with m.Else():
+            with m.Switch(decoder.op):
+                with m.Case(Op.ADD, Op.ADC, Op.SUB, Op.SBB, Op.AND, Op.OR, Op.XOR, Op.RRC):
+                    m.next = CoreState.EXECUTE_ALU
+                with m.Case(Op.SET):
+                    m.next = CoreState.EXECUTE_SET
+                with m.Case(Op.LD):
+                    with m.If(self.stack_variant):
+                        m.next = CoreState.EXECUTE_LD_STK
+                    with m.Else():
+                        m.next = CoreState.EXECUTE_LD
+                with m.Case(Op.ST):
+                    with m.If(self.stack_variant):
+                        m.next = CoreState.EXECUTE_ST_STK
+                    with m.Else():
+                        m.next = CoreState.EXECUTE_ST_DATA
+                with m.Case(Op.RSR):
+                    m.next = CoreState.EXECUTE_RSR_HI
+                with m.Case(Op.WSR):
+                    m.next = CoreState.EXECUTE_WSR
+                with m.Case(Op.JAL, Op.JMP):
+                    with m.If(decoder.is_jmp_csr):
+                        m.next = CoreState.EXECUTE_JMP_CSR
+                    with m.Else():
+                        m.next = CoreState.EXECUTE_BRANCH
+                with m.Case(Op.HALT):
+                    with m.If(decoder.is_syscall):
+                        m.d.sync += [
+                            self.cause.eq(self.cause_value(
+                                FaultKind.HALT, self.gp_reg_file.read_data_a
+                            )),
+                            self.vector_sel.eq(VectorSelect.SYSCALL)
+                        ]
+                        m.next = CoreState.TRAP_CAUSE
+                    with m.Else():
+                        m.next = CoreState.EXECUTE_HALT
 
 
     def elaborate_execute_alu(self, m: Module) -> None:
-        with m.State(CoreState.EXECUTE_ALU):
-            m.d.comb += [
-                self.gp_reg_file.read_gp_reg_a.eq(self.decoder_unit.n2),
-                self.gp_reg_file.read_gp_reg_b.eq(self.decoder_unit.n3),
+        m.d.comb += [
+            self.gp_reg_file.read_gp_reg_a.eq(self.decoder_unit.n2),
+            self.gp_reg_file.read_gp_reg_b.eq(self.decoder_unit.n3),
 
-                self.gp_reg_file.write_gp_reg.eq(self.decoder_unit.n1),
-                self.gp_reg_file.write_data.eq(self.alu_unit.y),
-                self.gp_reg_file.write_enable.eq(1),
+            self.gp_reg_file.write_gp_reg.eq(self.decoder_unit.n1),
+            self.gp_reg_file.write_data.eq(self.alu_unit.y),
+            self.gp_reg_file.write_enable.eq(1),
 
-                self.csr_reg_file.write_csr_reg.eq(CsrReg.FLAGS),
-                self.csr_reg_file.write_data.eq(
-                    Cat(self.alu_unit.z, self.alu_unit.c, self.alu_unit.n, self.alu_unit.v)
-                ),
-                self.csr_reg_file.write_enable.eq(1)
-            ]
-            self.advance(m)
+            self.csr_reg_file.write_csr_reg.eq(CsrReg.FLAGS),
+            self.csr_reg_file.write_data.eq(
+                Cat(self.alu_unit.z, self.alu_unit.c, self.alu_unit.n, self.alu_unit.v)
+            ),
+            self.csr_reg_file.write_enable.eq(1)
+        ]
+        self.advance(m)
 
 
     def elaborate_execute_set(self, m: Module) -> None:
-        with m.State(CoreState.EXECUTE_SET):
-            m.d.comb += [
-                self.gp_reg_file.write_gp_reg.eq(self.decoder_unit.n1),
-                self.gp_reg_file.write_data.eq(self.decoder_unit.imm8),
-                self.gp_reg_file.write_enable.eq(1)
-            ]
-            self.advance(m)
+        m.d.comb += [
+            self.gp_reg_file.write_gp_reg.eq(self.decoder_unit.n1),
+            self.gp_reg_file.write_data.eq(self.decoder_unit.imm8),
+            self.gp_reg_file.write_enable.eq(1)
+        ]
+        self.advance(m)
 
 
     def elaborate_execute_ld(self, m: Module) -> None:
-        with m.State(CoreState.EXECUTE_LD):
+        m.d.comb += [
+            self.gp_reg_file.read_gp_reg_a.eq(self.decoder_unit.n2),
+            self.gp_reg_file.read_gp_reg_b.eq(self.decoder_unit.n2 + 1)
+        ]
+        with m.If(self.addr_fault):
+            self.trap(m, FaultKind.ADDR_OVERFLOW, C(0x00, 8))
+        with m.Else():
             m.d.comb += [
-                self.gp_reg_file.read_gp_reg_a.eq(self.decoder_unit.n2),
-                self.gp_reg_file.read_gp_reg_b.eq(self.decoder_unit.n2 + 1)
+                self.mem_addr.eq(self.eff_addr),
+                self.mem_request.eq(1)
             ]
-            with m.If(self.addr_fault):
-                self.trap(m, FaultKind.ADDR_OVERFLOW, C(0x00, 8))
-            with m.Else():
+            with m.If(self.mem_ready):
                 m.d.comb += [
-                    self.mem_addr.eq(self.eff_addr),
-                    self.mem_request.eq(1)
+                    self.gp_reg_file.write_gp_reg.eq(self.decoder_unit.n1),
+                    self.gp_reg_file.write_data.eq(self.mem_read_data),
+                    self.gp_reg_file.write_enable.eq(1)
                 ]
-                with m.If(self.mem_ready):
-                    m.d.comb += [
-                        self.gp_reg_file.write_gp_reg.eq(self.decoder_unit.n1),
-                        self.gp_reg_file.write_data.eq(self.mem_read_data),
-                        self.gp_reg_file.write_enable.eq(1)
-                    ]
-                    self.advance(m)
+                self.advance(m)
 
 
     def elaborate_execute_ld_stk(self, m: Module) -> None:
-        with m.State(CoreState.EXECUTE_LD_STK):
-            m.d.comb += self.csr_reg_file.read_csr_reg.eq(CsrReg.SADDR)
-            with m.If(self.addr_fault):
-                self.trap(m, FaultKind.ADDR_OVERFLOW, C(0x00, 8))
-            with m.Else():
-                m.d.comb += [
-                    self.mem_addr.eq(self.eff_addr),
-                    self.mem_request.eq(1),
+        m.d.comb += self.csr_reg_file.read_csr_reg.eq(CsrReg.SADDR)
+        with m.If(self.addr_fault):
+            self.trap(m, FaultKind.ADDR_OVERFLOW, C(0x00, 8))
+        with m.Else():
+            m.d.comb += [
+                self.mem_addr.eq(self.eff_addr),
+                self.mem_request.eq(1),
 
-                    self.csr_reg_file.write_csr_reg.eq(CsrReg.SADDR),
-                    self.csr_reg_file.write_data.eq(self.eff_addr),
-                    self.csr_reg_file.write_enable.eq(self.mem_ready)
+                self.csr_reg_file.write_csr_reg.eq(CsrReg.SADDR),
+                self.csr_reg_file.write_data.eq(self.eff_addr),
+                self.csr_reg_file.write_enable.eq(self.mem_ready)
+            ]
+            with m.If(self.mem_ready):
+                m.d.comb += [
+                    self.gp_reg_file.write_gp_reg.eq(self.decoder_unit.n1),
+                    self.gp_reg_file.write_data.eq(self.mem_read_data),
+                    self.gp_reg_file.write_enable.eq(1)
                 ]
-                with m.If(self.mem_ready):
-                    m.d.comb += [
-                        self.gp_reg_file.write_gp_reg.eq(self.decoder_unit.n1),
-                        self.gp_reg_file.write_data.eq(self.mem_read_data),
-                        self.gp_reg_file.write_enable.eq(1)
-                    ]
-                    self.advance(m)
+                self.advance(m)
 
 
     def elaborate_execute_st_data(self, m: Module) -> None:
-        with m.State(CoreState.EXECUTE_ST_DATA):
-            m.d.comb += self.gp_reg_file.read_gp_reg_a.eq(self.decoder_unit.n1)
-            m.d.sync += self.data_buf.eq(self.gp_reg_file.read_data_a)
-            m.next = CoreState.EXECUTE_ST
+        m.d.comb += self.gp_reg_file.read_gp_reg_a.eq(self.decoder_unit.n1)
+        m.d.sync += self.data_buf.eq(self.gp_reg_file.read_data_a)
+        m.next = CoreState.EXECUTE_ST
 
 
     def elaborate_execute_st(self, m: Module) -> None:
-        with m.State(CoreState.EXECUTE_ST):
+        m.d.comb += [
+            self.gp_reg_file.read_gp_reg_a.eq(self.decoder_unit.n2),
+            self.gp_reg_file.read_gp_reg_b.eq(self.decoder_unit.n2 + 1)
+        ]
+        with m.If(self.addr_fault):
+            self.trap(m, FaultKind.ADDR_OVERFLOW, C(0x00, 8))
+        with m.Elif(self.vector_write):
+            self.trap(m, FaultKind.VECTOR_WRITE, Cat(self.store_addr[0:4], C(0, 4)))
+        with m.Else():
             m.d.comb += [
-                self.gp_reg_file.read_gp_reg_a.eq(self.decoder_unit.n2),
-                self.gp_reg_file.read_gp_reg_b.eq(self.decoder_unit.n2 + 1)
+                self.mem_addr.eq(self.eff_addr),
+                self.mem_write_data.eq(self.data_buf),
+                self.mem_write_enable.eq(1),
+                self.mem_request.eq(1)
             ]
-            with m.If(self.addr_fault):
-                self.trap(m, FaultKind.ADDR_OVERFLOW, C(0x00, 8))
-            with m.Elif(self.vector_write):
-                self.trap(m, FaultKind.VECTOR_WRITE, Cat(self.store_addr[0:4], C(0, 4)))
-            with m.Else():
-                m.d.comb += [
-                    self.mem_addr.eq(self.eff_addr),
-                    self.mem_write_data.eq(self.data_buf),
-                    self.mem_write_enable.eq(1),
-                    self.mem_request.eq(1)
-                ]
-                with m.If(self.mem_ready):
-                    self.advance(m)
+            with m.If(self.mem_ready):
+                self.advance(m)
 
 
     def elaborate_execute_st_stk(self, m: Module) -> None:
-        with m.State(CoreState.EXECUTE_ST_STK):
+        m.d.comb += [
+            self.csr_reg_file.read_csr_reg.eq(CsrReg.SADDR),
+            self.gp_reg_file.read_gp_reg_a.eq(self.decoder_unit.n1)
+        ]
+        with m.If(self.addr_fault):
+            self.trap(m, FaultKind.ADDR_OVERFLOW, C(0x00, 8))
+        with m.Elif(self.vector_write):
+            self.trap(m, FaultKind.VECTOR_WRITE, Cat(self.store_addr[0:4], C(0, 4)))
+        with m.Else():
             m.d.comb += [
-                self.csr_reg_file.read_csr_reg.eq(CsrReg.SADDR),
-                self.gp_reg_file.read_gp_reg_a.eq(self.decoder_unit.n1)
-            ]
-            with m.If(self.addr_fault):
-                self.trap(m, FaultKind.ADDR_OVERFLOW, C(0x00, 8))
-            with m.Elif(self.vector_write):
-                self.trap(m, FaultKind.VECTOR_WRITE, Cat(self.store_addr[0:4], C(0, 4)))
-            with m.Else():
-                m.d.comb += [
-                    self.mem_addr.eq(self.csr_reg_file.read_data),
-                    self.mem_write_data.eq(self.gp_reg_file.read_data_a),
-                    self.mem_write_enable.eq(1),
-                    self.mem_request.eq(1),
+                self.mem_addr.eq(self.csr_reg_file.read_data),
+                self.mem_write_data.eq(self.gp_reg_file.read_data_a),
+                self.mem_write_enable.eq(1),
+                self.mem_request.eq(1),
 
-                    self.csr_reg_file.write_csr_reg.eq(CsrReg.SADDR),
-                    self.csr_reg_file.write_data.eq(self.eff_addr),
-                    self.csr_reg_file.write_enable.eq(self.mem_ready)
-                ]
-                with m.If(self.mem_ready):
-                    self.advance(m)
+                self.csr_reg_file.write_csr_reg.eq(CsrReg.SADDR),
+                self.csr_reg_file.write_data.eq(self.eff_addr),
+                self.csr_reg_file.write_enable.eq(self.mem_ready)
+            ]
+            with m.If(self.mem_ready):
+                self.advance(m)
 
 
     def elaborate_execute_rsr_hi(self, m: Module) -> None:
-        with m.State(CoreState.EXECUTE_RSR_HI):
-            m.d.comb += [
-                self.csr_reg_file.read_csr_reg.eq(self.decoder_unit.csr),
+        m.d.comb += [
+            self.csr_reg_file.read_csr_reg.eq(self.decoder_unit.csr),
 
-                self.gp_reg_file.write_gp_reg.eq(self.decoder_unit.n1),
-                self.gp_reg_file.write_data.eq(self.csr_reg_file.read_data[8:16]),
-                self.gp_reg_file.write_enable.eq(1)
-            ]
-            m.next = CoreState.EXECUTE_RSR_LO
+            self.gp_reg_file.write_gp_reg.eq(self.decoder_unit.n1),
+            self.gp_reg_file.write_data.eq(self.csr_reg_file.read_data[8:16]),
+            self.gp_reg_file.write_enable.eq(1)
+        ]
+        m.next = CoreState.EXECUTE_RSR_LO
 
 
     def elaborate_execute_rsr_lo(self, m: Module) -> None:
-        with m.State(CoreState.EXECUTE_RSR_LO):
-            m.d.comb += [
-                self.csr_reg_file.read_csr_reg.eq(self.decoder_unit.csr),
+        m.d.comb += [
+            self.csr_reg_file.read_csr_reg.eq(self.decoder_unit.csr),
 
-                self.gp_reg_file.write_gp_reg.eq(self.decoder_unit.n2),
-                self.gp_reg_file.write_data.eq(self.csr_reg_file.read_data[0:8]),
-                self.gp_reg_file.write_enable.eq(1)
-            ]
-            self.advance(m)
+            self.gp_reg_file.write_gp_reg.eq(self.decoder_unit.n2),
+            self.gp_reg_file.write_data.eq(self.csr_reg_file.read_data[0:8]),
+            self.gp_reg_file.write_enable.eq(1)
+        ]
+        self.advance(m)
 
 
     def elaborate_execute_wsr(self, m: Module) -> None:
-        with m.State(CoreState.EXECUTE_WSR):
-            m.d.comb += [
-                self.gp_reg_file.read_gp_reg_a.eq(self.decoder_unit.n1),
-                self.gp_reg_file.read_gp_reg_b.eq(self.decoder_unit.n2),
+        m.d.comb += [
+            self.gp_reg_file.read_gp_reg_a.eq(self.decoder_unit.n1),
+            self.gp_reg_file.read_gp_reg_b.eq(self.decoder_unit.n2),
 
-                self.csr_reg_file.write_csr_reg.eq(self.decoder_unit.csr),
-                self.csr_reg_file.write_data.eq(self.base),
-                self.csr_reg_file.write_enable.eq(1)
-            ]
-            self.advance(m)
+            self.csr_reg_file.write_csr_reg.eq(self.decoder_unit.csr),
+            self.csr_reg_file.write_data.eq(self.base),
+            self.csr_reg_file.write_enable.eq(1)
+        ]
+        self.advance(m)
 
 
     def elaborate_execute_branch(self, m: Module) -> None:
-        with m.State(CoreState.EXECUTE_BRANCH):
-            m.d.comb += [
-                self.gp_reg_file.read_gp_reg_a.eq(self.decoder_unit.n1),
-                self.gp_reg_file.read_gp_reg_b.eq(self.decoder_unit.n2)
-            ]
-            with m.If(self.cmp_unit.true):
-                with m.If(self.decoder_unit.op == Op.JAL):
-                    m.d.comb += [
-                        self.csr_reg_file.write_csr_reg.eq(CsrReg.RADDR),
-                        self.csr_reg_file.write_data.eq(self.pc_next),
-                        self.csr_reg_file.write_enable.eq(1)
-                    ]
-                m.d.sync += self.pc.eq(self.base)
-                m.next = CoreState.FETCH_LO
-            with m.Else():
-                self.advance(m)
+        m.d.comb += [
+            self.gp_reg_file.read_gp_reg_a.eq(self.decoder_unit.n1),
+            self.gp_reg_file.read_gp_reg_b.eq(self.decoder_unit.n2)
+        ]
+        with m.If(self.cmp_unit.true):
+            with m.If(self.decoder_unit.op == Op.JAL):
+                m.d.comb += [
+                    self.csr_reg_file.write_csr_reg.eq(CsrReg.RADDR),
+                    self.csr_reg_file.write_data.eq(self.pc_next),
+                    self.csr_reg_file.write_enable.eq(1)
+                ]
+            m.d.sync += self.pc.eq(self.base)
+            m.next = CoreState.FETCH_LO
+        with m.Else():
+            self.advance(m)
 
 
     def elaborate_execute_jmp_csr(self, m: Module) -> None:
-        with m.State(CoreState.EXECUTE_JMP_CSR):
-            m.d.comb += self.csr_reg_file.read_csr_reg.eq(self.decoder_unit.csr)
+        m.d.comb += self.csr_reg_file.read_csr_reg.eq(self.decoder_unit.csr)
 
-            with m.If(self.decoder_unit.csr == CsrReg.RETSC):
-                with m.If(self.privilege_enabled):
-                    m.d.comb += [
-                        self.csr_reg_file.write_csr_reg.eq(CsrReg.PRIVS),
-                        self.csr_reg_file.write_data.eq(self.syscall_privs),
-                        self.csr_reg_file.write_enable.eq(1)
-                    ]
-                m.d.sync += [
-                    self.pc.eq(self.csr_reg_file.read_data),
-                    self.in_syscall.eq(0)
-                ]
-                m.next = CoreState.FETCH_LO
-            with m.Elif(self.decoder_unit.csr == CsrReg.RETIR):
-                m.next = CoreState.EXECUTE_RETIR_HI
-            with m.Elif(self.cmp_unit.true):
-                m.d.sync += self.pc.eq(self.csr_reg_file.read_data)
-                m.next = CoreState.FETCH_LO
-            with m.Else():
-                self.advance(m)
-
-
-    def elaborate_execute_retir_hi(self, m: Module) -> None:
-        with m.State(CoreState.EXECUTE_RETIR_HI):
-            m.d.comb += [
-                self.gp_reg_file.write_gp_reg.eq(GpReg.RSCRATCH0),
-                self.gp_reg_file.write_data.eq(self.int_rscratch[8:16]),
-                self.gp_reg_file.write_enable.eq(1),
-
-                self.csr_reg_file.write_csr_reg.eq(CsrReg.FLAGS),
-                self.csr_reg_file.write_data.eq(self.int_flags),
-                self.csr_reg_file.write_enable.eq(1)
-            ]
-            m.next = CoreState.EXECUTE_RETIR_LO
-
-
-    def elaborate_execute_retir_lo(self, m: Module) -> None:
-        with m.State(CoreState.EXECUTE_RETIR_LO):
-            m.d.comb += [
-                self.csr_reg_file.read_csr_reg.eq(CsrReg.RETIR),
-
-                self.gp_reg_file.write_gp_reg.eq(GpReg.RSCRATCH1),
-                self.gp_reg_file.write_data.eq(self.int_rscratch[0:8]),
-                self.gp_reg_file.write_enable.eq(1)
-            ]
+        with m.If(self.decoder_unit.csr == CsrReg.RETSC):
             with m.If(self.privilege_enabled):
                 m.d.comb += [
                     self.csr_reg_file.write_csr_reg.eq(CsrReg.PRIVS),
-                    self.csr_reg_file.write_data.eq(self.int_privs),
+                    self.csr_reg_file.write_data.eq(self.syscall_privs),
                     self.csr_reg_file.write_enable.eq(1)
                 ]
             m.d.sync += [
                 self.pc.eq(self.csr_reg_file.read_data),
-                self.in_interrupt.eq(0)
+                self.in_syscall.eq(0)
             ]
             m.next = CoreState.FETCH_LO
+        with m.Elif(self.decoder_unit.csr == CsrReg.RETIR):
+            m.next = CoreState.EXECUTE_RETIR_HI
+        with m.Elif(self.cmp_unit.true):
+            m.d.sync += self.pc.eq(self.csr_reg_file.read_data)
+            m.next = CoreState.FETCH_LO
+        with m.Else():
+            self.advance(m)
+
+
+    def elaborate_execute_retir_hi(self, m: Module) -> None:
+        m.d.comb += [
+            self.gp_reg_file.write_gp_reg.eq(GpReg.RSCRATCH0),
+            self.gp_reg_file.write_data.eq(self.int_rscratch[8:16]),
+            self.gp_reg_file.write_enable.eq(1),
+
+            self.csr_reg_file.write_csr_reg.eq(CsrReg.FLAGS),
+            self.csr_reg_file.write_data.eq(self.int_flags),
+            self.csr_reg_file.write_enable.eq(1)
+        ]
+        m.next = CoreState.EXECUTE_RETIR_LO
+
+
+    def elaborate_execute_retir_lo(self, m: Module) -> None:
+        m.d.comb += [
+            self.csr_reg_file.read_csr_reg.eq(CsrReg.RETIR),
+
+            self.gp_reg_file.write_gp_reg.eq(GpReg.RSCRATCH1),
+            self.gp_reg_file.write_data.eq(self.int_rscratch[0:8]),
+            self.gp_reg_file.write_enable.eq(1)
+        ]
+        with m.If(self.privilege_enabled):
+            m.d.comb += [
+                self.csr_reg_file.write_csr_reg.eq(CsrReg.PRIVS),
+                self.csr_reg_file.write_data.eq(self.int_privs),
+                self.csr_reg_file.write_enable.eq(1)
+            ]
+        m.d.sync += [
+            self.pc.eq(self.csr_reg_file.read_data),
+            self.in_interrupt.eq(0)
+        ]
+        m.next = CoreState.FETCH_LO
 
 
     def elaborate_execute_halt(self, m: Module) -> None:
-        with m.State(CoreState.EXECUTE_HALT):
-            m.d.comb += [
-                self.gp_reg_file.read_gp_reg_a.eq(self.decoder_unit.n1),
+        m.d.comb += [
+            self.gp_reg_file.read_gp_reg_a.eq(self.decoder_unit.n1),
 
-                self.csr_reg_file.write_csr_reg.eq(CsrReg.CAUSE),
-                self.csr_reg_file.write_data.eq(self.cause_value(
-                    FaultKind.HALT, self.gp_reg_file.read_data_a
-                )),
-                self.csr_reg_file.write_enable.eq(1)
-            ]
-            m.next = CoreState.HALTED
+            self.csr_reg_file.write_csr_reg.eq(CsrReg.CAUSE),
+            self.csr_reg_file.write_data.eq(self.cause_value(
+                FaultKind.HALT, self.gp_reg_file.read_data_a
+            )),
+            self.csr_reg_file.write_enable.eq(1)
+        ]
+        m.next = CoreState.HALTED
 
 
     def elaborate_halted(self, m: Module) -> None:
-        with m.State(CoreState.HALTED):
-            m.d.comb += [
-                self.csr_reg_file.read_csr_reg.eq(CsrReg.CAUSE),
-                self.halted.eq(1),
-                self.halt_code.eq(self.csr_reg_file.read_data[8:15])
-            ]
-            m.next = CoreState.HALTED
+        m.d.comb += [
+            self.csr_reg_file.read_csr_reg.eq(CsrReg.CAUSE),
+            self.halted.eq(1),
+            self.halt_code.eq(self.csr_reg_file.read_data[8:15])
+        ]
+        m.next = CoreState.HALTED
 
 
     def elaborate_trap_cause(self, m: Module) -> None:
-        with m.State(CoreState.TRAP_CAUSE):
-            m.d.comb += [
-                self.csr_reg_file.write_csr_reg.eq(CsrReg.CAUSE),
-                self.csr_reg_file.write_data.eq(self.cause),
-                self.csr_reg_file.write_enable.eq(1)
-            ]
-            m.next = CoreState.TRAP_LINK
+        m.d.comb += [
+            self.csr_reg_file.write_csr_reg.eq(CsrReg.CAUSE),
+            self.csr_reg_file.write_data.eq(self.cause),
+            self.csr_reg_file.write_enable.eq(1)
+        ]
+        m.next = CoreState.TRAP_LINK
 
 
     def elaborate_trap_link(self, m: Module) -> None:
-        with m.State(CoreState.TRAP_LINK):
-            with m.Switch(self.vector_sel):
-                with m.Case(VectorSelect.FAULT):
-                    m.d.comb += [
-                        self.csr_reg_file.write_csr_reg.eq(CsrReg.FAULT),
-                        self.csr_reg_file.write_data.eq(self.pc),
-                        self.csr_reg_file.write_enable.eq(1)
-                    ]
-                with m.Case(VectorSelect.SYSCALL):
-                    m.d.comb += [
-                        self.csr_reg_file.write_csr_reg.eq(CsrReg.RETSC),
-                        self.csr_reg_file.write_data.eq(self.pc_next),
-                        self.csr_reg_file.write_enable.eq(1)
-                    ]
-                with m.Case(VectorSelect.INTERRUPT):
-                    m.d.comb += [
-                        self.csr_reg_file.write_csr_reg.eq(CsrReg.RETIR),
-                        self.csr_reg_file.write_data.eq(self.pc),
-                        self.csr_reg_file.write_enable.eq(1)
-                    ]
-            m.next = CoreState.TRAP_ENTER
+        with m.Switch(self.vector_sel):
+            with m.Case(VectorSelect.FAULT):
+                m.d.comb += [
+                    self.csr_reg_file.write_csr_reg.eq(CsrReg.FAULT),
+                    self.csr_reg_file.write_data.eq(self.pc),
+                    self.csr_reg_file.write_enable.eq(1)
+                ]
+            with m.Case(VectorSelect.SYSCALL):
+                m.d.comb += [
+                    self.csr_reg_file.write_csr_reg.eq(CsrReg.RETSC),
+                    self.csr_reg_file.write_data.eq(self.pc_next),
+                    self.csr_reg_file.write_enable.eq(1)
+                ]
+            with m.Case(VectorSelect.INTERRUPT):
+                m.d.comb += [
+                    self.csr_reg_file.write_csr_reg.eq(CsrReg.RETIR),
+                    self.csr_reg_file.write_data.eq(self.pc),
+                    self.csr_reg_file.write_enable.eq(1)
+                ]
+        m.next = CoreState.TRAP_ENTER
 
 
     def elaborate_trap_enter(self, m: Module) -> None:
-        with m.State(CoreState.TRAP_ENTER):
-            with m.If(self.privilege_enabled):
-                m.d.comb += [
-                    self.csr_reg_file.write_csr_reg.eq(CsrReg.PRIVS),
-                    self.csr_reg_file.write_data.eq(0x0000),
-                    self.csr_reg_file.write_enable.eq(1)
+        with m.If(self.privilege_enabled):
+            m.d.comb += [
+                self.csr_reg_file.write_csr_reg.eq(CsrReg.PRIVS),
+                self.csr_reg_file.write_data.eq(0x0000),
+                self.csr_reg_file.write_enable.eq(1)
+            ]
+        with m.Switch(self.vector_sel):
+            with m.Case(VectorSelect.SYSCALL):
+                m.d.sync += [
+                    self.syscall_privs.eq(self.csr_reg_file.privs_data),
+                    self.in_syscall.eq(1)
                 ]
-            with m.Switch(self.vector_sel):
-                with m.Case(VectorSelect.SYSCALL):
-                    m.d.sync += [
-                        self.syscall_privs.eq(self.csr_reg_file.privs_data),
-                        self.in_syscall.eq(1)
-                    ]
-                with m.Case(VectorSelect.INTERRUPT):
-                    m.d.comb += [
-                        self.gp_reg_file.read_gp_reg_a.eq(GpReg.RSCRATCH0),
-                        self.gp_reg_file.read_gp_reg_b.eq(GpReg.RSCRATCH1)
-                    ]
-                    m.d.sync += [
-                        self.int_privs.eq(self.csr_reg_file.privs_data),
-                        self.int_flags.eq(self.csr_reg_file.flags_data),
-                        self.int_rscratch.eq(self.base),
-                        self.in_interrupt.eq(1)
-                    ]
-            m.next = CoreState.VECTOR_LO
+            with m.Case(VectorSelect.INTERRUPT):
+                m.d.comb += [
+                    self.gp_reg_file.read_gp_reg_a.eq(GpReg.RSCRATCH0),
+                    self.gp_reg_file.read_gp_reg_b.eq(GpReg.RSCRATCH1)
+                ]
+                m.d.sync += [
+                    self.int_privs.eq(self.csr_reg_file.privs_data),
+                    self.int_flags.eq(self.csr_reg_file.flags_data),
+                    self.int_rscratch.eq(self.base),
+                    self.in_interrupt.eq(1)
+                ]
+        m.next = CoreState.VECTOR_LO
