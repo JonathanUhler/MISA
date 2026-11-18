@@ -95,7 +95,8 @@ When used as operands for instructions, the special registers are encoded as fol
 | `RETSC` | 1000 (under System Call Extension) |
 | `RETIR` | 1001 (under Interrupt Extension) |
 | `PRIVS` | 1010 (under Privilege Extension) |
-| Reserved | 1011 - 1111 |
+| `MPUCF` | 1011 (under Privilege Extension) |
+| Reserved | 1100 - 1111 |
 
 The special register encodings marked as reserved MUST NOT be emitted by an assembler. A special
 register which is marked above as belonging to an architecture extension is only available when that
@@ -342,21 +343,49 @@ valid Type fields are:
 
 #### `CAUSE` Reason: Memory Usage
 The exception cause is related to the use of an address or memory operation. The valid Type fields
-are:
+are as follows. Bits 0-2 in the extended status fields for all Types except "PC overflow" MUST be
+one-hot vectors indicating the kind of memory access that the fault describes.
 
 | Type | Encoding | Commentary |
 |-------------------|----------|----------------------------------------------------------------------------------------------|
-| Address overflow | 000 | A memory operation attempted to access an address which is outside the mapped memory space. Extended status is not used. |
+| Address overflow | 000 | The computation of an address left the range it is required to stay within, either because an effective address left the 16-bit address range or because a stack operation caused `SADDR` to overflow or underflow its implemented width. The extended status is set as follows: bit 0 = execute was attempted, bit 1 = write was attempted, bit 2 = read was attempted, bit 3 = the bound which was exceeded was the implemented width of `SADDR` rather than the 16-bit address range, bits 4-7 = reserved. |
 | PC overflow | 001 | The program counter overflowed an unsigned 16-bit value. Extended status is not used. |
-| Privileged access | 010 | An access to privileged memory was attempted while in User Mode (under Privilege Extension). Extended status is not used. |
-| Vector write | 011 | A `ST` instruction attempted to write an address between `0xFFF0` and `0xFFFF`, inclusive, which is the reset vector table. The extended status is set as follows: bits 0-3 = the low nibble of the address the store would have written, bits 4-7 = reserved. |
+| Privileged access | 010 | An access to memory was attempted while in User Mode (under Privilege Extension) without the appropriate permissions in the MPU regions. The extended status is set as follows: bit 0 = execute was attempted, bit 1 = write was attempted, bit 2 = read was attempted, bits 3-7 = reserved. |
+| Vector write | 011 | A `ST` instruction attempted to write an address between `0xFFF0` and `0xFFFF`, inclusive, which is the reset vector table. The extended status is set as follows: bits 0-2 = `0b010`, bit 3 = reserved, bits 4-7 = the low nibble of the address the store would have written. |
+| Invalid access | 100 | A certain kind of access (read, write, or execute) to memory was attempted at an address which does not support that kind of access. The extended status is set as follows: bit 0 = execute was attempted, bit 1 = write was attempted, bit 2 = read was attempted, bits 3-7 = reserved. |
+| Unmapped address | 101 | A memory operation attempted to access an address which is outside the mapped memory space. The extended status is set as follows: bit 0 = execute was attempted, bit 1 = write was attempted, bit 2 = read was attempted, bits 3-7 = reserved. |
 
 : {tbl-colwidths="[20, 15, 65]"}
 
-An implementation raises "Address overflow" both when a memory operation addresses memory that the
-implementation does not provide, and when the computation of an effective address leaves the 16-bit
-address range. The second case applies to every implementation, including one which maps the entire
-16-bit address range.
+An implementation raises "Address overflow" when the computation of an address leaves the range it
+is required to stay within. No address is produced in this case, so the memory operation has no
+location whose properties could be examined. This fault applies to every implementation, including
+one which maps the entire 16-bit address range.
+
+An implementation raises "Unmapped address" when a memory operation names a well-formed address at
+which the implementation provides no memory. An implementation which maps the entire 16-bit address
+range never raises this fault.
+
+An implementation raises "Invalid access" when a memory operation addresses memory that the
+implementation provides, but attempts the wrong type of access (e.g. a write to read-only memory).
+This fault MUST occur regardless of privilege mode or the Privilege Extension being enabled. The
+method that the processor uses to determine whether a particular kind of memory access is invalid at
+a specific address is implementation-defined.
+
+Multiple memory usage fault conditions may occur simultaneously (e.g. a User Mode write to an
+address without write permissions, which is also not mapped in the first place). In such a case, the
+following total ordering, from highest to lowest precedence, MUST apply to decide which fault is
+reported:
+
+1. PC overflow
+2. Address overflow
+3. Privileged access
+4. Unmapped address
+5. Vector write
+6. Invalid access
+
+"Address overflow" ranks above the faults which describe a specific address because an address
+computation which leaves its range produces no address for those faults to describe.
 
 The effective address of a `LD` or `ST` is the sum of a 16-bit base and a sign extended immediate
 offset, which MUST NOT wrap. If an effective address is calculated to be below `0x0000` or above
@@ -474,10 +503,10 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
-Arithmetic instructions do not depend on the software-level signedness of an integer. Only the
-`CMP` pseudo instruction (and conditional branches using it) have a semantic difference based on
-the signedness of operands. See the Flag Comparisons section for more information on signed and
-unsigned comparisons.
+Arithmetic instructions do not depend on the software-level signedness of an integer. Only the `CMP`
+pseudo instruction (and conditional branches using it) have a semantic difference based on the
+signedness of operands. See the Flag Comparisons section for more information on signed and unsigned
+comparisons.
 
 16-bit data types MAY be supported in software using the `ADC` and `SBB` instructions for
 arithmetic.
@@ -501,10 +530,10 @@ out of reset, the program counter MUST be initialized to the address stored in m
 0xFFFF and begin execution there.
 
 The reset vector table MUST never be writable by any software, in any privilege level and under any
-set of extensions. If a `ST` instruction attempts to write an address in the range
-`0xFFF0 - 0xFFFF`, a fault MUST occur with the `CAUSE` Reason "Memory usage" and the `CAUSE` Type
-"Vector write". The write MUST be ignored, and `SADDR` MUST not be updated (if executing the stack
-variant of `ST`).
+set of extensions. If a `ST` instruction attempts to write an address in the range `0xFFF0 -
+0xFFFF`, a fault MUST occur with the `CAUSE` Reason "Memory usage" and the `CAUSE` Type "Vector
+write". The write MUST be ignored, and `SADDR` MUST not be updated (if executing the stack variant
+of `ST`).
 
 The address this fault tests is the address the store would write, which is not always the effective
 address. For the register base variant of `ST` the two are the same. For the stack variant the store
@@ -595,10 +624,12 @@ When the processor is taken out of the reset state, some internal state MUST be 
 - If the Interrupt Extension is enabled, any interrupt pin activity which occurred before the
   processor was taken out of reset must be discarded, so that no interrupt is taken until the pin is
   next asserted.
+- If the Privilege Extension is supported (even if the extension is not enabled on reset), all four
+  MPU regions MUST initialize with no User Mode permissions.
 
 ## Faults
 
-Fault conditions occur when something goes wrong during program execution. Two fault conditions are
+Fault conditions occur when something goes wrong during program execution. Some fault conditions are
 not specific to any one instruction and MUST be detected for every instruction:
 
 - An instruction whose encoding fails to decode raises the `CAUSE` Reason "Instruction usage" with
@@ -610,6 +641,17 @@ not specific to any one instruction and MUST be detected for every instruction:
   of the instruction word would be fetched from outside the address space. A branch to `0xFFFF`
   therefore does not fault at the branch itself, but on the following step when the instruction word
   at `0xFFFF` is fetched.
+- An instruction fetch from an address that the implementation does not provide raises the `CAUSE`
+  Reason "Memory usage" with the `CAUSE` Type "Unmapped address".
+- An instruction fetch from an address that the implementation does not make executable raises the
+  `CAUSE` Reason "Memory usage" with the `CAUSE` Type "Invalid access".
+- If the Privilege Extension is enabled and the processor is in User Mode, an instruction fetch from
+  an address that is not user-executable raises the `CAUSE` Reason "Memory usage" with the `CAUSE`
+  Type "Privileged access".
+
+Instruction fetches require loading two bytes from memory. If a fault occurs during either fetch,
+the processor MUST handle the fault according to its type, and discard the partially-fetched
+instruction word.
 
 The faults which are specific to individual instructions are enumerated under the "Faults" label of
 each instruction in the Base Instructions section.
@@ -1009,11 +1051,14 @@ If (RSB == 0xF) {
 
 Faults:
 
-- "Address overflow" if the effective address computation leaves the 16-bit address range, or if the
-  effective address is outside the memory the implementation provides. For the stack variant, the
-  same applies if the updated value of `SADDR` leaves the implemented width of `SADDR`.
-- "Privileged access" if the effective address is in privileged memory and the load is performed in
-  User Mode under the Privilege Extension with a memory protection unit.
+- "Address overflow" if the effective address computation leaves the 16-bit address range. For the
+  stack variant, the same applies if the updated value of `SADDR` (which is the address the load
+  reads) leaves the implemented width of `SADDR`.
+- "Privileged access" if the MPU configuration does not grant read permissions to the effective
+  address, and the load is performed in User Mode under the Privilege Extension.
+- "Unmapped address" if the effective address is outside the memory the implementation provides.
+- "Invalid access" if the effective address is in memory that the implementation does not allow
+  reads from.
 
 ### `ST`
 Usage: `ST RD RSB IMM`
@@ -1057,14 +1102,20 @@ If (RSB == 0xF) {
 
 Faults:
 
-- "Address overflow" if the effective address computation leaves the 16-bit address range, or if the
-  effective address is outside the memory the implementation provides. For the stack variant, the
-  same applies if the updated value of `SADDR` leaves the implemented width of `SADDR`.
-- "Vector write" if the address the store would write is in the reset vector table at
-  `0xFFF0 - 0xFFFF`. For the stack variant this is the current value of `SADDR`, the address the
-  store writes, rather than the updated value. "Address overflow" takes precedence.
-- "Privileged access" if the effective address is in privileged memory and the store is performed in
-  User Mode under the Privilege Extension with a memory protection unit.
+- "Address overflow" if the effective address computation leaves the 16-bit address range, or, for
+  the stack variant, if the updated value of `SADDR` leaves the implemented width of `SADDR`.
+- "Privileged access" if the MPU configuration does not grant write permissions to the address the
+  store would write, and the store is performed in User Mode under the Privilege Extension.
+- "Unmapped address" if the address the store would write is outside the memory the implementation
+  provides.
+- "Vector write" if the address the store would write is in the reset vector table at `0xFFF0 -
+  0xFFFF`.
+- "Invalid access" if the address the store would write is in memory that the implementation does
+  not allow writes to.
+
+For every fault above other than "Address overflow", the address the store would write is the
+current value of `SADDR` for the stack variant, rather than the updated value, as described in the
+Required Memory Regions subsection.
 
 ### `RSR`
 Usage: `RSR CSR RS1 RS2`
@@ -1872,30 +1923,71 @@ When the processor is in User Mode, the following actions MUST cause a privilege
 - Execution of `WSR` except on `SADDR`, `RADDR`, and `FLAGS`
 - Execution of the special register variant of `JMP` except on `SADDR`, `RADDR`, `FLAGS`, and
   `PRIVS`
-- Access to privileged memory, if a memory protection unit is used to manage access based on the
-  ring bit
+- Access to memory (read, write, or instruction fetch) if the active MPU region configuration does
+  not grant appropriate permissions to complete the memory access.
 
 If a privilege error is detected, the processor MUST preempt the instruction which caused the error,
 discard any partial result of the instruction, and jump to the fault handler. The `CAUSE` special
 register MUST be set to indicate the privilege error for the instruction use or memory access.
 
-An implementation MAY provide a memory protection unit. This specification defines neither which
-addresses are privileged nor any architectural means of configuring them, so an implementation which
-provides a memory protection unit defines its own privileged regions, and software which relies on
-them is not portable between implementations. An implementation which provides no memory protection
-unit never raises the `CAUSE` Type "Privileged access", and the first three restrictions above are
-the whole of User Mode.
+#### Memory Protection Unit
 
-The reset vector table is MUST NOT be writable in either privilege level. Faults when writing to
-the vector table are described in the Required Memory Regions subsection, and MUST occur regardless
-of privilege mode.
+An implementation supporting the Privilege Extension MUST provide the memory protection unit
+described in this subsection. If a memory access is performed without the proper permissions, a
+"Privileged access" fault MUST occur.
+
+The MPU is comprised of four software-configurable region registers which have windowed access
+through the `MPUCF` special register.
+
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        {"name": "Execute", "bits": 1},
+        {"name": "Write", "bits": 1},
+        {"name": "Read", "bits": 1},
+        {"name": "Index", "bits": 2},
+        {"name": "Size", "bits": 3},
+        {"name": "Base", "bits": 8}
+    ],
+    "config": {"bits": 16}
+})).tostring())
+```
+
+When `MPUCF` is written with `WSR`, the `MPUCF.Index`th region register MUST be updated with the new
+information in the other fields of `MPUCF`, which MUST take effect for the fetch and execution of
+the next instruction following the `WSR`. A region is always naturally aligned to its own size. The
+low `MPUCF.Size` bits of `MPUCF.Base` do not affect which addresses the region covers, so the base
+page of the region is `B = (MPUCF.Base >> Size) << Size`. The memory referenced by the region spans
+the addresses from `B << 8` inclusive to `(B + 2 ** Size) << 8` exclusive. In other words, the
+region spans `2 ** Size` of the 256-byte pages, from the page `B` inclusive to the page `B + 2 **
+Size` exclusive.
+
+Equivalently, an address is within the region if `(Address >> 8) >> Size == MPUCF.Base >> Size`. The
+low bits of `MPUCF.Base` which do not participate in this comparison are ignored rather than
+illegal, and are retained to be read back by `RSR`. Every value of `MPUCF.Base` therefore describes
+a region, and no region extends past the page `0xFF`.
+
+The `MPUCF.Read`, `MPUCF.Write`, and `MPUCF.Execute` permission bits apply only when the processor
+is in User Mode. The MPU configuration does not add additional constraints to memory operations
+performed in Machine Mode. If an address is not covered by any MPU region, the processor MUST assume
+no User Mode permissions are granted for any kind of memory access at that address.
+
+If multiple MPU regions contain the same page(s), the permissions for the region with the lower
+`MPUCF.Index` value MUST be used.
+
+Reads of `MPUCF` with `RSR` MUST return the region information and index for the last index written
+(which is `0x0000` on reset, where `MPUCF.Index` initializes to zero, along with all fields of all
+four region registers).
 
 #### Points of Privilege Change
 
-Under normal operation, the processor is expected to change privilege modes when the following
-occur and the Privilege Extension is enabled:
+Under normal operation, the processor is expected to change privilege modes when the following occur
+and the Privilege Extension is enabled:
 
-- When any fault occurs which requires the processor to jump to the fault handler (including an User
+- When any fault occurs which requires the processor to jump to the fault handler (including a User
   Mode privilege error), the processor must first set `PRIVS.R` to 0.
 - Under the System Call Extension, when the `SYSCALL` instruction is executed and the exception bit
   is 1, `PRIVS.R` must be set to 0 before the system call handler is entered.
