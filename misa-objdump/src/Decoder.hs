@@ -213,6 +213,7 @@ decodeInst lo hi = inst
       0x8 -> Just RETSC
       0x9 -> Just RETIR
       0xA -> Just PRIVS
+      0xB -> Just MPUCF
       _   -> Nothing
     toCmp nib = case nib of
       0x0 -> Just ALWAYS

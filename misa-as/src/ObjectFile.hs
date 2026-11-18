@@ -296,6 +296,7 @@ packInst inst =
       RETIR -> 0x9
       -- Privilege extension
       PRIVS -> 0xA
+      MPUCF -> 0xB
     fromFlag f = fromIntegral (fromEnum f)
     fromImm i  = case i of
       (IntImm Full n) -> fromIntegral n

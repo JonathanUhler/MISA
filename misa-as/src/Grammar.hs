@@ -115,7 +115,7 @@ data CsrReg
   -- Interrupt extension
   | RETIR
   -- Privilege extension
-  | PRIVS
+  | PRIVS | MPUCF
   deriving (Show, Enum, Bounded, Eq)
 
 

@@ -25,6 +25,7 @@ extnForCsr :: CsrReg -> Maybe Extn
 extnForCsr RETSC = Just SystemCallExtn
 extnForCsr RETIR = Just InterruptExtn
 extnForCsr PRIVS = Just PrivilegeExtn
+extnForCsr MPUCF = Just PrivilegeExtn
 extnForCsr _     = Nothing
 
 
