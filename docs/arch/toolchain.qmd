@@ -259,9 +259,12 @@ A memory map file is a small linker script that tells the linker where to place 
 address space. Each entry gives an address range and the sections that belong in it. The grammar is:
 
 ```
-memmap  ::= ("section" number "-" number ":" (section)* ";")+
+section ::= ("section" number "-" number ":" (ident)* ";")+
+memory  ::= ("memory"  number "-" number ":" perms    ";")+
+mpu     ::= ("mpu"     number "-" number ":" perms    ";")+
 number  ::= 0x(0-9a-fA-F)+
-section ::= (_a-zA-Z)(_a-zA-Z0-9)*
+ident   ::= (_a-zA-Z)(_a-zA-Z0-9)*
+perms   ::= r?w?x?
 ```
 
 A memory map file is selected with `-M <path>`. When none is given, the linker uses the following
@@ -275,6 +278,10 @@ section 0x8000 - 0xBFFF :             ;  // Memory-mapped IO
 section 0xC000 - 0xFFEF : text rodata ;  // Program ROM
 section 0xFFF0 - 0xFFFF : vectors     ;  // Vector table
 ```
+
+Only `section` directives are used by the linker when constructing a memory file. In the future,
+`mpu` directives may allow the linker to automatically emit MPU initialization code. The `memory`
+directives are only used by the `misa-spec` model described in the next chapter.
 
 ## Other Tools
 

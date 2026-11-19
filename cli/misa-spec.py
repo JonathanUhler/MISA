@@ -48,6 +48,11 @@ help_text: str = (
     "  q0\tRun from the canonical initial state."
     "\n"
     "  qi\tRun from an arbitrary state defined by a YAML-like file."
+    "\n\n"
+    "In q0 mode, the memory the simulated implementation provides can be described with a memory "
+    "map file passed with the -M option. This is the same file format that the misa-ld linker "
+    "uses. When -M is not specified, the simulator provides the entire 16-bit address space and "
+    "permits every kind of access to any address."
 )
 
 
@@ -67,9 +72,9 @@ def format_interrupts(steps: list) -> str:
     return ",".join(str(step) for step in steps)
 
 
-def run_from_q0(mem_path: Path, steps: str, extns: int, ints: str) -> (bool, str):
+def run_from_q0(mem_path: Path, steps: str, extns: int, ints: str, map_path: Path) -> (bool, str):
     result: CompletedProcess = subprocess.run(
-        ["misa-spec-exe", "q0", mem_path, steps, str(extns), ints],
+        ["misa-spec-exe", "q0", mem_path, steps, str(extns), ints, map_path],
         capture_output = True
     )
     ran: bool = result.returncode == 0
@@ -109,6 +114,8 @@ def main() -> None:
                            help = "run for maximum <n> state transitions (default: until halt)")
     q0_parser.add_argument("-o", "--output", metavar = "<file>",
                            help = "write the final state information to <output>")
+    q0_parser.add_argument("-M", "--memmap", metavar = "<memmap>",
+                           help = "use the memory map file at <memmap>")
     q0_parser.add_argument("memfile", type = Path, metavar = "<memfile>",
                            help = "initialize simulator memory from binary file <memfile>")
 
@@ -127,11 +134,13 @@ def main() -> None:
 
     finished, output = False, ""
     if (args.command == "q0"):
+        map_path: str = "-" if (args.memmap is None) else str(args.memmap)
         finished, output = run_from_q0(
             args.memfile,
             args.steps,
             get_extn_bits(args.extension),
-            format_interrupts(args.interrupt)
+            format_interrupts(args.interrupt),
+            map_path
         )
     elif (args.command == "qi"):
         finished, output = run_from_qi(
