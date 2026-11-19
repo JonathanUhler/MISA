@@ -63,10 +63,10 @@ theorem GpReg.dec_isSome (n : HalfWord) : (GpReg.dec n).isSome = true :=
 -- The reserved special register encodings do not decode
 theorem CsrReg.dec_eq_none_iff (n : HalfWord) :
     CsrReg.dec n = none
-      <-> (n = 0b0000#4 \/ n = 0b0111#4 \/ 0b1011#4 <= n) :=
+      <-> (n = 0b0000#4 \/ n = 0b0111#4 \/ 0b1100#4 <= n) :=
   of_decide_eq_true (forall_halfWord
     (fun m =>
-      decide (CsrReg.dec m = none <-> (m = 0b0000#4 \/ m = 0b0111#4 \/ 0b1011#4 <= m)))
+      decide (CsrReg.dec m = none <-> (m = 0b0000#4 \/ m = 0b0111#4 \/ 0b1100#4 <= m)))
     (by decide) n)
 
 
@@ -339,6 +339,8 @@ theorem FaultKind.reason_type_table (k : FaultKind) :
         | .pcOverflow               => (0b010#3, 0b001#3)
         | .privilegedAccess         => (0b010#3, 0b010#3)
         | .vectorWrite              => (0b010#3, 0b011#3)
+        | .invalidAccess            => (0b010#3, 0b100#3)
+        | .unmappedAddress          => (0b010#3, 0b101#3)
         | .improperReturnContext    => (0b011#3, 0b000#3)
         | .conditionalContextReturn => (0b011#3, 0b001#3)
         | .improperSystemCall       => (0b011#3, 0b010#3) := by
@@ -381,12 +383,46 @@ theorem CsrCause.conditionalContextReturn_status (cmp : CmpFlag) (csr : CsrReg) 
   cases cmp <;> cases csr <;> decide
 
 
--- The extended status of a vector write holds the low nibble of the address the store would have
--- written, which names the vector it tried to overwrite
+-- Every access kind is a one-hot vector confined to the three access bits, so the extended status
+-- of a memory usage fault names exactly one kind of access
+theorem AccessKind.enc_one_hot (acc : AccessKind) :
+    Ne acc.enc 0x00#8
+      /\ acc.enc &&& (acc.enc - 0x01#8) = 0x00#8
+      /\ acc.enc &&& 0b11111000#8 = 0x00#8 := by
+  cases acc <;> decide
+
+
+-- Distinct access kinds encode distinctly
+theorem AccessKind.enc_inj (a1 : AccessKind) (a2 : AccessKind) (h : a1.enc = a2.enc) :
+    a1 = a2 := by
+  cases a1 <;> cases a2 <;> simp_all [AccessKind.enc]
+
+
+-- Every address overflow kind is a one-hot vector confined to bits 0-4
+theorem OverflowKind.enc_one_hot (ovf : OverflowKind) :
+    Ne ovf.enc 0x00#8
+      /\ ovf.enc &&& (ovf.enc - 0x01#8) = 0x00#8
+      /\ ovf.enc &&& 0b11100000#8 = 0x00#8 := by
+  cases ovf
+  case access acc => cases acc <;> decide
+  all_goals decide
+
+
+-- A stack or link register overflow describes an address computation rather than an attempted
+-- access, so it clears the access kind bits. This is the precedence the manual requires of bits 3
+-- and 4 over bits 0-2.
+theorem OverflowKind.saddr_link_clear_access :
+    OverflowKind.saddr.enc &&& 0b00000111#8 = 0x00#8
+      /\ OverflowKind.link.enc &&& 0b00000111#8 = 0x00#8 := by
+  decide
+
+
+-- The extended status of a vector write records a write in the access kind bits, and holds the low
+-- nibble of the address the store would have written, which names the vector it tried to overwrite
 theorem CsrCause.vectorWrite_status (addr : AddrWord) :
     let s := (CsrCause.vectorWrite addr).status
-    s.extractLsb' 0 4 = addr.extractLsb' 0 4
-      /\ s.extractLsb' 4 4 = 0b0000#4 := by
+    s.extractLsb' 0 4 = 0b0010#4
+      /\ s.extractLsb' 4 4 = addr.extractLsb' 0 4 := by
   simp only [CsrCause.vectorWrite]
   bv_decide
 

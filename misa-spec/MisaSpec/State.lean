@@ -2,6 +2,8 @@ import MisaSpec.Basic
 import MisaSpec.GpReg
 import MisaSpec.CsrReg
 import MisaSpec.CmpFlag
+import MisaSpec.MemMap
+import MisaSpec.Mpu
 
 
 namespace MisaSpec
@@ -11,6 +13,8 @@ structure State where
   register     : GpReg -> DataWord
   special      : CsrReg -> SpecWord
   memory       : AddrWord -> DataWord
+  caps         : AddrWord -> Option MemCaps
+  mpuRegion    : BitVec 2 -> SpecWord
   check        : CmpFlag -> Bool
   pc           : AddrWord
   inSyscall    : Bool
@@ -50,7 +54,40 @@ def State.writeSpecial (q : State) (c : CsrReg) (v : SpecWord) : State :=
     else
       q
   | .flags => q.writeFlags (CsrFlags.dec v)
+  | .mpucf =>
+    let idx := (MpuRegion.dec v).index
+    { q with
+      special   := fun c' => if c'.enc == CsrReg.mpucf.enc then v else q.special c',
+      mpuRegion := fun i => if i == idx then v else q.mpuRegion i }
   | _      => { q with special := fun c' => if c'.enc == c.enc then v else q.special c' }
+
+
+def linkAddr (pc : AddrWord) : Option AddrWord :=
+  let next := pc + 2
+  if next < pc then none else some next
+
+
+def State.userMode (q : State) : Bool :=
+  (CsrExtns.dec (q.special .extns)).privilege && (q.special .privs).getLsbD 0
+
+
+def State.mpuCaps (q : State) (a : AddrWord) : MemCaps :=
+  if q.userMode then Mpu.caps q.mpuRegion a else MemCaps.rwx
+
+
+def State.accessFault (q : State) (acc : AccessKind) (a : AddrWord) : Option CsrCause :=
+  if !((q.mpuCaps a).allows acc) then
+    some (CsrCause.privilegedAccess acc)
+  else
+    match q.caps a with
+    | none   => some (CsrCause.unmappedAddress acc)
+    | some c =>
+      if acc.isVectorWrite a then
+        some (CsrCause.vectorWrite a)
+      else if c.allows acc then
+        none
+      else
+        some (CsrCause.invalidAccess acc)
 
 
 def State.privsUpdate (q : State) (v : SpecWord) : SpecWord :=
@@ -63,7 +100,7 @@ def State.fault (q : State) (cause : CsrCause) : State :=
   { q with pc := q.memory 0xFFFD ++ q.memory 0xFFFC }
 
 
-def State.first (bytes : ByteArray) (extns : SpecWord) : State :=
+def State.first (bytes : ByteArray) (extns : SpecWord) (map : MemMap) : State :=
   let mem : AddrWord -> DataWord := fun a =>
     let i := a.toNat
     if i < bytes.size then BitVec.ofNat 8 (bytes.get! i).toNat else 0
@@ -71,6 +108,8 @@ def State.first (bytes : ByteArray) (extns : SpecWord) : State :=
     special      := fun c =>
       if c.enc == CsrReg.extns.enc then extns &&& CsrReg.extns.writeMask else 0x0000#16,
     memory       := mem,
+    caps         := MemMap.toCaps map,
+    mpuRegion    := fun _ => 0x0000#16,
     check        := CsrFlags.eval (CsrFlags.dec 0x0000#16),
     pc           := mem 0xFFFF ++ mem 0xFFFE,
     inSyscall    := false,
@@ -93,10 +132,6 @@ def State.next (q : State) : State :=
 
 def State.canInterrupt (q : State) : Bool :=
   (CsrExtns.dec (q.special .extns)).interrupt && !q.inInterrupt
-
-
-def State.userMode (q : State) : Bool :=
-  (CsrExtns.dec (q.special .extns)).privilege && (q.special .privs).getLsbD 0
 
 
 def State.interrupt (q : State) : State :=

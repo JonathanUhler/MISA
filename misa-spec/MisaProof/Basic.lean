@@ -91,6 +91,15 @@ theorem bit16_eq_ge (x : BitVec 17) : x.getLsbD 16 = decide (65536 <= x.toNat) :
   simp [BitVec.ule]
 
 
+-- Below the last instruction slot the link register computation stays inside the address space,
+-- so a JAL or SYSCALL records the following instruction rather than raising an address overflow
+theorem linkAddr_of_lt (pc : AddrWord) (h : pc < 0xFFFE#16) : linkAddr pc = some (pc + 2) := by
+  simp only [linkAddr]
+  split
+  next hlt => exact absurd hlt (by bv_decide)
+  next      => rfl
+
+
 -- The fault handler address held in the reset vector table
 def State.faultVector (q : State) : AddrWord :=
   q.memory 0xFFFD ++ q.memory 0xFFFC

@@ -132,12 +132,14 @@ theorem next_raddr (q : State) :
 
 -- A taken JAL sets RADDR to the address of the next instruction and branches to its target
 theorem jal_taken_sets_raddr (q : State) (rs1 : GpReg) (rs2 : GpReg) (cmp : CmpFlag)
-    (h : q.check cmp = true) :
+    (h : q.check cmp = true) (hpc : q.pc < 0xFFFE#16) :
     (executeJal q rs1 rs2 cmp).special CsrReg.raddr = q.pc + 2
       /\ (executeJal q rs1 rs2 cmp).pc = (q.register rs1 ++ q.register rs2) := by
   refine And.intro ?_ ?_
-  next => simp [executeJal, h, State.writeSpecial, CsrReg.writeMask] <;> bv_decide
-  next => simp [executeJal, h]
+  next =>
+    simp [executeJal, h, linkAddr_of_lt q.pc hpc, State.writeSpecial, CsrReg.writeMask]
+      <;> bv_decide
+  next => simp [executeJal, h, linkAddr_of_lt q.pc hpc]
 
 
 -- An untaken JAL leaves RADDR unchanged
@@ -155,21 +157,22 @@ theorem ret_returns_to_raddr (q : State) (hwf : q.WF) :
 
 
 -- A RET after an unconditional JAL returns to the instruction after the JAL
-theorem call_ret_roundtrip (q : State) (hwf : q.WF) (rs1 : GpReg) (rs2 : GpReg) :
+theorem call_ret_roundtrip (q : State) (hwf : q.WF) (rs1 : GpReg) (rs2 : GpReg)
+    (hpc : q.pc < 0xFFFE#16) :
     let q1 := executeJal q rs1 rs2 CmpFlag.always
     let q2 := executeJmpCsr q1 CsrReg.raddr CmpFlag.always
     q2.pc = q.pc + 2 := by
   have hca : q.check CmpFlag.always = true := State.WF.check_always q hwf
-  have h2 := (jal_taken_sets_raddr q rs1 rs2 CmpFlag.always hca).1
+  have h2 := (jal_taken_sets_raddr q rs1 rs2 CmpFlag.always hca hpc).1
   have h1 : (executeJal q rs1 rs2 CmpFlag.always).check CmpFlag.always = true := by
-    simp [executeJal, hca, State.writeSpecial]
+    simp [executeJal, hca, linkAddr_of_lt q.pc hpc, State.writeSpecial]
   simp [executeJmpCsr, CsrReg.userReadable, h1, h2]
 
 
 -- A PUSH onto a stack outside the reset vector table writes its source register at the current
 -- stack address and then decrements SADDR
 theorem push_decrements_saddr (q : State) (rs : GpReg) (h : 0 < (q.special CsrReg.saddr).toNat)
-    (hv : inVectorTable (q.special CsrReg.saddr) = false) :
+    (hok : q.accessFault AccessKind.write (q.special CsrReg.saddr) = none) :
     let q' := executeSt q rs GpReg.rscratch1 (-1)
     q'.memory (q.special CsrReg.saddr) = q.register rs
       /\ q'.special CsrReg.saddr = q.special CsrReg.saddr - 1 := by
@@ -181,12 +184,13 @@ theorem push_decrements_saddr (q : State) (rs : GpReg) (h : 0 < (q.special CsrRe
     have hc : ((q.special CsrReg.saddr).setWidth 17 + (-1 : HalfWord).signExtend 17).getLsbD 16
         = false := by bv_decide
     simp [effAddr] <;> bv_decide
-  exact st_stack_order q rs (-1) (q.special CsrReg.saddr - 1) hv heff
+  exact st_stack_order q rs (-1) (q.special CsrReg.saddr - 1) hok heff
 
 
 -- A POP increments SADDR and then reads into its destination register from the new stack address
 theorem pop_increments_saddr (q : State) (rd : GpReg) (h : Ne rd GpReg.r0)
-    (hs : (q.special CsrReg.saddr).toNat < 0xFFFF) :
+    (hs : (q.special CsrReg.saddr).toNat < 0xFFFF)
+    (hok : q.accessFault AccessKind.read (q.special CsrReg.saddr + 1) = none) :
     let q' := executeLd q rd GpReg.rscratch1 1
     q'.special CsrReg.saddr = q.special CsrReg.saddr + 1
       /\ q'.register rd = q.memory (q.special CsrReg.saddr + 1) := by
@@ -198,14 +202,16 @@ theorem pop_increments_saddr (q : State) (rd : GpReg) (h : Ne rd GpReg.r0)
     have hc : ((q.special CsrReg.saddr).setWidth 17 + (1 : HalfWord).signExtend 17).getLsbD 16
         = false := by bv_decide
     simp [effAddr] <;> bv_decide
-  exact ld_stack_order q rd 1 (q.special CsrReg.saddr + 1) h heff
+  exact ld_stack_order q rd 1 (q.special CsrReg.saddr + 1) h hok heff
 
 
 -- A POP after a PUSH recovers the pushed value and restores SADDR
 theorem push_pop_roundtrip (q : State) (rs : GpReg) (rd : GpReg)
     (hrd : Ne rd GpReg.r0)
     (hs : 0 < (q.special CsrReg.saddr).toNat)
-    (hv : inVectorTable (q.special CsrReg.saddr) = false) :
+    (hw : q.accessFault AccessKind.write (q.special CsrReg.saddr) = none)
+    (hr : (executeSt q rs GpReg.rscratch1 (-1)).accessFault AccessKind.read
+            (q.special CsrReg.saddr) = none) :
     let q1 := executeSt q rs GpReg.rscratch1 (-1)
     let q2 := executeLd q1 rd GpReg.rscratch1 1
     q2.register rd = q.register rs
@@ -214,7 +220,7 @@ theorem push_pop_roundtrip (q : State) (rs : GpReg) (rd : GpReg)
     intro he
     rw [he] at hs
     simp at hs
-  have hp := push_decrements_saddr q rs hs hv
+  have hp := push_decrements_saddr q rs hs hw
   have heff : effAddr ((executeSt q rs GpReg.rscratch1 (-1)).special CsrReg.saddr) 1
       = some (q.special CsrReg.saddr) := by
     rw [hp.2]
@@ -222,7 +228,7 @@ theorem push_pop_roundtrip (q : State) (rs : GpReg) (rd : GpReg)
         = false := by bv_decide
     simp [effAddr] <;> bv_decide
   have hl := ld_stack_order (executeSt q rs GpReg.rscratch1 (-1)) rd 1
-      (q.special CsrReg.saddr) hrd heff
+      (q.special CsrReg.saddr) hrd hr heff
   refine And.intro ?_ hl.1
   rw [hl.2]
   exact hp.1
@@ -233,7 +239,13 @@ theorem push_pop_roundtrip (q : State) (rs : GpReg) (rd : GpReg)
 theorem push2_pop2_roundtrip (q : State) (rs1 : GpReg) (rs2 : GpReg) (rd1 : GpReg) (rd2 : GpReg)
     (hrd1 : Ne rd1 GpReg.r0) (hrd2 : Ne rd2 GpReg.r0) (hrd : Ne rd1 rd2)
     (hs : 1 < (q.special CsrReg.saddr).toNat)
-    (hv : inVectorTable (q.special CsrReg.saddr) = false) :
+    (hw1 : q.accessFault AccessKind.write (q.special CsrReg.saddr) = none)
+    (hw2 : (executeSt q rs2 GpReg.rscratch1 (-1)).accessFault AccessKind.write
+             ((executeSt q rs2 GpReg.rscratch1 (-1)).special CsrReg.saddr) = none)
+    (hr1 : (executeSt (executeSt q rs2 GpReg.rscratch1 (-1)) rs1 GpReg.rscratch1 (-1)).accessFault
+             AccessKind.read (q.special CsrReg.saddr - 1) = none)
+    (hr2 : (executeLd (executeSt (executeSt q rs2 GpReg.rscratch1 (-1)) rs1 GpReg.rscratch1 (-1))
+             rd1 GpReg.rscratch1 1).accessFault AccessKind.read (q.special CsrReg.saddr) = none) :
     let q1 := executeSt q rs2 GpReg.rscratch1 (-1)
     let q2 := executeSt q1 rs1 GpReg.rscratch1 (-1)
     let q3 := executeLd q2 rd1 GpReg.rscratch1 1
@@ -250,13 +262,8 @@ theorem push2_pop2_roundtrip (q : State) (rs1 : GpReg) (rs2 : GpReg) (rd1 : GpRe
     rw [he] at hs
     simp at hs
   have h0 : 0 < (q.special CsrReg.saddr).toNat := by omega
-  -- the byte below the stack address is outside the vector table too, so neither push faults
-  have hv2 : inVectorTable (q.special CsrReg.saddr - 1) = false := by
-    rw [inVectorTable_eq_false_iff] at hv
-    rw [inVectorTable_eq_false_iff]
-    bv_decide
   -- the first push stores RS2 at the stack address and steps SADDR down
-  have p1 := push_decrements_saddr q rs2 h0 hv
+  have p1 := push_decrements_saddr q rs2 h0 hw1
   -- the second push stores RS1 one below it
   have heff2 : effAddr (q.special CsrReg.saddr - 1) (-1)
       = some (q.special CsrReg.saddr - 1 - 1) := by
@@ -264,7 +271,7 @@ theorem push2_pop2_roundtrip (q : State) (rs1 : GpReg) (rs2 : GpReg) (rd1 : GpRe
         + (-1 : HalfWord).signExtend 17).getLsbD 16 = false := by bv_decide
     simp [effAddr] <;> bv_decide
   have p2 := st_stack_order (executeSt q rs2 GpReg.rscratch1 (-1)) rs1 (-1)
-      (q.special CsrReg.saddr - 1 - 1) (by rw [p1.2]; exact hv2) (by rw [p1.2]; exact heff2)
+      (q.special CsrReg.saddr - 1 - 1) hw2 (by rw [p1.2]; exact heff2)
   -- the first pop reads RS1 back
   have heff3 : effAddr (q.special CsrReg.saddr - 1 - 1) 1
       = some (q.special CsrReg.saddr - 1) := by
@@ -272,14 +279,15 @@ theorem push2_pop2_roundtrip (q : State) (rs1 : GpReg) (rs2 : GpReg) (rd1 : GpRe
         + (1 : HalfWord).signExtend 17).getLsbD 16 = false := by bv_decide
     simp [effAddr] <;> bv_decide
   have p3 := ld_stack_order (executeSt (executeSt q rs2 GpReg.rscratch1 (-1)) rs1
-      GpReg.rscratch1 (-1)) rd1 1 (q.special CsrReg.saddr - 1) hrd1 (by rw [p2.2]; exact heff3)
+      GpReg.rscratch1 (-1)) rd1 1 (q.special CsrReg.saddr - 1) hrd1 hr1
+      (by rw [p2.2]; exact heff3)
   -- the second pop reads RS2 back and restores SADDR
   have heff4 : effAddr (q.special CsrReg.saddr - 1) 1 = some (q.special CsrReg.saddr) := by
     have hc : ((q.special CsrReg.saddr - 1).setWidth 17
         + (1 : HalfWord).signExtend 17).getLsbD 16 = false := by bv_decide
     simp [effAddr] <;> bv_decide
   have p4 := ld_stack_order (executeLd (executeSt (executeSt q rs2 GpReg.rscratch1 (-1)) rs1
-      GpReg.rscratch1 (-1)) rd1 GpReg.rscratch1 1) rd2 1 (q.special CsrReg.saddr) hrd2
+      GpReg.rscratch1 (-1)) rd1 GpReg.rscratch1 1) rd2 1 (q.special CsrReg.saddr) hrd2 hr2
       (by rw [p3.1]; exact heff4)
   have hne : Ne (q.special CsrReg.saddr)
       ((executeSt q rs2 GpReg.rscratch1 (-1)).special CsrReg.saddr) := by
@@ -400,6 +408,7 @@ theorem wsr_rsr_roundtrip (q : State) (rs1 : GpReg) (rs2 : GpReg) (rd1 : GpReg) 
     case fault => rw [wsr_preserves_userMode q rs1 rs2 CsrReg.fault hu he (by decide) hpc']; rfl
     case retsc => rw [wsr_preserves_userMode q rs1 rs2 CsrReg.retsc hu he (by decide) hpc']; rfl
     case retir => rw [wsr_preserves_userMode q rs1 rs2 CsrReg.retir hu he (by decide) hpc']; rfl
+    case mpucf => rw [wsr_preserves_userMode q rs1 rs2 CsrReg.mpucf hu he (by decide) hpc']; rfl
   simp only [executeRsr]
   split
   next hg =>

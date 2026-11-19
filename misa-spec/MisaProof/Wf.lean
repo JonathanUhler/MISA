@@ -316,7 +316,8 @@ theorem State.interrupt_wf (q : State) (h : q.WF) : q.interrupt.WF := by
 
 
 -- Reset produces a well-formed state
-theorem State.first_wf (bytes : ByteArray) (extns : SpecWord) : (State.first bytes extns).WF := by
+theorem State.first_wf (bytes : ByteArray) (extns : SpecWord) (map : MemMap) :
+    (State.first bytes extns map).WF := by
   constructor
   next => rfl
   next =>
@@ -328,17 +329,17 @@ theorem State.first_wf (bytes : ByteArray) (extns : SpecWord) : (State.first byt
 
 
 -- Reset initializes the program counter from the reset vector
-theorem State.first_pc (bytes : ByteArray) (extns : SpecWord) :
-    (State.first bytes extns).pc = (State.first bytes extns).resetVector :=
+theorem State.first_pc (bytes : ByteArray) (extns : SpecWord) (map : MemMap) :
+    (State.first bytes extns map).pc = (State.first bytes extns map).resetVector :=
   rfl
 
 
 -- Reset starts outside any system call or interrupt context and discards pre-reset interrupt pin
 -- activity
-theorem State.first_contexts (bytes : ByteArray) (extns : SpecWord) :
-    (State.first bytes extns).inSyscall = false
-      /\ (State.first bytes extns).inInterrupt = false
-      /\ (State.first bytes extns).intPending = false :=
+theorem State.first_contexts (bytes : ByteArray) (extns : SpecWord) (map : MemMap) :
+    (State.first bytes extns map).inSyscall = false
+      /\ (State.first bytes extns map).inInterrupt = false
+      /\ (State.first bytes extns map).intPending = false :=
   And.intro rfl (And.intro rfl rfl)
 
 

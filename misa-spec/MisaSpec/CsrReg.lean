@@ -18,6 +18,7 @@ inductive CsrReg where
   | retir
   -- Privilege extension
   | privs
+  | mpucf
   deriving DecidableEq, Repr
 
 
@@ -29,7 +30,7 @@ def CsrReg.all : List CsrReg :=
     -- Interrupt extension
     .retir,
     -- Privilege extension
-    .privs
+    .privs, .mpucf
   ]
 
 
@@ -46,6 +47,7 @@ def CsrReg.enc : CsrReg -> HalfWord
   | .retir => 0b1001#4
   -- Privilege extension
   | .privs => 0b1010#4
+  | .mpucf => 0b1011#4
 
 
 def CsrReg.dec (n : HalfWord) : Option CsrReg :=
@@ -65,6 +67,7 @@ def CsrReg.name : CsrReg -> String
   | .retir => "retir"
   -- Privilege extension
   | .privs => "privs"
+  | .mpucf => "mpucf"
 
 
 structure CsrFlags where
@@ -125,6 +128,7 @@ def CsrReg.availableUnder (csr : CsrReg) (extns : CsrExtns) : Bool :=
   | .retir => extns.interrupt
   -- Privilege extension
   | .privs => extns.privilege
+  | .mpucf => extns.privilege
   | _      => true
 
 
@@ -141,6 +145,7 @@ def CsrReg.writeMask : CsrReg -> SpecWord
   | .retir => 0xFFFF#16
   -- Privilege extension
   | .privs => 0x0001#16
+  | .mpucf => 0xFFFF#16
 
 
 def CsrReg.userReadable : CsrReg -> Bool
@@ -165,6 +170,8 @@ inductive FaultKind where
   | pcOverflow
   | privilegedAccess
   | vectorWrite
+  | invalidAccess
+  | unmappedAddress
   -- Reason: Control Event
   | improperReturnContext
   | conditionalContextReturn
@@ -181,9 +188,37 @@ def FaultKind.enc : FaultKind -> BitVec 6
   | .pcOverflow               => 0b001010#6
   | .privilegedAccess         => 0b010010#6
   | .vectorWrite              => 0b011010#6
+  | .invalidAccess            => 0b100010#6
+  | .unmappedAddress          => 0b101010#6
   | .improperReturnContext    => 0b000011#6
   | .conditionalContextReturn => 0b001011#6
   | .improperSystemCall       => 0b010011#6
+
+
+inductive AccessKind where
+  | execute
+  | write
+  | read
+  deriving DecidableEq, Repr
+
+
+def AccessKind.enc : AccessKind -> DataWord
+  | .execute => 0b00000001#8
+  | .write   => 0b00000010#8
+  | .read    => 0b00000100#8
+
+
+inductive OverflowKind where
+  | access (acc : AccessKind)
+  | saddr
+  | link
+  deriving DecidableEq, Repr
+
+
+def OverflowKind.enc : OverflowKind -> DataWord
+  | .access acc => acc.enc
+  | .saddr      => 0b00001000#8
+  | .link       => 0b00010000#8
 
 
 structure CsrCause where
@@ -204,17 +239,23 @@ def CsrCause.illegalInstruction : CsrCause :=
 def CsrCause.privilegedInstruction : CsrCause :=
   { kind := .privilegedInstruction, status := 0b00000000#8 }
 
-def CsrCause.addressOverflow : CsrCause :=
-  { kind := .addressOverflow, status := 0b00000000#8 }
+def CsrCause.addressOverflow (ovf : OverflowKind) : CsrCause :=
+  { kind := .addressOverflow, status := ovf.enc }
 
 def CsrCause.pcOverflow : CsrCause :=
   { kind := .pcOverflow, status := 0b00000000#8 }
 
-def CsrCause.privilegedAccess : CsrCause :=
-  { kind := .privilegedAccess, status := 0b00000000#8 }
+def CsrCause.privilegedAccess (acc : AccessKind) : CsrCause :=
+  { kind := .privilegedAccess, status := acc.enc }
 
 def CsrCause.vectorWrite (addr : AddrWord) : CsrCause :=
-  { kind := .vectorWrite, status := 0b0000#4 ++ addr.extractLsb' 0 4 }
+  { kind := .vectorWrite, status := addr.extractLsb' 0 4 ++ 0b0010#4 }
+
+def CsrCause.invalidAccess (acc : AccessKind) : CsrCause :=
+  { kind := .invalidAccess, status := acc.enc }
+
+def CsrCause.unmappedAddress (acc : AccessKind) : CsrCause :=
+  { kind := .unmappedAddress, status := acc.enc }
 
 def CsrCause.improperReturnContext (inSyscall inInterrupt : Bool) (csr : CsrReg) : CsrCause :=
   { kind   := .improperReturnContext,

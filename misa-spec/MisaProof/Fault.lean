@@ -59,9 +59,9 @@ theorem halt_preserves_fault_reg (q : State) (rs : GpReg) (hu : q.userMode = fal
 
 -- A successful SYSCALL leaves FAULT unchanged
 theorem syscall_preserves_fault_reg (q : State) (rs : GpReg)
-    (hs : q.inSyscall = false) (hi : q.inInterrupt = false) :
+    (hs : q.inSyscall = false) (hi : q.inInterrupt = false) (hpc : q.pc < 0xFFFE#16) :
     (executeSyscall q rs).special CsrReg.fault = q.special CsrReg.fault := by
-  simp [executeSyscall, hs, hi, State.writeSpecial, CsrReg.enc]
+  simp [executeSyscall, hs, hi, linkAddr_of_lt q.pc hpc, State.writeSpecial, CsrReg.enc]
 
 
 -- Below the end of the address space the program counter advances by two without recording a cause
@@ -122,10 +122,10 @@ theorem jmp_taken_no_overflow (q : State) (rs1 : GpReg) (rs2 : GpReg) (cmp : Cmp
 
 -- A taken JAL sets the program counter from its target and cannot raise a PC overflow
 theorem jal_taken_no_overflow (q : State) (rs1 : GpReg) (rs2 : GpReg) (cmp : CmpFlag)
-    (h : q.check cmp = true) :
+    (h : q.check cmp = true) (hpc : q.pc < 0xFFFE#16) :
     (executeJal q rs1 rs2 cmp).pc = (q.register rs1 ++ q.register rs2)
       /\ (executeJal q rs1 rs2 cmp).special CsrReg.cause = q.special CsrReg.cause := by
-  simp [executeJal, h, State.writeSpecial, CsrReg.enc]
+  simp [executeJal, h, linkAddr_of_lt q.pc hpc, State.writeSpecial, CsrReg.enc]
 
 
 -- An instruction that completes before its sequential increment overflows keeps its effects, which
@@ -313,22 +313,24 @@ theorem ld_base_address (q : State) (rd : GpReg) (rsb : GpReg) (lo : GpReg) (imm
     (a : AddrWord)
     (hrsb : Ne rsb GpReg.rscratch1) (hrd : Ne rd GpReg.r0)
     (hlo : lo = (GpReg.dec (rsb.enc + 1)).getD GpReg.r0)
+    (hok : q.accessFault AccessKind.read a = none)
     (h : effAddr (q.register rsb ++ q.register lo) imm = some a) :
     (executeLd q rd rsb imm).register rd = q.memory a := by
   subst hlo
   cases rsb
   case rscratch1 => exact absurd rfl hrsb
   all_goals
-    simp only [executeLd, h, State.next_register]
+    simp only [executeLd, h, hok, State.next_register]
     exact State.writeReg_self q rd (q.memory a) hrd
 
 
 -- A stack LD updates SADDR and then reads from the new stack address
 theorem ld_stack_order (q : State) (rd : GpReg) (imm : HalfWord) (s : AddrWord)
-    (hrd : Ne rd GpReg.r0) (h : effAddr (q.special CsrReg.saddr) imm = some s) :
+    (hrd : Ne rd GpReg.r0) (hok : q.accessFault AccessKind.read s = none)
+    (h : effAddr (q.special CsrReg.saddr) imm = some s) :
     let q' := executeLd q rd GpReg.rscratch1 imm
     q'.special CsrReg.saddr = s /\ q'.register rd = q.memory s := by
-  simp only [executeLd, h]
+  simp only [executeLd, h, hok]
   refine And.intro ?_ ?_
   next =>
     rw [next_saddr, State.writeReg_special,
@@ -341,21 +343,18 @@ theorem ld_stack_order (q : State) (rd : GpReg) (imm : HalfWord) (s : AddrWord)
 
 -- A stack ST outside the reset vector table writes to the old stack address and then updates SADDR
 theorem st_stack_order (q : State) (rd : GpReg) (imm : HalfWord) (s : AddrWord)
-    (hv : inVectorTable (q.special CsrReg.saddr) = false)
+    (hok : q.accessFault AccessKind.write (q.special CsrReg.saddr) = none)
     (h : effAddr (q.special CsrReg.saddr) imm = some s) :
     let q' := executeSt q rd GpReg.rscratch1 imm
     q'.memory (q.special CsrReg.saddr) = q.register rd /\ q'.special CsrReg.saddr = s := by
-  simp only [executeSt, h]
-  split
-  next hc => simp [hv] at hc
+  simp only [executeSt, h, hok]
+  refine And.intro ?_ ?_
   next =>
-    refine And.intro ?_ ?_
-    next =>
-      rw [next_memory]
-      simp [State.writeSpecial, State.writeMem, CsrReg.enc]
-    next =>
-      rw [next_saddr, State.writeSpecial_self _ CsrReg.saddr s (by decide)]
-      simp [CsrReg.writeMask] <;> bv_decide
+    rw [next_memory]
+    simp [State.writeSpecial, State.writeMem, CsrReg.enc]
+  next =>
+    rw [next_saddr, State.writeSpecial_self _ CsrReg.saddr s (by decide)]
+    simp [CsrReg.writeMask] <;> bv_decide
 
 
 -- A ST leaves every register unchanged
@@ -365,7 +364,7 @@ theorem st_preserves_registers (q : State) (rd : GpReg) (rsb : GpReg) (imm : Hal
   simp only [executeSt]
   repeat (any_goals split)
   all_goals first
-    | exact (fault_frame q CsrCause.addressOverflow).1 r
+    | exact (fault_frame q _).1 r
     | simp [State.next_register, State.writeSpecial_register, State.writeMem]
 
 
@@ -375,7 +374,7 @@ theorem st_preserves_memory_other (q : State) (rd : GpReg) (imm : HalfWord) (a :
     (executeSt q rd GpReg.rscratch1 imm).memory a = q.memory a := by
   simp only [executeSt]
   split
-  next => exact (fault_frame q CsrCause.addressOverflow).2.1 a
+  next => exact (fault_frame q _).2.1 a
   next =>
     split
     next => exact (fault_frame q _).2.1 a
@@ -389,7 +388,7 @@ theorem ld_preserves_memory (q : State) (rd : GpReg) (rsb : GpReg) (imm : HalfWo
   simp only [executeLd]
   repeat (any_goals split)
   all_goals first
-    | exact (fault_frame q CsrCause.addressOverflow).2.1 a
+    | exact (fault_frame q _).2.1 a
     | simp [next_memory, State.writeReg_memory, State.writeSpecial_memory]
 
 
@@ -400,7 +399,7 @@ theorem ld_preserves_registers_other (q : State) (rd : GpReg) (rsb : GpReg) (imm
   simp only [executeLd]
   repeat (any_goals split)
   all_goals first
-    | exact (fault_frame q CsrCause.addressOverflow).1 r
+    | exact (fault_frame q _).1 r
     | simp [State.next_register, State.writeReg_other _ rd r _ h, State.writeSpecial_register]
 
 
@@ -446,7 +445,10 @@ theorem jal_preserves_flags (q : State) (rs1 : GpReg) (rs2 : GpReg) (cmp : CmpFl
     (executeJal q rs1 rs2 cmp).special CsrReg.flags = q.special CsrReg.flags := by
   simp only [executeJal]
   split
-  next => simp [State.writeSpecial, CsrReg.enc]
+  next =>
+    split
+    next => exact (fault_frame q _).2.2.2.2.2.1
+    next => simp [State.writeSpecial, CsrReg.enc]
   next => exact State.next_flags q
 
 
@@ -487,33 +489,39 @@ theorem wsr_preserves_flags (q : State) (rs1 : GpReg) (rs2 : GpReg) (csr : CsrRe
     exact State.writeSpecial_other q csr CsrReg.flags _ (Ne.symm h)
 
 
+-- A fetch that cannot complete raises the fetch's own fault, and nothing is decoded
+theorem decodeAndExecute_fetch_fault (q : State) (cause : CsrCause)
+    (hf : fetch q = Except.error cause) : decodeAndExecute q = q.fault cause := by
+  simp [decodeAndExecute, hf]
+
+
 -- An instruction word that fails to decode raises an illegal instruction fault
-theorem decodeAndExecute_illegal (q : State)
-    (h : Inst.decUnder (fetch q) (CsrExtns.dec (q.special CsrReg.extns)) = none) :
+theorem decodeAndExecute_illegal (q : State) (w : InstWord) (hf : fetch q = Except.ok w)
+    (h : Inst.decUnder w (CsrExtns.dec (q.special CsrReg.extns)) = none) :
     decodeAndExecute q = q.fault CsrCause.illegalInstruction := by
-  simp [decodeAndExecute, h]
+  simp [decodeAndExecute, hf, h]
 
 
 -- An instruction word that does not raise an illegal instruction fault is the encoding of some
 -- available instruction
-theorem decodeAndExecute_legal_iff (q : State) :
+theorem decodeAndExecute_legal_iff (q : State) (w : InstWord) (hf : fetch q = Except.ok w) :
     Ne (decodeAndExecute q) (q.fault CsrCause.illegalInstruction)
       -> Exists fun i : Inst =>
-           Inst.decUnder (fetch q) (CsrExtns.dec (q.special CsrReg.extns)) = some i
-             /\ i.enc = fetch q := by
+           Inst.decUnder w (CsrExtns.dec (q.special CsrReg.extns)) = some i
+             /\ i.enc = w := by
   intro hne
-  cases hd : Inst.decUnder (fetch q) (CsrExtns.dec (q.special CsrReg.extns)) with
-  | none   => exact absurd (decodeAndExecute_illegal q hd) hne
+  cases hd : Inst.decUnder w (CsrExtns.dec (q.special CsrReg.extns)) with
+  | none   => exact absurd (decodeAndExecute_illegal q w hf hd) hne
   | some i =>
-    have hdec : Inst.dec (fetch q) = some i := by
-      cases hx : Inst.dec (fetch q) with
+    have hdec : Inst.dec w = some i := by
+      cases hx : Inst.dec w with
       | none   => simp [Inst.decUnder, hx] at hd
       | some j =>
         simp only [Inst.decUnder, hx] at hd
         split at hd
         next => exact hd
         next => simp at hd
-    refine Exists.intro i (And.intro ?_ (Inst.enc_dec (fetch q) i hdec))
+    refine Exists.intro i (And.intro ?_ (Inst.enc_dec w i hdec))
     first | exact hd | rfl
 
 

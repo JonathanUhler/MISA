@@ -31,10 +31,6 @@ def effAddr (base : AddrWord) (imm : HalfWord) : Option AddrWord :=
   if wide.getLsbD 16 then none else some (wide.setWidth 16)
 
 
-def inVectorTable (addr : AddrWord) : Bool :=
-  0xFFF0#16 <= addr
-
-
 def executeHalt (q : State) (rs : GpReg) : State :=
   if q.userMode then
     q.fault CsrCause.privilegedInstruction
@@ -47,13 +43,16 @@ def executeSyscall (q : State) (rs : GpReg) : State :=
   if q.inSyscall || q.inInterrupt then
     q.fault (CsrCause.improperSystemCall q.inSyscall q.inInterrupt)
   else
-    let cause : CsrCause := CsrCause.haltInstruction (q.register rs)
-    let target : AddrWord := q.memory 0xFFFB ++ q.memory 0xFFFA
-    let saved : SpecWord := q.special .privs
-    let cleared : SpecWord := q.privsUpdate 0x0000
-    let q := (q.writeSpecial .cause cause.enc).writeSpecial .retsc (q.pc + 2)
-    { (q.writeSpecial .privs cleared)
-      with pc := target, inSyscall := true, syscallPrivs := saved }
+    match linkAddr q.pc with
+    | none      => q.fault (CsrCause.addressOverflow .link)
+    | some link =>
+      let cause : CsrCause := CsrCause.haltInstruction (q.register rs)
+      let target : AddrWord := q.memory 0xFFFB ++ q.memory 0xFFFA
+      let saved : SpecWord := q.special .privs
+      let cleared : SpecWord := q.privsUpdate 0x0000
+      let q := (q.writeSpecial .cause cause.enc).writeSpecial .retsc link
+      { (q.writeSpecial .privs cleared)
+        with pc := target, inSyscall := true, syscallPrivs := saved }
 
 
 def executeAdd (q : State) (rd : GpReg) (rs1 : GpReg) (rs2 : GpReg) : State :=
@@ -114,15 +113,21 @@ def executeLd (q : State) (rd : GpReg) (rsb : GpReg) (imm : HalfWord) : State :=
   match rsb with
   | .rscratch1 =>
     match effAddr (q.special .saddr) imm with
-    | none        => q.fault CsrCause.addressOverflow
+    | none        => q.fault (CsrCause.addressOverflow .saddr)
     | some saddr' =>
-      let q := q.writeSpecial .saddr saddr'
-      (q.writeReg rd (q.memory saddr')).next
+      match q.accessFault .read saddr' with
+      | some cause => q.fault cause
+      | none       =>
+        let q := q.writeSpecial .saddr saddr'
+        (q.writeReg rd (q.memory saddr')).next
   | _ =>
     let lo := (GpReg.dec (rsb.enc + 1)).getD .r0
     match effAddr (q.register rsb ++ q.register lo) imm with
-    | none      => q.fault CsrCause.addressOverflow
-    | some addr => (q.writeReg rd (q.memory addr)).next
+    | none      => q.fault (CsrCause.addressOverflow (.access .read))
+    | some addr =>
+      match q.accessFault .read addr with
+      | some cause => q.fault cause
+      | none       => (q.writeReg rd (q.memory addr)).next
 
 
 def executeSt (q : State) (rd : GpReg) (rsb : GpReg) (imm : HalfWord) : State :=
@@ -130,22 +135,21 @@ def executeSt (q : State) (rd : GpReg) (rsb : GpReg) (imm : HalfWord) : State :=
   | .rscratch1 =>
     let saddr : AddrWord := q.special .saddr
     match effAddr saddr imm with
-    | none        => q.fault CsrCause.addressOverflow
+    | none        => q.fault (CsrCause.addressOverflow .saddr)
     | some saddr' =>
-      if inVectorTable saddr then
-        q.fault (CsrCause.vectorWrite saddr)
-      else
+      match q.accessFault .write saddr with
+      | some cause => q.fault cause
+      | none       =>
         let q := q.writeMem saddr (q.register rd)
         (q.writeSpecial .saddr saddr').next
   | _ =>
     let lo := (GpReg.dec (rsb.enc + 1)).getD .r0
     match effAddr (q.register rsb ++ q.register lo) imm with
-    | none      => q.fault CsrCause.addressOverflow
+    | none      => q.fault (CsrCause.addressOverflow (.access .write))
     | some addr =>
-      if inVectorTable addr then
-        q.fault (CsrCause.vectorWrite addr)
-      else
-        (q.writeMem addr (q.register rd)).next
+      match q.accessFault .write addr with
+      | some cause => q.fault cause
+      | none       => (q.writeMem addr (q.register rd)).next
 
 
 def executeRsr (q : State) (rs1 : GpReg) (rs2 : GpReg) (csr : CsrReg) : State :=
@@ -165,8 +169,11 @@ def executeWsr (q : State) (rs1 : GpReg) (rs2 : GpReg) (csr : CsrReg) : State :=
 
 def executeJal (q : State) (rs1 : GpReg) (rs2 : GpReg) (cmp : CmpFlag) : State :=
   if q.check cmp then
-    let target : AddrWord := q.register rs1 ++ q.register rs2
-    { (q.writeSpecial .raddr (q.pc + 2)) with pc := target }
+    match linkAddr q.pc with
+    | none      => q.fault (CsrCause.addressOverflow .link)
+    | some link =>
+      let target : AddrWord := q.register rs1 ++ q.register rs2
+      { (q.writeSpecial .raddr link) with pc := target }
   else
     q.next
 
@@ -213,7 +220,10 @@ def executeJmpCsr (q : State) (csr : CsrReg) (cmp : CmpFlag) : State :=
 
 def decodeAndExecute (q : State) : State :=
   let extns : CsrExtns := CsrExtns.dec (q.special .extns)
-  match Inst.decUnder (fetch q) extns with
+  match fetch q with
+  | .error cause => q.fault cause
+  | .ok word     =>
+  match Inst.decUnder word extns with
   | none      => q.fault CsrCause.illegalInstruction
   | some inst =>
     match inst with

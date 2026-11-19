@@ -89,7 +89,23 @@ def base64Decode (s : String) : ByteArray :=
   base64DecodeAux s.toList ByteArray.empty
 
 
+def capsRuns (q : State) : List (Nat × Nat × MemCaps) :=
+  let step := fun (acc : List (Nat × Nat × MemCaps)) (i : Nat) =>
+    match q.caps (BitVec.ofNat 16 i) with
+    | none   => acc
+    | some c =>
+      match acc with
+      | (lo, hi, c') :: rest =>
+        if c' == c && hi + 1 == i then (lo, i, c') :: rest else (i, i, c) :: acc
+      | []                   => [(i, i, c)]
+  ((List.range 65536).foldl step []).reverse
+
+
 def State.serialize (q : State) : String :=
+  let capsLines := String.join (capsRuns q |>.map fun (lo, hi, c) =>
+    s!"  0x{toHex 4 lo} - 0x{toHex 4 hi} : {c.name}\n")
+  let mpuLines := String.join (MpuRegion.indices.map fun i =>
+    s!"  {i.toNat} : 0x{toHex 4 (q.mpuRegion i).toNat}\n")
   let specLines := String.join (CsrReg.all.map fun c =>
     s!"  {c.name} : 0x{toHex 4 (q.special c).toNat}\n")
   let regLines := String.join (GpReg.all.map fun r =>
@@ -107,6 +123,10 @@ def State.serialize (q : State) : String :=
   specLines ++
   "registers:\n" ++
   regLines ++
+  "caps:\n" ++
+  capsLines ++
+  "mpu:\n" ++
+  mpuLines ++
   "memory: " ++
   memBase64 q ++ "\n"
 
@@ -116,11 +136,11 @@ structure Parsed where
   scalars   : List (String × String)
   specials  : List (String × String)
   registers : List (String × String)
+  caps      : List (String × String)
+  mpu       : List (String × String)
   memory    : String
 
 
--- Surrounding whitespace removed from a line or field of a state file. String.trimAscii returns a
--- slice rather than a string, so the result is copied back out.
 def trimmed (s : String) : String :=
   s.trimAscii.toString
 
@@ -157,14 +177,21 @@ def parseStateText (content : String) : Parsed :=
           { acc with sect := 1 }
         else if k == "registers" && v.isEmpty then
           { acc with sect := 2 }
+        else if k == "caps" && v.isEmpty then
+          { acc with sect := 3 }
+        else if k == "mpu" && v.isEmpty then
+          { acc with sect := 4 }
         else if k == "memory" then
           { acc with memory := v }
         else
           match acc.sect with
           | 1 => { acc with specials  := acc.specials  ++ [(k, v)] }
           | 2 => { acc with registers := acc.registers ++ [(k, v)] }
+          | 3 => { acc with caps      := acc.caps      ++ [(k, v)] }
+          | 4 => { acc with mpu       := acc.mpu       ++ [(k, v)] }
           | _ => { acc with scalars   := acc.scalars   ++ [(k, v)] })
-    ({ sect := 0, scalars := [], specials := [], registers := [], memory := "" } : Parsed)
+    ({ sect := 0, scalars := [], specials := [], registers := [],
+       caps := [], mpu := [], memory := "" } : Parsed)
 
 
 def State.deserialize (content : String) : Option State := do
@@ -185,10 +212,24 @@ def State.deserialize (content : String) : Option State := do
   let bytes := base64Decode p.memory
   let memFn : AddrWord -> DataWord := fun a =>
     if a.toNat < bytes.size then BitVec.ofNat 8 (bytes.get! a.toNat).toNat else 0
+  let capRegions : MemMap := p.caps.filterMap fun (k, v) =>
+    match k.splitOn "-" with
+    | [a, b] =>
+      match parseNumeral? (trimmed a), parseNumeral? (trimmed b) with
+      | some lo, some hi =>
+        some { lo := BitVec.ofNat 16 lo, hi := BitVec.ofNat 16 hi, caps := MemCaps.ofString v }
+      | _,       _       => none
+    | _      => none
+  let mpuFn : BitVec 2 -> SpecWord := fun i =>
+    match (lookup? p.mpu (toString i.toNat)).bind parseNumeral? with
+    | some n => BitVec.ofNat 16 n
+    | none   => 0x0000#16
   return {
     register     := regFn,
     special      := specFn,
     memory       := memFn,
+    caps         := MemMap.toCaps capRegions,
+    mpuRegion    := mpuFn,
     check        := CsrFlags.eval (CsrFlags.dec (specFn .flags)),
     pc           := BitVec.ofNat 16 pcN,
     inSyscall    := scalarBool p.scalars "inSyscall"   false,

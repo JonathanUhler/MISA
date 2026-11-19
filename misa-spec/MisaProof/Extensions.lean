@@ -78,6 +78,7 @@ theorem csr_availableUnder_monotone (csr : CsrReg) (e1 : CsrExtns) (e2 : CsrExtn
   case retsc => exact hle.2.1 h
   case retir => exact hle.2.2.2 h
   case privs => exact hle.2.2.1 h
+  case mpucf => exact hle.2.2.1 h
   all_goals rfl
 
 
@@ -129,12 +130,13 @@ theorem core_decode_no_syscall (w : InstWord) (i : Inst)
   all_goals rfl
 
 
--- No instruction word decodes to an instruction naming RETSC, RETIR, or PRIVS on a core-only
--- implementation
+-- No instruction word decodes to an instruction naming RETSC, RETIR, PRIVS, or MPUCF on a
+-- core-only implementation
 theorem core_decode_no_extension_csr (w : InstWord) (i : Inst) (csr : CsrReg)
     (hd : Inst.decUnder w (CsrExtns.dec 0x0000#16) = some i)
     (hc : i.csrOperand = some csr) :
-    Ne csr CsrReg.retsc /\ Ne csr CsrReg.retir /\ Ne csr CsrReg.privs := by
+    Ne csr CsrReg.retsc /\ Ne csr CsrReg.retir /\ Ne csr CsrReg.privs
+      /\ Ne csr CsrReg.mpucf := by
   have hav := (decUnder_available w (CsrExtns.dec 0x0000#16) i hd).1
   have hcsr : csr.availableUnder (CsrExtns.dec 0x0000#16) = true := by
     rw [<- availableUnder_eq_csrOperand i (CsrExtns.dec 0x0000#16) csr hc]
@@ -143,7 +145,8 @@ theorem core_decode_no_extension_csr (w : InstWord) (i : Inst) (csr : CsrReg)
   case retsc => simp [CsrReg.availableUnder, CsrExtns.dec] at hcsr
   case retir => simp [CsrReg.availableUnder, CsrExtns.dec] at hcsr
   case privs => simp [CsrReg.availableUnder, CsrExtns.dec] at hcsr
-  all_goals exact And.intro (by decide) (And.intro (by decide) (by decide))
+  case mpucf => simp [CsrReg.availableUnder, CsrExtns.dec] at hcsr
+  all_goals decide
 
 
 -- Only RSR, WSR, and the special register variant of JMP name a special register as an operand, so
@@ -175,52 +178,58 @@ theorem csrOperand_table (i : Inst) :
 
 -- An instruction naming an unavailable special register raises an illegal instruction fault rather
 -- than a privilege fault, because the register is absent rather than protected
-theorem unavailable_csr_is_illegal (q : State) (i : Inst) (csr : CsrReg)
-    (hd : Inst.dec (fetch q) = some i) (hc : i.csrOperand = some csr)
+theorem unavailable_csr_is_illegal (q : State) (w : InstWord) (i : Inst) (csr : CsrReg)
+    (hf : fetch q = Except.ok w)
+    (hd : Inst.dec w = some i) (hc : i.csrOperand = some csr)
     (ha : csr.availableUnder (CsrExtns.dec (q.special CsrReg.extns)) = false) :
     decodeAndExecute q = q.fault CsrCause.illegalInstruction := by
   have hav : i.availableUnder (CsrExtns.dec (q.special CsrReg.extns)) = false := by
     rw [availableUnder_eq_csrOperand i (CsrExtns.dec (q.special CsrReg.extns)) csr hc]
     exact ha
-  have hdu : Inst.decUnder (fetch q) (CsrExtns.dec (q.special CsrReg.extns)) = none := by
+  have hdu : Inst.decUnder w (CsrExtns.dec (q.special CsrReg.extns)) = none := by
     simp [Inst.decUnder, hd, hav]
-  simp [decodeAndExecute, hdu]
+  simp [decodeAndExecute, hf, hdu]
 
 
 -- A SYSCALL encoding raises an illegal instruction fault without the System Call Extension, which
 -- is also what the core architecture requires of its reserved exception bit
 theorem core_syscall_word_is_illegal (q : State) (rs : GpReg)
     (h : (CsrExtns.dec (q.special CsrReg.extns)).syscall = false)
-    (hf : fetch q = (Inst.syscall rs).enc) :
+    (hf : fetch q = Except.ok (Inst.syscall rs).enc) :
     decodeAndExecute q = q.fault CsrCause.illegalInstruction := by
-  have hdec : Inst.dec (fetch q) = some (Inst.syscall rs) := by
-    rw [hf]
-    exact Inst.dec_enc (Inst.syscall rs)
-  have hdu : Inst.decUnder (fetch q) (CsrExtns.dec (q.special CsrReg.extns)) = none := by
+  have hdec : Inst.dec (Inst.syscall rs).enc = some (Inst.syscall rs) :=
+    Inst.dec_enc (Inst.syscall rs)
+  have hdu :
+      Inst.decUnder (Inst.syscall rs).enc (CsrExtns.dec (q.special CsrReg.extns)) = none := by
     simp [Inst.decUnder, hdec, Inst.availableUnder, h]
-  simp [decodeAndExecute, hdu]
+  simp [decodeAndExecute, hf, hdu]
 
 
--- RETSC, RETIR, and PRIVS are available under the System Call, Interrupt, and Privilege Extensions
--- respectively, and every other special register is always available
+-- RETSC and RETIR are available under the System Call and Interrupt Extensions respectively, PRIVS
+-- and MPUCF are available under the Privilege Extension, and every other special register is
+-- always available
 theorem availableUnder_table (csr : CsrReg) (e : CsrExtns) :
     csr.availableUnder e
       = match csr with
         | .retsc => e.syscall
         | .retir => e.interrupt
         | .privs => e.privilege
+        | .mpucf => e.privilege
         | _      => true := by
   cases csr <;> rfl
 
 
--- Every special register other than RETSC, RETIR, and PRIVS is available under any extension set
+-- Every special register other than RETSC, RETIR, PRIVS, and MPUCF is available under any
+-- extension set
 theorem core_csrs_always_available (csr : CsrReg) (e : CsrExtns)
-    (h : Ne csr CsrReg.retsc /\ Ne csr CsrReg.retir /\ Ne csr CsrReg.privs) :
+    (h : Ne csr CsrReg.retsc /\ Ne csr CsrReg.retir /\ Ne csr CsrReg.privs
+         /\ Ne csr CsrReg.mpucf) :
     csr.availableUnder e = true := by
   cases csr
   case retsc => exact absurd rfl h.1
   case retir => exact absurd rfl h.2.1
-  case privs => exact absurd rfl h.2.2
+  case privs => exact absurd rfl h.2.2.1
+  case mpucf => exact absurd rfl h.2.2.2
   all_goals rfl
 
 

@@ -15,7 +15,6 @@ decisions:
 
 - `SADDR` is 16 bits, `FLAGS` is 4 bits, `PRIVS` is 1 bit, and `EXTNS` is 4 bits.
 - The entire 16-bit address space is mapped.
-- No memory protection unit is provided.
 - Every architecture extension is supported, including the Dynamic Hardware Extension.
 
 There are two primary modes of operation when using `misa-spec`.

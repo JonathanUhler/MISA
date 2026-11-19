@@ -44,14 +44,50 @@ theorem ne_of_inVectorTable (a : AddrWord) (b : AddrWord)
   exact absurd ha hb
 
 
+-- No store into the reset vector table is ever permitted to proceed. This holds in either
+-- privilege level, under any set of extensions, and whatever the memory map provides there: the
+-- vector test sits inside the access check, so every path through it yields a fault.
+theorem accessFault_vector_isSome (q : State) (a : AddrWord) (hv : inVectorTable a = true) :
+    Exists fun cause : CsrCause => q.accessFault AccessKind.write a = some cause := by
+  simp only [State.accessFault]
+  split
+  next => exact Exists.intro _ rfl
+  next =>
+    cases hc : q.caps a with
+    | none   => exact Exists.intro _ rfl
+    | some c => exact Exists.intro (CsrCause.vectorWrite a)
+                  (by simp [AccessKind.isVectorWrite, hv])
+
+
+-- A store that the access check allows is therefore not a store into the reset vector table
+theorem accessFault_none_not_vector (q : State) (a : AddrWord)
+    (h : q.accessFault AccessKind.write a = none) : Not (inVectorTable a = true) := by
+  intro hv
+  cases accessFault_vector_isSome q a hv with
+  | intro cause hc => rw [hc] at h; exact absurd h (by simp)
+
+
+-- Where the map provides memory and the MPU permits the write, the fault reported for a store
+-- into the table is the vector write. The ordering puts it ahead of an invalid access, which is
+-- what an implementation holding its vector table in read only memory would otherwise report.
+theorem accessFault_vectorWrite (q : State) (a : AddrWord) (hv : inVectorTable a = true)
+    (hmpu : (q.mpuCaps a).allows AccessKind.write = true)
+    (hmapped : Exists fun c : MemCaps => q.caps a = some c) :
+    q.accessFault AccessKind.write a = some (CsrCause.vectorWrite a) := by
+  cases hmapped with
+  | intro c hc => simp [State.accessFault, AccessKind.isVectorWrite, hmpu, hc, hv]
+
+
 -- A stack ST whose stack address is in the reset vector table raises a vector write fault naming
 -- the address it would have written
 theorem st_stack_vector_fault (q : State) (rd : GpReg) (imm : HalfWord) (s : AddrWord)
     (hv : inVectorTable (q.special CsrReg.saddr) = true)
+    (hmpu : (q.mpuCaps (q.special CsrReg.saddr)).allows AccessKind.write = true)
+    (hmapped : Exists fun c : MemCaps => q.caps (q.special CsrReg.saddr) = some c)
     (h : effAddr (q.special CsrReg.saddr) imm = some s) :
     executeSt q rd GpReg.rscratch1 imm
       = q.fault (CsrCause.vectorWrite (q.special CsrReg.saddr)) := by
-  simp [executeSt, h, hv]
+  simp [executeSt, h, accessFault_vectorWrite q _ hv hmpu hmapped]
 
 
 -- A register-based ST whose effective address is in the reset vector table raises a vector write
@@ -60,13 +96,15 @@ theorem st_base_vector_fault (q : State) (rd : GpReg) (rsb : GpReg) (lo : GpReg)
     (addr : AddrWord) (hrsb : Ne rsb GpReg.rscratch1)
     (hlo : lo = (GpReg.dec (rsb.enc + 1)).getD GpReg.r0)
     (h : effAddr (q.register rsb ++ q.register lo) imm = some addr)
-    (hv : inVectorTable addr = true) :
+    (hv : inVectorTable addr = true)
+    (hmpu : (q.mpuCaps addr).allows AccessKind.write = true)
+    (hmapped : Exists fun c : MemCaps => q.caps addr = some c) :
     executeSt q rd rsb imm = q.fault (CsrCause.vectorWrite addr) := by
   subst hlo
   cases rsb
   case rscratch1 => exact absurd rfl hrsb
   all_goals
-    simp only [executeSt, h, hv, ite_true]
+    simp only [executeSt, h, accessFault_vectorWrite q _ hv hmpu hmapped]
 
 
 -- A ST into the reset vector table records a vector write in CAUSE and enters the fault handler
@@ -88,8 +126,10 @@ theorem st_stack_vector_no_effect (q : State) (rd : GpReg) (imm : HalfWord)
   split
   next => exact And.intro (fault_frame q _).2.2.2.1 (fault_frame q _).2.1
   next =>
-    simp only [hv, ite_true]
-    exact And.intro (fault_frame q _).2.2.2.1 (fault_frame q _).2.1
+    cases accessFault_vector_isSome q (q.special CsrReg.saddr) hv with
+    | intro cause hc =>
+      simp only [hc]
+      exact And.intro (fault_frame q _).2.2.2.1 (fault_frame q _).2.1
 
 
 -- Every ST leaves the reset vector table unchanged, whichever variant it is and wherever it points
@@ -101,7 +141,8 @@ theorem st_preserves_vectors (q : State) (rd : GpReg) (rsb : GpReg) (imm : HalfW
   all_goals first
     | exact (fault_frame _ _).2.1 a
     | (simp only [next_memory, State.writeSpecial_memory]
-       exact State.writeMem_other _ _ a _ (ne_of_inVectorTable a _ h (by assumption)))
+       exact State.writeMem_other _ _ a _
+         (ne_of_inVectorTable a _ h (accessFault_none_not_vector _ _ (by assumption))))
 
 
 -- Executing a decoded instruction leaves the reset vector table unchanged. Every instruction is
@@ -111,22 +152,26 @@ theorem decodeAndExecute_preserves_vectors (q : State) (a : AddrWord)
     (h : inVectorTable a = true) :
     (decodeAndExecute q).memory a = q.memory a := by
   simp only [decodeAndExecute]
+  -- a fetch that faults, then a word that fails to decode, then every instruction
   split
   next => exact (fault_frame q _).2.1 a
   next =>
     split
-    all_goals first
-      | exact st_preserves_vectors q _ _ _ a h
-      | exact ld_preserves_memory q _ _ _ a
-      | (simp only [executeHalt, executeSyscall, executeAdd, executeAdc, executeSub, executeSbb,
-                    executeAnd, executeOr, executeXor, executeRrc, executeSet, executeRsr,
-                    executeWsr, executeJal, executeJmp, executeJmpCsr]
-         repeat (any_goals split)
-         all_goals first
-           | rfl
-           | exact (fault_frame _ _).2.1 a
-           | simp [next_memory, State.writeReg_memory, State.writeSpecial_memory,
-                   State.writeFlags])
+    next => exact (fault_frame q _).2.1 a
+    next =>
+      split
+      all_goals first
+        | exact st_preserves_vectors q _ _ _ a h
+        | exact ld_preserves_memory q _ _ _ a
+        | (simp only [executeHalt, executeSyscall, executeAdd, executeAdc, executeSub, executeSbb,
+                      executeAnd, executeOr, executeXor, executeRrc, executeSet, executeRsr,
+                      executeWsr, executeJal, executeJmp, executeJmpCsr]
+           repeat (any_goals split)
+           all_goals first
+             | rfl
+             | exact (fault_frame _ _).2.1 a
+             | simp [next_memory, State.writeReg_memory, State.writeSpecial_memory,
+                     State.writeFlags])
 
 
 -- Fetching and executing leaves the reset vector table unchanged
@@ -207,11 +252,11 @@ theorem runN_preserves_vector_table (pin : Nat -> Bool) (n : Nat) (q : State) :
 
 -- Reset reads the vector table out of the program image, so the handler addresses a run can reach
 -- are exactly the ones the image was built with
-theorem runN_vectors_eq_image (bytes : ByteArray) (extns : SpecWord) (pin : Nat -> Bool) (n : Nat)
-    (a : AddrWord) (h : inVectorTable a = true) :
-    (State.runN pin n (State.first bytes extns)).memory a
-      = (State.first bytes extns).memory a :=
-  runN_preserves_vectors pin n (State.first bytes extns) a h
+theorem runN_vectors_eq_image (bytes : ByteArray) (extns : SpecWord) (map : MemMap)
+    (pin : Nat -> Bool) (n : Nat) (a : AddrWord) (h : inVectorTable a = true) :
+    (State.runN pin n (State.first bytes extns map)).memory a
+      = (State.first bytes extns map).memory a :=
+  runN_preserves_vectors pin n (State.first bytes extns map) a h
 
 
 end MisaSpec

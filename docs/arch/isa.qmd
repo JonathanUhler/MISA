@@ -344,11 +344,12 @@ valid Type fields are:
 #### `CAUSE` Reason: Memory Usage
 The exception cause is related to the use of an address or memory operation. The valid Type fields
 are as follows. Bits 0-2 in the extended status fields for all Types except "PC overflow" MUST be
-one-hot vectors indicating the kind of memory access that the fault describes.
+one-hot vectors indicating the kind of memory access that the fault describes, except for "Address
+overflow", where bits 0-4 are a one-hot vector (bit 3 or bit 4 MUST take precedence over bits 0-2).
 
 | Type | Encoding | Commentary |
 |-------------------|----------|----------------------------------------------------------------------------------------------|
-| Address overflow | 000 | The computation of an address left the range it is required to stay within, either because an effective address left the 16-bit address range or because a stack operation caused `SADDR` to overflow or underflow its implemented width. The extended status is set as follows: bit 0 = execute was attempted, bit 1 = write was attempted, bit 2 = read was attempted, bit 3 = the bound which was exceeded was the implemented width of `SADDR` rather than the 16-bit address range, bits 4-7 = reserved. |
+| Address overflow | 000 | The computation of an address left the range it is required to stay within, either because an effective address left the 16-bit address range (including link-register calculations) or because a stack operation caused `SADDR` to overflow or underflow its implemented width. The extended status is set as follows: bit 0 = execute was attempted, bit 1 = write was attempted, bit 2 = read was attempted, bit 3 = a stack operation caused `SADDR` to overflow or underflow its implemented width, bit 4 = a link-register calculation overflowed or underflowed the 16-bit address range, bits 5-7 = reserved. |
 | PC overflow | 001 | The program counter overflowed an unsigned 16-bit value. Extended status is not used. |
 | Privileged access | 010 | An access to memory was attempted while in User Mode (under Privilege Extension) without the appropriate permissions in the MPU regions. The extended status is set as follows: bit 0 = execute was attempted, bit 1 = write was attempted, bit 2 = read was attempted, bits 3-7 = reserved. |
 | Vector write | 011 | A `ST` instruction attempted to write an address between `0xFFF0` and `0xFFFF`, inclusive, which is the reset vector table. The extended status is set as follows: bits 0-2 = `0b010`, bit 3 = reserved, bits 4-7 = the low nibble of the address the store would have written. |
@@ -531,9 +532,8 @@ out of reset, the program counter MUST be initialized to the address stored in m
 
 The reset vector table MUST never be writable by any software, in any privilege level and under any
 set of extensions. If a `ST` instruction attempts to write an address in the range `0xFFF0 -
-0xFFFF`, a fault MUST occur with the `CAUSE` Reason "Memory usage" and the `CAUSE` Type "Vector
-write". The write MUST be ignored, and `SADDR` MUST not be updated (if executing the stack variant
-of `ST`).
+0xFFFF`, the appropriate "Memory usage" fault MUST occur, and `SADDR` MUST not be updated (if
+executing the stack variant of `ST`).
 
 The address this fault tests is the address the store would write, which is not always the effective
 address. For the register base variant of `ST` the two are the same. For the stack variant the store
@@ -557,6 +557,13 @@ The reset vector table contains the following function pointers:
 
 Every vector in this table stores its address as little-endian, with the low byte at the lower of
 the two addresses.
+
+The vector table SHOULD always be mapped and capable of being read. If a vector address cannot be
+read (e.g. because it is in unmapped memory), the appropriate "Memory usage" fault MUST occur. In
+such a case, the `FAULT` register MUST be set to the lower address of the vector (e.g. `0xFFFE`
+for the reset handler). If the fault handler address itself cannot be read, the processor MUST
+recursively attempt to retrigger the fault - if the address never becomes readable, the processor
+will be unable to do anything.
 
 ### Recommended Memory Map
 
@@ -615,8 +622,6 @@ When the processor is taken out of the reset state, some internal state MUST be 
 - Every special register must be reset to the value `0x0000`, except `EXTNS` which may have a
   non-zero value specifying the set of architecture extensions that are initially (or always)
   enabled.
-- The reset vector address stored in memory at `0xFFFE - 0xFFFF` MUST be read and used to initialize
-  the program counter.
 - If the System Call Extension is enabled, the processor must not be initialized to a system call
   context on reset.
 - If the Interrupt Extension is enabled, the processor must not be initialized to an interrupt
@@ -626,6 +631,9 @@ When the processor is taken out of the reset state, some internal state MUST be 
   next asserted.
 - If the Privilege Extension is supported (even if the extension is not enabled on reset), all four
   MPU regions MUST initialize with no User Mode permissions.
+- The reset vector address stored in memory at `0xFFFE - 0xFFFF` MUST be read and used to initialize
+  the program counter. The reset vector MUST be read after all the above initialization steps are
+  complete. The other steps are unordered.
 
 ## Faults
 
@@ -651,7 +659,10 @@ not specific to any one instruction and MUST be detected for every instruction:
 
 Instruction fetches require loading two bytes from memory. If a fault occurs during either fetch,
 the processor MUST handle the fault according to its type, and discard the partially-fetched
-instruction word.
+instruction word. The processor MUST behave as if the low byte of an instruction word is fetched
+first, and take that fault if fetching both bytes of the instruction word would each cause a
+(potentially different) fault. The exception is "PC overflow", which takes precedence over any other
+fault from either byte of the instruction word.
 
 The faults which are specific to individual instructions are enumerated under the "Faults" label of
 each instruction in the Base Instructions section.
@@ -662,11 +673,12 @@ program counter to the fault vector address stored in memory at `0xFFFC - 0xFFFD
 then continue in the fault handler, which is software-defined and MAY attempt recovery, dump
 diagnostic information, or simply halt.
 
-For every fault other than a PC overflow, the program counter at the time of the fault is the
-address of the instruction which caused it. A PC overflow raised by a sequential increment records
-the address of the last instruction before the overflowing PC value. A PC overflow raised by a
-program counter of `0xFFFF` records `0xFFFF`, the address at which an instruction word could not be
-fetched.
+For every fault other than a PC overflow or failure to read a vector table address, the program
+counter at the time of the fault is the address of the instruction which caused it. A PC overflow
+raised by a sequential increment records the address of the last instruction before the overflowing
+PC value. A PC overflow raised by a program counter of `0xFFFF` records `0xFFFF`, the address at
+which an instruction word could not be fetched. A vector table address which cannot be read records
+the lower address of the vector.
 
 A fault which is detected before or during the execution of an instruction MUST leave the processor
 state unchanged apart from `CAUSE`, `FAULT`, `PRIVS.R`, and the program counter. The exception is a
@@ -1215,6 +1227,10 @@ If (Check[CMP]) {
 }
 ```
 
+Faults:
+
+- "Address overflow" if the computed value of `RADDR` leaves the 16-bit address range.
+
 ### `JMP`
 `JMP` has two variants depending on the branch target. The most significant bit of the instruction
 encoding identifies the target source.
@@ -1631,6 +1647,7 @@ If (E == 0b1) {
 
 Faults:
 
+- "Address overflow" if the computed value of `RETSC` leaves the 16-bit address range.
 - "Privileged instruction" if `E` is `0` and the instruction is executed in User Mode under the
   Privilege Extension, as described for `HALT`.
 - "Improper system call" if `E` is `1` and the processor is already in a system call context or in

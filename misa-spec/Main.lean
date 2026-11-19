@@ -34,14 +34,35 @@ def runFrom (q0 : State) (stepsArg : String) (ints : List Nat) : IO UInt32 := do
     | none   => return 1
 
 
+def readMemMap (mapPath : String) : IO (Option MemMap) := do
+  if mapPath == "-" then
+    return some []
+  else
+    let content ← IO.FS.readFile (⟨mapPath⟩ : System.FilePath)
+    match parseMemMap content with
+    | .ok map    => return some map
+    | .error err => do
+      IO.eprintln s!"{mapPath}: {err}"
+      return none
+
+
+def runQ0 (memPath : String) (stepsArg : String) (extnsArg : String) (intsArg : String)
+    (mapPath : String) : IO UInt32 := do
+  match parseNumeral? extnsArg, parseIntSteps? intsArg with
+  | some e, some ints =>
+    let bytes ← IO.FS.readBinFile (⟨memPath⟩ : System.FilePath)
+    match ← readMemMap mapPath with
+    | none     => return 1
+    | some map => runFrom (State.first bytes (BitVec.ofNat 16 e) map) stepsArg ints
+  | _,      _         => return 1
+
+
 def main (args : List String) : IO UInt32 := do
   match args with
   | ["q0", memPath, stepsArg, extnsArg, intsArg] =>
-    match parseNumeral? extnsArg, parseIntSteps? intsArg with
-    | some e, some ints =>
-      let bytes ← IO.FS.readBinFile (⟨memPath⟩ : System.FilePath)
-      runFrom (State.first bytes (BitVec.ofNat 16 e)) stepsArg ints
-    | _,      _         => return 1
+    runQ0 memPath stepsArg extnsArg intsArg "-"
+  | ["q0", memPath, stepsArg, extnsArg, intsArg, mapPath] =>
+    runQ0 memPath stepsArg extnsArg intsArg mapPath
   | ["qi", statePath, stepsArg, intsArg] =>
     match parseIntSteps? intsArg with
     | none      => return 1

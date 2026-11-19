@@ -4,6 +4,8 @@ import MisaSpec.Basic
 import MisaSpec.CmpFlag
 import MisaSpec.CsrReg
 import MisaSpec.GpReg
+import MisaSpec.MemMap
+import MisaSpec.Mpu
 import MisaSpec.State
 import MisaSpec.Inst
 import MisaSpec.Fetch
