@@ -562,8 +562,8 @@ The vector table SHOULD always be mapped and capable of being read. If a vector 
 read (e.g. because it is in unmapped memory), the appropriate "Memory usage" fault MUST occur. In
 such a case, the `FAULT` register MUST be set to the lower address of the vector (e.g. `0xFFFE`
 for the reset handler). If the fault handler address itself cannot be read, the processor MUST
-recursively attempt to retrigger the fault - if the address never becomes readable, the processor
-will be unable to do anything.
+set `CAUSE` and `FAULT` for the "Memory usage" error that occurred, and then the procssor MUST
+halt.
 
 ### Recommended Memory Map
 
