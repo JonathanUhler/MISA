@@ -75,32 +75,54 @@ def State.mpuCaps (q : State) (a : AddrWord) : MemCaps :=
   if q.userMode then Mpu.caps q.mpuRegion a else MemCaps.rwx
 
 
+def State.mapFault (q : State) (acc : AccessKind) (a : AddrWord) : Option CsrCause :=
+  match q.caps a with
+  | none   => some (CsrCause.unmappedAddress acc)
+  | some c =>
+    if acc.isVectorWrite a then
+      some (CsrCause.vectorWrite a)
+    else if c.allows acc then
+      none
+    else
+      some (CsrCause.invalidAccess acc)
+
+
 def State.accessFault (q : State) (acc : AccessKind) (a : AddrWord) : Option CsrCause :=
   if !((q.mpuCaps a).allows acc) then
     some (CsrCause.privilegedAccess acc)
   else
-    match q.caps a with
-    | none   => some (CsrCause.unmappedAddress acc)
-    | some c =>
-      if acc.isVectorWrite a then
-        some (CsrCause.vectorWrite a)
-      else if c.allows acc then
-        none
-      else
-        some (CsrCause.invalidAccess acc)
+    q.mapFault acc a
+
+
+def State.readVector (q : State) (lo : AddrWord) : Except CsrCause AddrWord :=
+  match q.mapFault .read lo with
+  | some cause => .error cause
+  | none       =>
+    match q.mapFault .read (lo + 1) with
+    | some cause => .error cause
+    | none       => .ok (q.memory (lo + 1) ++ q.memory lo)
 
 
 def State.privsUpdate (q : State) (v : SpecWord) : SpecWord :=
   if (CsrExtns.dec (q.special .extns)).privilege then v else q.special .privs
 
 
-def State.fault (q : State) (cause : CsrCause) : State :=
+def State.faultAt (q : State) (cause : CsrCause) (loc : AddrWord) : State :=
   let cleared : SpecWord := q.privsUpdate 0x0000
-  let q := ((q.writeSpecial .cause cause.enc).writeSpecial .privs cleared).writeSpecial .fault q.pc
-  { q with pc := q.memory 0xFFFD ++ q.memory 0xFFFC }
+  match q.readVector 0xFFFC with
+  | .ok target =>
+    let q := ((q.writeSpecial .cause cause.enc).writeSpecial .privs cleared).writeSpecial .fault loc
+    { q with pc := target }
+  | .error c   =>
+    let q := ((q.writeSpecial .cause c.enc).writeSpecial .privs cleared).writeSpecial .fault 0xFFFC
+    { q with halted := true }
 
 
-def State.first (bytes : ByteArray) (extns : SpecWord) (map : MemMap) : State :=
+def State.fault (q : State) (cause : CsrCause) : State :=
+  q.faultAt cause q.pc
+
+
+def State.init (bytes : ByteArray) (extns : SpecWord) (map : MemMap) : State :=
   let mem : AddrWord -> DataWord := fun a =>
     let i := a.toNat
     if i < bytes.size then BitVec.ofNat 8 (bytes.get! i).toNat else 0
@@ -111,7 +133,7 @@ def State.first (bytes : ByteArray) (extns : SpecWord) (map : MemMap) : State :=
     caps         := MemMap.toCaps map,
     mpuRegion    := fun _ => 0x0000#16,
     check        := CsrFlags.eval (CsrFlags.dec 0x0000#16),
-    pc           := mem 0xFFFF ++ mem 0xFFFE,
+    pc           := 0x0000#16,
     inSyscall    := false,
     inInterrupt  := false,
     intPending   := false,
@@ -120,6 +142,13 @@ def State.first (bytes : ByteArray) (extns : SpecWord) (map : MemMap) : State :=
     syscallPrivs := 0x0000#16,
     intPrivs     := 0x0000#16,
     halted       := false }
+
+
+def State.first (bytes : ByteArray) (extns : SpecWord) (map : MemMap) : State :=
+  let q := State.init bytes extns map
+  match q.readVector 0xFFFE with
+  | .ok target => { q with pc := target }
+  | .error c   => q.faultAt c 0xFFFE
 
 
 def State.next (q : State) : State :=
@@ -137,13 +166,16 @@ def State.canInterrupt (q : State) : Bool :=
 def State.interrupt (q : State) : State :=
   let saved : SpecWord := q.special .privs
   let cleared : SpecWord := q.privsUpdate 0x0000
-  { ((q.writeSpecial .retir q.pc).writeSpecial .privs cleared) with
-    intRscratch := q.register .rscratch0 ++ q.register .rscratch1,
-    intFlags    := q.special .flags,
-    intPrivs    := saved,
-    inInterrupt := true,
-    intPending  := false,
-    pc          := q.memory 0xFFF9 ++ q.memory 0xFFF8 }
+  match q.readVector 0xFFF8 with
+  | .ok target =>
+    { ((q.writeSpecial .retir q.pc).writeSpecial .privs cleared) with
+      intRscratch := q.register .rscratch0 ++ q.register .rscratch1,
+      intFlags    := q.special .flags,
+      intPrivs    := saved,
+      inInterrupt := true,
+      intPending  := false,
+      pc          := target }
+  | .error c   => { q with intPending := false }.faultAt c 0xFFF8
 
 
 end MisaSpec

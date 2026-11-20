@@ -46,13 +46,15 @@ def executeSyscall (q : State) (rs : GpReg) : State :=
     match linkAddr q.pc with
     | none      => q.fault (CsrCause.addressOverflow .link)
     | some link =>
-      let cause : CsrCause := CsrCause.haltInstruction (q.register rs)
-      let target : AddrWord := q.memory 0xFFFB ++ q.memory 0xFFFA
-      let saved : SpecWord := q.special .privs
-      let cleared : SpecWord := q.privsUpdate 0x0000
-      let q := (q.writeSpecial .cause cause.enc).writeSpecial .retsc link
-      { (q.writeSpecial .privs cleared)
-        with pc := target, inSyscall := true, syscallPrivs := saved }
+      match q.readVector 0xFFFA with
+      | .error c   => q.faultAt c 0xFFFA
+      | .ok target =>
+        let cause : CsrCause := CsrCause.haltInstruction (q.register rs)
+        let saved : SpecWord := q.special .privs
+        let cleared : SpecWord := q.privsUpdate 0x0000
+        let q := (q.writeSpecial .cause cause.enc).writeSpecial .retsc link
+        { (q.writeSpecial .privs cleared)
+          with pc := target, inSyscall := true, syscallPrivs := saved }
 
 
 def executeAdd (q : State) (rd : GpReg) (rs1 : GpReg) (rs2 : GpReg) : State :=

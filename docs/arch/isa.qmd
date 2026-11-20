@@ -562,8 +562,17 @@ The vector table SHOULD always be mapped and capable of being read. If a vector 
 read (e.g. because it is in unmapped memory), the appropriate "Memory usage" fault MUST occur. In
 such a case, the `FAULT` register MUST be set to the lower address of the vector (e.g. `0xFFFE`
 for the reset handler). If the fault handler address itself cannot be read, the processor MUST
-set `CAUSE` and `FAULT` for the "Memory usage" error that occurred, and then the procssor MUST
-halt.
+set `CAUSE` and `FAULT` for the "Memory usage" error that occurred, and then the processor MUST
+halt. If the interrupt handler address (under the Interrupt Extension) cannot be read when an
+interrupt occurs, the processor MUST discard the interrupt, and then handle the vector-read memory
+fault. When the processor halts in this way, the `CAUSE` and `FAULT` values describe the failed
+vector read, so the fault which led to it cannot be recovered from those registers.
+
+A vector table read is performed in Machine Mode, because the processor sets `PRIVS.R` to 0 before
+it reads the vector. The MPU region configuration therefore MUST NOT be consulted for a vector
+read, and the only faults such a read can raise are "Unmapped address" and "Invalid access". A
+vector occupies two addresses, and the processor MUST behave as if the lower address is read first,
+so a vector whose two bytes would raise different faults reports the fault of its lower byte.
 
 ### Recommended Memory Map
 
@@ -635,6 +644,11 @@ When the processor is taken out of the reset state, some internal state MUST be 
   the program counter. The reset vector MUST be read after all the above initialization steps are
   complete. The other steps are unordered.
 
+If the reset vector cannot be read, the fault described in the Required Memory Regions subsection
+occurs, and the processor MUST begin execution in the fault handler rather than at the reset
+handler. If the fault handler address cannot be read either, the processor MUST halt without
+executing any instruction.
+
 ## Faults
 
 Fault conditions occur when something goes wrong during program execution. Some fault conditions are
@@ -680,15 +694,19 @@ PC value. A PC overflow raised by a program counter of `0xFFFF` records `0xFFFF`
 which an instruction word could not be fetched. A vector table address which cannot be read records
 the lower address of the vector.
 
-A fault which is detected before or during the execution of an instruction MUST leave the processor
-state unchanged apart from `CAUSE`, `FAULT`, `PRIVS.R`, and the program counter. The exception is a
-PC overflow raised by a sequential increment, which is detected only after the instruction has
-completed. In that case, the effects of the instruction MUST be retained.
+A fault MUST leave the processor state unchanged apart from `CAUSE`, `FAULT`, `PRIVS.R`, and the
+program counter. This applies both to a fault detected before or during the execution of an
+instruction, and to a fault detected while the processor is entering a handler, in which case the
+entry MUST be discarded along with the rest of the event that raised the fault. An interrupt whose
+handler address cannot be read therefore leaves `RETIR`, the automatically saved `RSCRATCH0`,
+`RSCRATCH1`, and `FLAGS`, and the interrupt context as they were. The exception is a PC overflow
+raised by a sequential increment, which is detected only after the instruction has completed. In
+that case, the effects of the instruction MUST be retained.
 
 A fault MUST NOT change whether the processor is in a system call context or an interrupt context.
-The fault handler executes in whichever context the faulting instruction was in. Because being in an
-interrupt context is what masks interrupts, a fault which occurs inside an interrupt context leaves
-interrupts masked for the duration of the fault handler.
+The fault handler executes in whichever context the processor was in when the fault was detected.
+Because being in an interrupt context is what masks interrupts, a fault which occurs inside an
+interrupt context leaves interrupts masked for the duration of the fault handler.
 
 ## Exceptions and Interrupts
 

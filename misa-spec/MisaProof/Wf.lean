@@ -4,18 +4,33 @@ import MisaProof.Encoding
 namespace MisaSpec
 
 
--- A state in which R0 reads as zero, every reserved special register bit reads as zero, and the
--- cached check function agrees with the FLAGS special register
+-- A state in which R0 reads as zero, every reserved special register bit reads as zero, the cached
+-- check function agrees with the FLAGS special register, and MPUCF holds the region register its
+-- own index field selects. The last is what makes a read of MPUCF report the region the MPU is
+-- enforcing, since MPUCF is a window onto the region registers rather than a register of its own.
 structure State.WF (q : State) : Prop where
   zeroReg   : q.register GpReg.r0 = 0x00#8
   csrMasked : forall c : CsrReg, q.special c &&& ~~~ c.writeMask = 0x0000#16
   checkSync : forall f : CmpFlag,
     q.check f = CsrFlags.eval (CsrFlags.dec (q.special CsrReg.flags)) f
+  mpuWindow : q.special CsrReg.mpucf
+    = q.mpuRegion (MpuRegion.dec (q.special CsrReg.mpucf)).index
 
 
 -- In a well-formed state the ALWAYS comparison is taken
 theorem State.WF.check_always (q : State) (h : q.WF) : q.check CmpFlag.always = true := by
   simp [h.checkSync CmpFlag.always, CsrFlags.eval]
+
+
+-- The MPUCF window invariant constrains only MPUCF and the region registers, so an update which
+-- leaves those alone carries it over
+theorem State.mpuWindow_of (q : State) (q' : State) (h : q.WF)
+    (hs : q'.special CsrReg.mpucf = q.special CsrReg.mpucf)
+    (hr : forall i : BitVec 2, q'.mpuRegion i = q.mpuRegion i) :
+    q'.special CsrReg.mpucf
+      = q'.mpuRegion (MpuRegion.dec (q'.special CsrReg.mpucf)).index := by
+  rw [hs, hr]
+  exact h.mpuWindow
 
 
 -- A register write to R0 leaves the state unchanged
@@ -135,6 +150,28 @@ theorem State.writeSpecial_int_frame (q : State) (c : CsrReg) (v : SpecWord) :
   all_goals exact And.intro rfl (And.intro rfl (And.intro rfl (And.intro rfl rfl)))
 
 
+-- Taking a fault leaves the interrupt save slots, the system call slot, and the pending interrupt
+-- flag unchanged, on both of the paths a fault can take
+theorem State.faultAt_int_frame (q : State) (c : CsrCause) (loc : AddrWord) :
+    (q.faultAt c loc).intPending = q.intPending
+      /\ (q.faultAt c loc).intRscratch = q.intRscratch
+      /\ (q.faultAt c loc).intFlags = q.intFlags
+      /\ (q.faultAt c loc).intPrivs = q.intPrivs
+      /\ (q.faultAt c loc).syscallPrivs = q.syscallPrivs := by
+  simp only [State.faultAt]
+  split
+  all_goals exact And.intro rfl (And.intro rfl (And.intro rfl (And.intro rfl rfl)))
+
+
+theorem State.fault_int_frame (q : State) (c : CsrCause) :
+    (q.fault c).intPending = q.intPending
+      /\ (q.fault c).intRscratch = q.intRscratch
+      /\ (q.fault c).intFlags = q.intFlags
+      /\ (q.fault c).intPrivs = q.intPrivs
+      /\ (q.fault c).syscallPrivs = q.syscallPrivs :=
+  State.faultAt_int_frame q c q.pc
+
+
 -- Advancing the program counter leaves the interrupt save slots, the system call slot, and the
 -- pending interrupt flag unchanged, whether or not it overflows into a fault
 theorem State.next_int_frame (q : State) :
@@ -143,7 +180,7 @@ theorem State.next_int_frame (q : State) :
       /\ (State.next q).intFlags = q.intFlags
       /\ (State.next q).intPrivs = q.intPrivs
       /\ (State.next q).syscallPrivs = q.syscallPrivs := by
-  simp only [State.next, State.fault, State.writeSpecial]
+  simp only [State.next, State.fault, State.faultAt, State.writeSpecial]
   repeat (any_goals split)
   all_goals exact And.intro rfl (And.intro rfl (And.intro rfl (And.intro rfl rfl)))
 
@@ -216,16 +253,16 @@ theorem State.writeSpecial_register (q : State) (c : CsrReg) (v : SpecWord) (r :
 -- a fault
 theorem State.next_register (q : State) (r : GpReg) :
     (State.next q).register r = q.register r := by
-  simp only [State.next]
-  split
+  simp only [State.next, State.fault, State.faultAt]
+  repeat (any_goals split)
   all_goals rfl
 
 
 -- Advancing the program counter leaves every comparison unchanged
 theorem State.next_check (q : State) (cmp : CmpFlag) :
     (State.next q).check cmp = q.check cmp := by
-  simp only [State.next]
-  split
+  simp only [State.next, State.fault, State.faultAt]
+  repeat (any_goals split)
   all_goals rfl
 
 
@@ -233,8 +270,8 @@ theorem State.next_check (q : State) (cmp : CmpFlag) :
 -- CAUSE, PRIVS, and FAULT
 theorem State.next_flags (q : State) :
     (State.next q).special CsrReg.flags = q.special CsrReg.flags := by
-  simp only [State.next]
-  split
+  simp only [State.next, State.fault, State.faultAt]
+  repeat (any_goals split)
   all_goals rfl
 
 
@@ -246,7 +283,8 @@ theorem State.writeReg_wf (q : State) (r : GpReg) (v : DataWord) (h : q.WF) :
   all_goals exact
     { zeroReg   := by simp [State.writeReg, GpReg.enc, h.zeroReg],
       csrMasked := h.csrMasked,
-      checkSync := h.checkSync }
+      checkSync := h.checkSync,
+      mpuWindow := h.mpuWindow }
 
 
 -- A flags write preserves well-formedness, since it refreshes the cached check function alongside
@@ -260,6 +298,9 @@ theorem State.writeFlags_wf (q : State) (f : CsrFlags) (h : q.WF) : (q.writeFlag
     case flags => simp [State.writeFlags, CsrFlags.enc, CsrReg.writeMask] <;> bv_decide
     all_goals exact h.csrMasked _
   next => exact State.writeFlags_sync q f
+  next =>
+    refine State.mpuWindow_of q _ h ?_ (fun _ => rfl)
+    simp [State.writeFlags, CsrReg.enc]
 
 
 -- A special register write preserves well-formedness
@@ -279,25 +320,61 @@ theorem State.writeSpecial_wf (q : State) (c : CsrReg) (v : SpecWord) (h : q.WF)
       simp only [State.writeSpecial]
       split
       all_goals exact h.checkSync cmp
+    next =>
+      refine State.mpuWindow_of q _ h ?_ ?_
+      next =>
+        simp only [State.writeSpecial]
+        split
+        all_goals simp [CsrReg.enc]
+      next =>
+        intro i
+        simp only [State.writeSpecial]
+        split
+        all_goals rfl
+  -- a write naming MPUCF lands in the region its index selects, and every other write leaves both
+  -- MPUCF and the regions alone
   all_goals
     constructor
     next => exact h.zeroReg
     next => exact fun c' => State.writeSpecial_masked q _ c' v h
     next => exact h.checkSync
+    next =>
+      first
+        | (refine State.mpuWindow_of q _ h ?_ (fun _ => rfl)
+           simp [State.writeSpecial, CsrReg.enc])
+        | simp [State.writeSpecial]
 
 
 -- A memory write preserves well-formedness
 theorem State.writeMem_wf (q : State) (a : AddrWord) (v : DataWord) (h : q.WF) :
     (q.writeMem a v).WF :=
-  { zeroReg := h.zeroReg, csrMasked := h.csrMasked, checkSync := h.checkSync }
+  { zeroReg := h.zeroReg, csrMasked := h.csrMasked, checkSync := h.checkSync,
+    mpuWindow := h.mpuWindow }
 
 
--- Taking a fault preserves well-formedness
-theorem State.fault_wf (q : State) (c : CsrCause) (h : q.WF) : (q.fault c).WF := by
-  have h1 := State.writeSpecial_wf q CsrReg.cause c.enc h
-  have h2 := State.writeSpecial_wf _ CsrReg.privs (q.privsUpdate 0x0000) h1
-  have h3 := State.writeSpecial_wf _ CsrReg.fault q.pc h2
-  exact { zeroReg := h3.zeroReg, csrMasked := h3.csrMasked, checkSync := h3.checkSync }
+-- Taking a fault preserves well-formedness, whether it enters the handler or halts on a fault
+-- vector it cannot read
+theorem State.faultAt_wf (q : State) (c : CsrCause) (loc : AddrWord) (h : q.WF) :
+    (q.faultAt c loc).WF := by
+  cases hv : q.readVector 0xFFFC with
+  | error c' =>
+    have h1 := State.writeSpecial_wf q CsrReg.cause c'.enc h
+    have h2 := State.writeSpecial_wf _ CsrReg.privs (q.privsUpdate 0x0000) h1
+    have h3 := State.writeSpecial_wf _ CsrReg.fault 0xFFFC h2
+    simp only [State.faultAt, hv]
+    exact { zeroReg := h3.zeroReg, csrMasked := h3.csrMasked, checkSync := h3.checkSync,
+            mpuWindow := h3.mpuWindow }
+  | ok t     =>
+    have h1 := State.writeSpecial_wf q CsrReg.cause c.enc h
+    have h2 := State.writeSpecial_wf _ CsrReg.privs (q.privsUpdate 0x0000) h1
+    have h3 := State.writeSpecial_wf _ CsrReg.fault loc h2
+    simp only [State.faultAt, hv]
+    exact { zeroReg := h3.zeroReg, csrMasked := h3.csrMasked, checkSync := h3.checkSync,
+            mpuWindow := h3.mpuWindow }
+
+
+theorem State.fault_wf (q : State) (c : CsrCause) (h : q.WF) : (q.fault c).WF :=
+  State.faultAt_wf q c q.pc h
 
 
 -- Advancing the program counter preserves well-formedness
@@ -305,42 +382,77 @@ theorem State.next_wf (q : State) (h : q.WF) : (State.next q).WF := by
   simp only [State.next]
   split
   next => exact State.fault_wf q CsrCause.pcOverflow h
-  next => exact { zeroReg := h.zeroReg, csrMasked := h.csrMasked, checkSync := h.checkSync }
+  next => exact { zeroReg := h.zeroReg, csrMasked := h.csrMasked, checkSync := h.checkSync,
+                  mpuWindow := h.mpuWindow }
 
 
--- Taking an interrupt preserves well-formedness
+-- Taking an interrupt preserves well-formedness, whether it enters the handler or faults on an
+-- interrupt vector it cannot read
 theorem State.interrupt_wf (q : State) (h : q.WF) : q.interrupt.WF := by
-  have h1 := State.writeSpecial_wf q CsrReg.retir q.pc h
-  have h2 := State.writeSpecial_wf _ CsrReg.privs (q.privsUpdate 0x0000) h1
-  exact { zeroReg := h2.zeroReg, csrMasked := h2.csrMasked, checkSync := h2.checkSync }
+  simp only [State.interrupt]
+  split
+  next =>
+    have h1 := State.writeSpecial_wf q CsrReg.retir q.pc h
+    have h2 := State.writeSpecial_wf _ CsrReg.privs (q.privsUpdate 0x0000) h1
+    exact { zeroReg := h2.zeroReg, csrMasked := h2.csrMasked, checkSync := h2.checkSync,
+            mpuWindow := h2.mpuWindow }
+  next =>
+    exact State.faultAt_wf _ _ _
+      { zeroReg := h.zeroReg, csrMasked := h.csrMasked, checkSync := h.checkSync,
+        mpuWindow := h.mpuWindow }
 
 
--- Reset produces a well-formed state
-theorem State.first_wf (bytes : ByteArray) (extns : SpecWord) (map : MemMap) :
-    (State.first bytes extns map).WF := by
+-- The initialization steps produce a well-formed state
+theorem State.init_wf (bytes : ByteArray) (extns : SpecWord) (map : MemMap) :
+    (State.init bytes extns map).WF := by
   constructor
   next => rfl
   next =>
     intro c
-    cases c <;> simp [State.first, CsrReg.enc, CsrReg.writeMask] <;> bv_decide
+    cases c <;> simp [State.init, CsrReg.enc, CsrReg.writeMask] <;> bv_decide
   next =>
     intro f
     rfl
+  next => simp [State.init, CsrReg.enc]
 
 
--- Reset initializes the program counter from the reset vector
-theorem State.first_pc (bytes : ByteArray) (extns : SpecWord) (map : MemMap) :
-    (State.first bytes extns map).pc = (State.first bytes extns map).resetVector :=
-  rfl
+-- Reset produces a well-formed state, whether or not it could read the reset vector
+theorem State.first_wf (bytes : ByteArray) (extns : SpecWord) (map : MemMap) :
+    (State.first bytes extns map).WF := by
+  have h := State.init_wf bytes extns map
+  simp only [State.first]
+  split
+  next => exact { zeroReg := h.zeroReg, csrMasked := h.csrMasked, checkSync := h.checkSync,
+                  mpuWindow := h.mpuWindow }
+  next => exact State.faultAt_wf _ _ _ h
+
+
+-- Reset initializes the program counter from the reset vector, which is the last step it performs
+theorem State.first_pc (bytes : ByteArray) (extns : SpecWord) (map : MemMap)
+    (hv : (State.init bytes extns map).resetVectorReadable) :
+    (State.first bytes extns map).pc = (State.first bytes extns map).resetVector := by
+  have h : (State.init bytes extns map).readVector 0xFFFE
+      = Except.ok (State.init bytes extns map).resetVector := hv
+  simp only [State.first, h, State.resetVector]
+
+
+-- A reset vector which cannot be read faults like any other vector, so the machine comes up in the
+-- fault handler with the lower address of the reset vector recorded in FAULT
+theorem State.first_unreadable_reset (bytes : ByteArray) (extns : SpecWord) (map : MemMap)
+    (c : CsrCause) (h : (State.init bytes extns map).readVector 0xFFFE = Except.error c) :
+    State.first bytes extns map = (State.init bytes extns map).faultAt c 0xFFFE := by
+  simp only [State.first, h]
 
 
 -- Reset starts outside any system call or interrupt context and discards pre-reset interrupt pin
--- activity
+-- activity, on both of the paths the reset vector read can take
 theorem State.first_contexts (bytes : ByteArray) (extns : SpecWord) (map : MemMap) :
     (State.first bytes extns map).inSyscall = false
       /\ (State.first bytes extns map).inInterrupt = false
-      /\ (State.first bytes extns map).intPending = false :=
-  And.intro rfl (And.intro rfl rfl)
+      /\ (State.first bytes extns map).intPending = false := by
+  simp only [State.first, State.faultAt]
+  repeat (any_goals split)
+  all_goals exact And.intro rfl (And.intro rfl rfl)
 
 
 -- Deserializing a state file produces a well-formed state, so a hand-written or corrupted file
@@ -369,17 +481,19 @@ theorem State.deserialize_wf (content : String) (q : State)
       next =>
         intro f
         rfl
+      next => simp
 
 
--- Well-formedness constrains only the registers, the special registers, and the cached
--- comparisons, so an update leaving those three alone preserves it
+-- Well-formedness constrains only the registers, the special registers, the cached comparisons,
+-- and the region registers, so an update leaving those four alone preserves it
 theorem State.wf_of_fields (q : State) (q' : State) (h : q.WF)
-    (hr : q'.register = q.register) (hs : q'.special = q.special) (hc : q'.check = q.check) :
-    q'.WF := by
+    (hr : q'.register = q.register) (hs : q'.special = q.special) (hc : q'.check = q.check)
+    (hm : q'.mpuRegion = q.mpuRegion) : q'.WF := by
   constructor
   next => rw [hr]; exact h.zeroReg
   next => rw [hs]; exact h.csrMasked
   next => rw [hc, hs]; exact h.checkSync
+  next => rw [hs, hm]; exact h.mpuWindow
 
 
 -- Executing a decoded instruction preserves well-formedness, because every instruction reaches
@@ -394,6 +508,7 @@ theorem State.decodeAndExecute_wf (q : State) (h : q.WF) : (decodeAndExecute q).
     first
       | exact h
       | exact State.fault_wf _ _ h
+      | exact State.faultAt_wf _ _ _ h
       | exact State.next_wf _ h
       | exact State.next_wf _ (State.writeReg_wf _ _ _ h)
       | exact State.next_wf _ (State.writeMem_wf _ _ _ h)
@@ -402,16 +517,16 @@ theorem State.decodeAndExecute_wf (q : State) (h : q.WF) : (decodeAndExecute q).
       | exact State.next_wf _ (State.writeReg_wf _ _ _ (State.writeReg_wf _ _ _ h))
       | exact State.next_wf _ (State.writeReg_wf _ _ _ (State.writeSpecial_wf _ _ _ h))
       | exact State.next_wf _ (State.writeSpecial_wf _ _ _ (State.writeMem_wf _ _ _ h))
-      | exact State.wf_of_fields _ _ h rfl rfl rfl
-      | exact State.wf_of_fields _ _ (State.writeSpecial_wf _ _ _ h) rfl rfl rfl
+      | exact State.wf_of_fields _ _ h rfl rfl rfl rfl
+      | exact State.wf_of_fields _ _ (State.writeSpecial_wf _ _ _ h) rfl rfl rfl rfl
       | exact State.wf_of_fields _ _
           (State.writeSpecial_wf _ _ _
             (State.writeSpecial_wf _ _ _ (State.writeSpecial_wf _ _ _ h)))
-          rfl rfl rfl
+          rfl rfl rfl rfl
       | exact State.wf_of_fields _ _
           (State.writeSpecial_wf _ _ _
             (State.writeFlags_wf _ _ (State.writeReg_wf _ _ _ (State.writeReg_wf _ _ _ h))))
-          rfl rfl rfl
+          rfl rfl rfl rfl
 
 
 -- Fetching and executing preserves well-formedness
@@ -430,7 +545,7 @@ theorem State.step_wf (q : State) (h : q.WF) : (step q).WF := by
   next =>
     split
     next => exact State.interrupt_wf q h
-    next => exact State.execute_wf _ (State.wf_of_fields _ _ h rfl rfl rfl)
+    next => exact State.execute_wf _ (State.wf_of_fields _ _ h rfl rfl rfl rfl)
 
 
 end MisaSpec

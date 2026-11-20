@@ -105,9 +105,22 @@ def State.faultVector (q : State) : AddrWord :=
   q.memory 0xFFFD ++ q.memory 0xFFFC
 
 
+-- The fault handler address can be read, which is the condition under which a trap enters the
+-- handler rather than halting. The MPU does not appear in it: a trap is in Machine Mode by the
+-- time it reads the vector, so only the memory map can refuse the read.
+def State.faultVectorReadable (q : State) : Prop :=
+  q.readVector 0xFFFC = Except.ok q.faultVector
+
+
 -- The syscall handler address held in the reset vector table
 def State.syscallVector (q : State) : AddrWord :=
   q.memory 0xFFFB ++ q.memory 0xFFFA
+
+
+-- The syscall handler address can be read, which is the condition under which a SYSCALL enters its
+-- handler rather than faulting
+def State.syscallVectorReadable (q : State) : Prop :=
+  q.readVector 0xFFFA = Except.ok q.syscallVector
 
 
 -- The interrupt handler address held in the reset vector table
@@ -115,9 +128,21 @@ def State.intVector (q : State) : AddrWord :=
   q.memory 0xFFF9 ++ q.memory 0xFFF8
 
 
+-- The interrupt handler address can be read, which is the condition under which an interrupt is
+-- taken rather than faulting
+def State.intVectorReadable (q : State) : Prop :=
+  q.readVector 0xFFF8 = Except.ok q.intVector
+
+
 -- The reset handler address held in the reset vector table
 def State.resetVector (q : State) : AddrWord :=
   q.memory 0xFFFF ++ q.memory 0xFFFE
+
+
+-- The reset handler address can be read, which is the condition under which reset initializes the
+-- program counter from the vector table rather than faulting
+def State.resetVectorReadable (q : State) : Prop :=
+  q.readVector 0xFFFE = Except.ok q.resetVector
 
 
 -- Whether an Inst is a SYSCALL

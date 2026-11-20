@@ -49,7 +49,7 @@ theorem ne_of_inVectorTable (a : AddrWord) (b : AddrWord)
 -- vector test sits inside the access check, so every path through it yields a fault.
 theorem accessFault_vector_isSome (q : State) (a : AddrWord) (hv : inVectorTable a = true) :
     Exists fun cause : CsrCause => q.accessFault AccessKind.write a = some cause := by
-  simp only [State.accessFault]
+  simp only [State.accessFault, State.mapFault]
   split
   next => exact Exists.intro _ rfl
   next =>
@@ -75,7 +75,7 @@ theorem accessFault_vectorWrite (q : State) (a : AddrWord) (hv : inVectorTable a
     (hmapped : Exists fun c : MemCaps => q.caps a = some c) :
     q.accessFault AccessKind.write a = some (CsrCause.vectorWrite a) := by
   cases hmapped with
-  | intro c hc => simp [State.accessFault, AccessKind.isVectorWrite, hmpu, hc, hv]
+  | intro c hc => simp [State.accessFault, State.mapFault, AccessKind.isVectorWrite, hmpu, hc, hv]
 
 
 -- A stack ST whose stack address is in the reset vector table raises a vector write fault naming
@@ -108,11 +108,11 @@ theorem st_base_vector_fault (q : State) (rd : GpReg) (rsb : GpReg) (lo : GpReg)
 
 
 -- A ST into the reset vector table records a vector write in CAUSE and enters the fault handler
-theorem st_vector_cause (q : State) (addr : AddrWord) :
+theorem st_vector_cause (q : State) (addr : AddrWord) (hv : q.faultVectorReadable) :
     (q.fault (CsrCause.vectorWrite addr)).special CsrReg.cause
         = (CsrCause.vectorWrite addr).enc &&& CsrReg.cause.writeMask
       /\ (q.fault (CsrCause.vectorWrite addr)).pc = q.faultVector :=
-  And.intro (fault_sets_cause q _) (fault_jumps_to_vector q _)
+  And.intro (fault_sets_cause q _ hv) (fault_jumps_to_vector q _ hv)
 
 
 -- A stack ST into the reset vector table leaves SADDR and memory unchanged, so the write is
@@ -170,6 +170,7 @@ theorem decodeAndExecute_preserves_vectors (q : State) (a : AddrWord)
            all_goals first
              | rfl
              | exact (fault_frame _ _).2.1 a
+             | exact (faultAt_frame _ _ _).2.1 a
              | simp [next_memory, State.writeReg_memory, State.writeSpecial_memory,
                      State.writeFlags])
 
@@ -183,9 +184,14 @@ theorem execute_preserves_vectors (q : State) (a : AddrWord) (h : inVectorTable 
   next => exact decodeAndExecute_preserves_vectors q a h
 
 
--- Entering an interrupt leaves memory unchanged, since it only saves state into the shadow slots
-theorem interrupt_preserves_memory (q : State) (a : AddrWord) : q.interrupt.memory a = q.memory a :=
-  rfl
+-- Entering an interrupt leaves memory unchanged, since it only saves state into the shadow slots.
+-- So does the fault it takes instead when the interrupt vector cannot be read.
+theorem interrupt_preserves_memory (q : State) (a : AddrWord) :
+    q.interrupt.memory a = q.memory a := by
+  simp only [State.interrupt]
+  split
+  next => rfl
+  next => exact (faultAt_frame _ _ _).2.1 a
 
 
 -- A step leaves the reset vector table unchanged, whether it executes an instruction, takes a

@@ -9,8 +9,65 @@ set_option linter.constructorNameAsVariable false
 namespace MisaSpec
 
 
+-- A vector read that succeeds reports the little-endian address the two bytes of the vector hold
+theorem readVector_ok_value (q : State) (lo : AddrWord) (t : AddrWord)
+    (h : q.readVector lo = Except.ok t) : q.memory (lo + 1) ++ q.memory lo = t := by
+  simp only [State.readVector] at h
+  split at h
+  next => exact absurd h (by simp)
+  next =>
+    split at h
+    next => exact absurd h (by simp)
+    next => simpa using h
+
+
+-- A vector read that fails reports the fault of whichever of its two bytes the memory map refused
+theorem readVector_error_cause (q : State) (lo : AddrWord) (c : CsrCause)
+    (h : q.readVector lo = Except.error c) :
+    q.mapFault AccessKind.read lo = some c
+      \/ q.mapFault AccessKind.read (lo + 1) = some c := by
+  simp only [State.readVector] at h
+  split at h
+  next hlo => exact Or.inl (by rw [hlo]; simpa using h)
+  next =>
+    split at h
+    next hhi => exact Or.inr (by rw [hhi]; simpa using h)
+    next     => exact absurd h (by simp)
+
+
+-- A register write cannot change what a trap reads out of the vector table, since it touches
+-- neither memory nor the capability map
+theorem State.writeReg_readVector (q : State) (r : GpReg) (v : DataWord) (lo : AddrWord) :
+    (q.writeReg r v).readVector lo = q.readVector lo := by
+  cases r <;> rfl
+
+
+-- A register write therefore cannot turn a fault which would enter the handler into one which
+-- halts, which is what lets a fault after an instruction's write still record a program counter
+theorem State.writeReg_faultVectorReadable (q : State) (r : GpReg) (v : DataWord)
+    (h : q.faultVectorReadable) : (q.writeReg r v).faultVectorReadable := by
+  cases r <;> exact h
+
+
 -- Taking a fault leaves the registers, memory, comparisons, and every special register other than
--- CAUSE, FAULT, and PRIVS unchanged
+-- CAUSE, FAULT, and PRIVS unchanged. This holds on both of the paths a fault can take, since the
+-- one that halts records its cause in the same three registers as the one that enters the handler.
+theorem faultAt_frame (q : State) (c : CsrCause) (loc : AddrWord) :
+    (forall r : GpReg, (q.faultAt c loc).register r = q.register r)
+      /\ (forall a : AddrWord, (q.faultAt c loc).memory a = q.memory a)
+      /\ (forall f : CmpFlag, (q.faultAt c loc).check f = q.check f)
+      /\ (q.faultAt c loc).special CsrReg.saddr = q.special CsrReg.saddr
+      /\ (q.faultAt c loc).special CsrReg.raddr = q.special CsrReg.raddr
+      /\ (q.faultAt c loc).special CsrReg.flags = q.special CsrReg.flags
+      /\ (q.faultAt c loc).special CsrReg.extns = q.special CsrReg.extns
+      /\ (q.faultAt c loc).special CsrReg.retsc = q.special CsrReg.retsc
+      /\ (q.faultAt c loc).special CsrReg.retir = q.special CsrReg.retir := by
+  repeat (any_goals apply And.intro)
+  all_goals intros
+  all_goals (simp only [State.faultAt]; split)
+  all_goals rfl
+
+
 theorem fault_frame (q : State) (c : CsrCause) :
     (forall r : GpReg, (q.fault c).register r = q.register r)
       /\ (forall a : AddrWord, (q.fault c).memory a = q.memory a)
@@ -20,35 +77,190 @@ theorem fault_frame (q : State) (c : CsrCause) :
       /\ (q.fault c).special CsrReg.flags = q.special CsrReg.flags
       /\ (q.fault c).special CsrReg.extns = q.special CsrReg.extns
       /\ (q.fault c).special CsrReg.retsc = q.special CsrReg.retsc
-      /\ (q.fault c).special CsrReg.retir = q.special CsrReg.retir := by
-  repeat (any_goals apply And.intro)
-  all_goals (intros; rfl)
+      /\ (q.fault c).special CsrReg.retir = q.special CsrReg.retir :=
+  faultAt_frame q c q.pc
 
 
 -- Taking a fault does not change whether the processor is in a system call or interrupt context,
 -- so a fault handler entered from an interrupt context leaves interrupts masked
+theorem faultAt_preserves_context (q : State) (c : CsrCause) (loc : AddrWord) :
+    (q.faultAt c loc).inSyscall = q.inSyscall
+      /\ (q.faultAt c loc).inInterrupt = q.inInterrupt := by
+  refine And.intro ?_ ?_
+  all_goals (simp only [State.faultAt]; split)
+  all_goals rfl
+
+
 theorem fault_preserves_context (q : State) (c : CsrCause) :
     (q.fault c).inSyscall = q.inSyscall
       /\ (q.fault c).inInterrupt = q.inInterrupt :=
-  And.intro rfl rfl
+  faultAt_preserves_context q c q.pc
 
 
--- Taking a fault records the program counter at the time of the fault in FAULT
-theorem fault_records_pc (q : State) (c : CsrCause) :
-    (q.fault c).special CsrReg.fault = q.pc := by
-  simp [State.fault, State.writeSpecial, CsrReg.writeMask] <;> bv_decide
+-- A fault whose handler address can be read records the fault location it was given in FAULT,
+-- which for every fault but an unreadable vector is the program counter at the time of the fault
+theorem faultAt_records_loc (q : State) (c : CsrCause) (loc : AddrWord)
+    (hv : q.faultVectorReadable) : (q.faultAt c loc).special CsrReg.fault = loc := by
+  have h : q.readVector 0xFFFC = Except.ok q.faultVector := hv
+  simp only [State.faultAt, h]
+  simp [State.writeSpecial, CsrReg.writeMask] <;> bv_decide
 
 
--- Taking a fault records the cause in CAUSE
-theorem fault_sets_cause (q : State) (c : CsrCause) :
+theorem fault_records_pc (q : State) (c : CsrCause) (hv : q.faultVectorReadable) :
+    (q.fault c).special CsrReg.fault = q.pc :=
+  faultAt_records_loc q c q.pc hv
+
+
+-- A fault whose handler address can be read records the cause in CAUSE
+theorem faultAt_sets_cause (q : State) (c : CsrCause) (loc : AddrWord)
+    (hv : q.faultVectorReadable) :
+    (q.faultAt c loc).special CsrReg.cause = c.enc &&& CsrReg.cause.writeMask := by
+  have h : q.readVector 0xFFFC = Except.ok q.faultVector := hv
+  simp only [State.faultAt, h]
+  rfl
+
+
+theorem fault_sets_cause (q : State) (c : CsrCause) (hv : q.faultVectorReadable) :
     (q.fault c).special CsrReg.cause = c.enc &&& CsrReg.cause.writeMask :=
-  rfl
+  faultAt_sets_cause q c q.pc hv
 
 
--- Taking a fault continues execution at the fault handler address in the reset vector table
-theorem fault_jumps_to_vector (q : State) (c : CsrCause) :
+-- A fault whose handler address can be read continues execution at that address
+theorem faultAt_jumps_to_vector (q : State) (c : CsrCause) (loc : AddrWord)
+    (hv : q.faultVectorReadable) : (q.faultAt c loc).pc = q.faultVector := by
+  have h : q.readVector 0xFFFC = Except.ok q.faultVector := hv
+  simp only [State.faultAt, h]
+
+
+theorem fault_jumps_to_vector (q : State) (c : CsrCause) (hv : q.faultVectorReadable) :
     (q.fault c).pc = q.faultVector :=
+  faultAt_jumps_to_vector q c q.pc hv
+
+
+-- A fault whose handler address can be read is not terminal, so the fault handler runs
+theorem faultAt_not_halted (q : State) (c : CsrCause) (loc : AddrWord)
+    (hv : q.faultVectorReadable) : (q.faultAt c loc).halted = q.halted := by
+  have h : q.readVector 0xFFFC = Except.ok q.faultVector := hv
+  simp only [State.faultAt, h]
   rfl
+
+
+-- A fault whose handler address cannot be read is terminal. The cause and fault location describe
+-- the failed read rather than the fault that led to it, the fault location being the lower address
+-- of the fault vector, and the processor halts instead of retrying a read that cannot succeed.
+theorem faultAt_vector_unreadable_halts (q : State) (c : CsrCause) (loc : AddrWord)
+    (c' : CsrCause) (h : q.readVector 0xFFFC = Except.error c') :
+    (q.faultAt c loc).halted = true
+      /\ (q.faultAt c loc).special CsrReg.cause = c'.enc &&& CsrReg.cause.writeMask
+      /\ (q.faultAt c loc).special CsrReg.fault = 0xFFFC := by
+  refine And.intro ?_ (And.intro ?_ ?_)
+  next => simp only [State.faultAt, h]
+  next => simp only [State.faultAt, h]; rfl
+  next =>
+    simp only [State.faultAt, h]
+    simp [State.writeSpecial, CsrReg.writeMask] <;> bv_decide
+
+
+-- Every fault either enters the fault handler or halts the processor, so a fault never continues
+-- at an address the vector table does not hold
+theorem faultAt_enters_handler_or_halts (q : State) (c : CsrCause) (loc : AddrWord) :
+    (q.faultAt c loc).pc = q.faultVector \/ (q.faultAt c loc).halted = true := by
+  cases h : q.readVector 0xFFFC with
+  | error c' => exact Or.inr (faultAt_vector_unreadable_halts q c loc c' h).1
+  | ok t     =>
+    refine Or.inl ?_
+    have ha : (0xFFFC : AddrWord) + 1 = 0xFFFD := by bv_decide
+    have ht := readVector_ok_value q 0xFFFC t h
+    rw [ha] at ht
+    simp only [State.faultAt, h, State.faultVector]
+    exact ht.symm
+
+
+-- A fault handler vector the memory map does not provide halts the processor on the very first
+-- fault, recording the unmapped read in CAUSE and the lower address of the vector in FAULT
+theorem faultAt_unmapped_vector_halts (q : State) (c : CsrCause) (loc : AddrWord)
+    (h : q.caps 0xFFFC = none) :
+    (q.faultAt c loc).halted = true
+      /\ (q.faultAt c loc).special CsrReg.cause
+           = (CsrCause.unmappedAddress AccessKind.read).enc &&& CsrReg.cause.writeMask
+      /\ (q.faultAt c loc).special CsrReg.fault = 0xFFFC := by
+  have hr : q.readVector 0xFFFC = Except.error (CsrCause.unmappedAddress AccessKind.read) := by
+    simp only [State.readVector, State.mapFault, h]
+  exact faultAt_vector_unreadable_halts q c loc _ hr
+
+
+-- A fault that cannot read the fault handler address ends the run: the halted state it produces is
+-- a fixpoint of step, so no further fault is taken and the processor does not retry the read
+theorem faultAt_vector_unreadable_terminal (q : State) (c : CsrCause) (loc : AddrWord)
+    (c' : CsrCause) (h : q.readVector 0xFFFC = Except.error c') :
+    step (q.faultAt c loc) = q.faultAt c loc := by
+  simp [step, (faultAt_vector_unreadable_halts q c loc c' h).1]
+
+
+-- A SYSCALL whose handler address cannot be read faults instead of entering a system call context
+theorem syscall_vector_unreadable_faults (q : State) (rs : GpReg) (c : CsrCause) (link : AddrWord)
+    (hs : q.inSyscall = false) (hi : q.inInterrupt = false) (hl : linkAddr q.pc = some link)
+    (h : q.readVector 0xFFFA = Except.error c) : executeSyscall q rs = q.faultAt c 0xFFFA := by
+  simp only [executeSyscall, h]
+  simp [hs, hi, hl]
+
+
+-- That fault records the lower address of the syscall vector, and leaves behind none of the state
+-- the system call entry would have written: the processor is not in a system call context, and
+-- RETSC still holds whatever it held before
+theorem syscall_vector_unreadable_frame (q : State) (rs : GpReg) (c : CsrCause) (link : AddrWord)
+    (hs : q.inSyscall = false) (hi : q.inInterrupt = false) (hl : linkAddr q.pc = some link)
+    (hfv : q.faultVectorReadable) (h : q.readVector 0xFFFA = Except.error c) :
+    (executeSyscall q rs).special CsrReg.fault = 0xFFFA
+      /\ (executeSyscall q rs).inSyscall = false
+      /\ (executeSyscall q rs).special CsrReg.retsc = q.special CsrReg.retsc := by
+  rw [syscall_vector_unreadable_faults q rs c link hs hi hl h]
+  refine And.intro (faultAt_records_loc q c 0xFFFA hfv) (And.intro ?_ ?_)
+  next => rw [(faultAt_preserves_context q c 0xFFFA).1]; exact hs
+  next => exact (faultAt_frame q c 0xFFFA).2.2.2.2.2.2.2.1
+
+
+-- An interrupt whose handler address cannot be read faults instead of being taken. The interrupt
+-- is consumed, so the fault handler runs rather than being preempted by the same interrupt again.
+theorem interrupt_vector_unreadable_faults (q : State) (c : CsrCause)
+    (h : q.readVector 0xFFF8 = Except.error c) :
+    q.interrupt = { q with intPending := false }.faultAt c 0xFFF8 := by
+  simp only [State.interrupt, h]
+
+
+-- That fault records the lower address of the interrupt vector, and leaves behind none of the
+-- state the interrupt entry would have saved: the processor is not in an interrupt context, RETIR
+-- and the three save slots are untouched, and the pending flag is clear
+theorem interrupt_vector_unreadable_frame (q : State) (c : CsrCause)
+    (hfv : q.faultVectorReadable) (h : q.readVector 0xFFF8 = Except.error c) :
+    q.interrupt.special CsrReg.fault = 0xFFF8
+      /\ q.interrupt.inInterrupt = q.inInterrupt
+      /\ q.interrupt.special CsrReg.retir = q.special CsrReg.retir
+      /\ q.interrupt.intRscratch = q.intRscratch
+      /\ q.interrupt.intFlags = q.intFlags
+      /\ q.interrupt.intPrivs = q.intPrivs
+      /\ q.interrupt.intPending = false := by
+  rw [interrupt_vector_unreadable_faults q c h]
+  refine And.intro (faultAt_records_loc _ c 0xFFF8 hfv) (And.intro ?_ (And.intro ?_
+    (And.intro ?_ (And.intro ?_ (And.intro ?_ ?_)))))
+  next => exact (faultAt_preserves_context _ c 0xFFF8).2
+  next => exact (faultAt_frame _ c 0xFFF8).2.2.2.2.2.2.2.2
+  next => exact (State.faultAt_int_frame _ c 0xFFF8).2.1
+  next => exact (State.faultAt_int_frame _ c 0xFFF8).2.2.1
+  next => exact (State.faultAt_int_frame _ c 0xFFF8).2.2.2.1
+  next => exact (State.faultAt_int_frame _ c 0xFFF8).1
+
+
+-- Reset with a reset vector it cannot read comes up in the fault handler, with the lower address
+-- of the reset vector recorded in FAULT, so the machine never executes from an address it did not
+-- read out of the table
+theorem first_unreadable_reset_enters_handler (bytes : ByteArray) (extns : SpecWord)
+    (map : MemMap) (c : CsrCause) (hfv : (State.init bytes extns map).faultVectorReadable)
+    (h : (State.init bytes extns map).readVector 0xFFFE = Except.error c) :
+    (State.first bytes extns map).special CsrReg.fault = 0xFFFE
+      /\ (State.first bytes extns map).pc = (State.init bytes extns map).faultVector := by
+  rw [State.first_unreadable_reset bytes extns map c h]
+  exact And.intro (faultAt_records_loc _ c 0xFFFE hfv) (faultAt_jumps_to_vector _ c 0xFFFE hfv)
 
 
 -- A successful HALT leaves FAULT unchanged
@@ -59,9 +271,12 @@ theorem halt_preserves_fault_reg (q : State) (rs : GpReg) (hu : q.userMode = fal
 
 -- A successful SYSCALL leaves FAULT unchanged
 theorem syscall_preserves_fault_reg (q : State) (rs : GpReg)
-    (hs : q.inSyscall = false) (hi : q.inInterrupt = false) (hpc : q.pc < 0xFFFE#16) :
+    (hs : q.inSyscall = false) (hi : q.inInterrupt = false) (hpc : q.pc < 0xFFFE#16)
+    (hv : q.syscallVectorReadable) :
     (executeSyscall q rs).special CsrReg.fault = q.special CsrReg.fault := by
-  simp [executeSyscall, hs, hi, linkAddr_of_lt q.pc hpc, State.writeSpecial, CsrReg.enc]
+  have h : q.readVector 0xFFFA = Except.ok q.syscallVector := hv
+  simp only [executeSyscall, hs, hi, linkAddr_of_lt q.pc hpc, h, Bool.or_self]
+  simp [State.writeSpecial, CsrReg.enc]
 
 
 -- Below the end of the address space the program counter advances by two without recording a cause
@@ -98,12 +313,14 @@ theorem next_special_of_lt (q : State) (c : CsrReg) (h : q.pc < 0xFFFE#16) :
 
 -- A program counter of 0xFFFF raises a PC overflow recording 0xFFFF, because the high byte of the
 -- instruction word would be fetched from outside the address space
-theorem execute_pc_max (q : State) (h : q.pc = 0xFFFF#16) :
+theorem execute_pc_max (q : State) (hv : q.faultVectorReadable) (h : q.pc = 0xFFFF#16) :
     execute q = q.fault CsrCause.pcOverflow
       /\ (execute q).special CsrReg.fault = 0xFFFF#16 := by
   refine And.intro ?_ ?_
   next => simp [execute, h]
-  next => simp [execute, h, fault_records_pc]
+  next =>
+    rw [show execute q = q.fault CsrCause.pcOverflow by simp [execute, h],
+        fault_records_pc q CsrCause.pcOverflow hv, h]
 
 
 -- Outside 0xFFFF the address of the instruction word's high byte does not wrap, so the guard in
@@ -131,18 +348,19 @@ theorem jal_taken_no_overflow (q : State) (rs1 : GpReg) (rs2 : GpReg) (cmp : Cmp
 -- An instruction that completes before its sequential increment overflows keeps its effects, which
 -- is the one exception to the fault frame
 theorem overflow_after_write_retains_effect (q : State) (rd : GpReg) (imm : DataWord)
-    (hrd : Ne rd GpReg.r0) (hpc : 0xFFFE#16 <= q.pc) :
+    (hv : q.faultVectorReadable) (hrd : Ne rd GpReg.r0) (hpc : 0xFFFE#16 <= q.pc) :
     (executeSet q rd imm).register rd = imm
       /\ (executeSet q rd imm).special CsrReg.fault = q.pc := by
   have hq : (q.writeReg rd imm).pc = q.pc := by cases rd <;> rfl
   have h2 : 0xFFFE#16 <= (q.writeReg rd imm).pc := by rw [hq]; exact hpc
+  have hv2 := State.writeReg_faultVectorReadable q rd imm hv
   refine And.intro ?_ ?_
   next =>
     simp only [executeSet, State.next_register]
     exact State.writeReg_self q rd imm hrd
   next =>
     simp only [executeSet]
-    rw [next_overflows _ h2, fault_records_pc, hq]
+    rw [next_overflows _ h2, fault_records_pc _ CsrCause.pcOverflow hv2, hq]
 
 
 -- A load or store immediate ranges from -8 to 7
@@ -408,7 +626,9 @@ theorem halt_preserves_flags (q : State) (rs : GpReg) :
     (executeHalt q rs).special CsrReg.flags = q.special CsrReg.flags := by
   simp only [executeHalt]
   split
-  all_goals rfl
+  all_goals first
+    | rfl
+    | exact (fault_frame q _).2.2.2.2.2.1
 
 
 -- A LD leaves FLAGS unchanged
@@ -418,6 +638,7 @@ theorem ld_preserves_flags (q : State) (rd : GpReg) (rsb : GpReg) (imm : HalfWor
   repeat (any_goals split)
   all_goals first
     | rfl
+    | exact (fault_frame q _).2.2.2.2.2.1
     | simp [State.next_flags, State.writeReg_special, State.writeSpecial, CsrReg.enc]
 
 
@@ -428,6 +649,7 @@ theorem st_preserves_flags (q : State) (rd : GpReg) (rsb : GpReg) (imm : HalfWor
   repeat (any_goals split)
   all_goals first
     | rfl
+    | exact (fault_frame q _).2.2.2.2.2.1
     | simp [State.next_flags, State.writeSpecial, State.writeMem, CsrReg.enc]
 
 
@@ -436,7 +658,7 @@ theorem rsr_preserves_flags (q : State) (rs1 : GpReg) (rs2 : GpReg) (csr : CsrRe
     (executeRsr q rs1 rs2 csr).special CsrReg.flags = q.special CsrReg.flags := by
   simp only [executeRsr]
   split
-  next => rfl
+  next => exact (fault_frame q _).2.2.2.2.2.1
   next => simp [State.next_flags, State.writeReg_special]
 
 
@@ -473,6 +695,7 @@ theorem jmpCsr_preserves_flags (q : State) (csr : CsrReg) (cmp : CmpFlag)
     repeat (any_goals split)
     all_goals first
       | rfl
+      | exact (fault_frame q _).2.2.2.2.2.1
       | exact State.next_flags q
       | simp [State.writeSpecial, CsrReg.enc]
 
@@ -483,7 +706,7 @@ theorem wsr_preserves_flags (q : State) (rs1 : GpReg) (rs2 : GpReg) (csr : CsrRe
     (executeWsr q rs1 rs2 csr).special CsrReg.flags = q.special CsrReg.flags := by
   simp only [executeWsr]
   split
-  next => rfl
+  next => exact (fault_frame q _).2.2.2.2.2.1
   next =>
     rw [State.next_flags]
     exact State.writeSpecial_other q csr CsrReg.flags _ (Ne.symm h)

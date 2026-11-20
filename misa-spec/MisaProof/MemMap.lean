@@ -44,10 +44,22 @@ theorem State.writeSpecial_caps (q : State) (c : CsrReg) (v : SpecWord) :
   all_goals rfl
 
 
-theorem State.fault_caps (q : State) (c : CsrCause) : (q.fault c).caps = q.caps := rfl
+theorem State.faultAt_caps (q : State) (c : CsrCause) (loc : AddrWord) :
+    (q.faultAt c loc).caps = q.caps := by
+  simp only [State.faultAt]
+  split
+  all_goals rfl
 
 
-theorem State.interrupt_caps (q : State) : q.interrupt.caps = q.caps := rfl
+theorem State.fault_caps (q : State) (c : CsrCause) : (q.fault c).caps = q.caps :=
+  State.faultAt_caps q c q.pc
+
+
+theorem State.interrupt_caps (q : State) : q.interrupt.caps = q.caps := by
+  simp only [State.interrupt]
+  split
+  next => rfl
+  next => exact State.faultAt_caps _ _ _
 
 
 theorem State.next_caps (q : State) : q.next.caps = q.caps := by
@@ -68,8 +80,9 @@ theorem decodeAndExecute_caps (q : State) : (decodeAndExecute q).caps = q.caps :
                  executeAnd, executeOr, executeXor, executeRrc, executeSet, executeLd, executeSt,
                  executeRsr, executeWsr, executeJal, executeJmp, executeJmpCsr] <;>
       repeat (any_goals split)
-    all_goals simp only [State.next_caps, State.fault_caps, State.writeReg_caps,
-                         State.writeSpecial_caps, State.writeFlags_caps, State.writeMem_caps]
+    all_goals simp only [State.next_caps, State.fault_caps, State.faultAt_caps,
+                         State.writeReg_caps, State.writeSpecial_caps, State.writeFlags_caps,
+                         State.writeMem_caps]
     all_goals rfl
 
 
@@ -102,14 +115,20 @@ theorem runN_caps (pin : Nat -> Bool) (n : Nat) (q : State) :
     exact step_caps _
 
 
--- Reset installs the map the implementation was given, and a model given no map provides the
--- entire address range
+-- Reset installs the map the implementation was given, whether or not it could read the reset
+-- vector out of it, and a model given no map provides the entire address range
 theorem State.first_caps (bytes : ByteArray) (extns : SpecWord) (map : MemMap) :
-    (State.first bytes extns map).caps = MemMap.toCaps map := rfl
+    (State.first bytes extns map).caps = MemMap.toCaps map := by
+  simp only [State.first]
+  split
+  next => rfl
+  next => exact State.faultAt_caps _ _ _
 
 
 theorem State.first_caps_default (bytes : ByteArray) (extns : SpecWord) (a : AddrWord) :
-    (State.first bytes extns []).caps a = some MemCaps.rwx := rfl
+    (State.first bytes extns []).caps a = some MemCaps.rwx := by
+  rw [State.first_caps bytes extns []]
+  rfl
 
 
 end MisaSpec

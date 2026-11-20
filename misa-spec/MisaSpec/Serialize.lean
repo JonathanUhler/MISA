@@ -220,10 +220,14 @@ def State.deserialize (content : String) : Option State := do
         some { lo := BitVec.ofNat 16 lo, hi := BitVec.ofNat 16 hi, caps := MemCaps.ofString v }
       | _,       _       => none
     | _      => none
+  let mpucfV : SpecWord := specFn .mpucf
   let mpuFn : BitVec 2 -> SpecWord := fun i =>
-    match (lookup? p.mpu (toString i.toNat)).bind parseNumeral? with
-    | some n => BitVec.ofNat 16 n
-    | none   => 0x0000#16
+    if i == (MpuRegion.dec mpucfV).index then
+      mpucfV
+    else
+      match (lookup? p.mpu (toString i.toNat)).bind parseNumeral? with
+      | some n => BitVec.ofNat 16 n
+      | none   => 0x0000#16
   return {
     register     := regFn,
     special      := specFn,

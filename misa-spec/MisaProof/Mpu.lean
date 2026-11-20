@@ -85,11 +85,16 @@ theorem Mpu.caps_zero (regs : BitVec 2 -> SpecWord) (h : forall i : BitVec 2, re
 
 
 -- Reset leaves the MPU granting no User Mode access to any address, whether or not the Privilege
--- Extension is enabled out of reset
+-- Extension is enabled out of reset, and whether or not reset could read the reset vector
 theorem State.first_mpu_grants_nothing (bytes : ByteArray) (extns : SpecWord) (map : MemMap)
     (a : AddrWord) :
-    Mpu.caps (State.first bytes extns map).mpuRegion a = MemCaps.empty :=
-  Mpu.caps_zero _ (fun _ => rfl) a
+    Mpu.caps (State.first bytes extns map).mpuRegion a = MemCaps.empty := by
+  have h : forall i : BitVec 2, (State.first bytes extns map).mpuRegion i = 0x0000#16 := by
+    intro i
+    simp only [State.first, State.faultAt]
+    repeat (any_goals split)
+    all_goals rfl
+  exact Mpu.caps_zero _ h a
 
 
 -- MPUCF retains every bit of what is written to it, so the window masks nothing away
@@ -119,6 +124,15 @@ theorem State.writeSpecial_mpucf_selected (q : State) (v : SpecWord) :
     (q.writeSpecial CsrReg.mpucf v).mpuRegion (MpuRegion.dec v).index = v := by
   rw [State.writeSpecial_mpucf_region]
   simp
+
+
+-- A read of MPUCF reports the region register its own index field selects. The manual requires a
+-- read to return the region information and index for the last index written, and this says it of
+-- every well-formed state rather than only of the state just after a write, which is what rules out
+-- a read reporting a region the MPU is not enforcing
+theorem State.mpucf_reads_selected_region (q : State) (h : q.WF) :
+    q.special CsrReg.mpucf = q.mpuRegion (MpuRegion.dec (q.special CsrReg.mpucf)).index :=
+  h.mpuWindow
 
 
 -- No special register write other than one naming MPUCF can move an MPU region
