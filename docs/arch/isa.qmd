@@ -349,7 +349,7 @@ overflow", where bits 0-4 are a one-hot vector (bit 3 or bit 4 MUST take precede
 
 | Type | Encoding | Commentary |
 |-------------------|----------|----------------------------------------------------------------------------------------------|
-| Address overflow | 000 | The computation of an address left the range it is required to stay within, either because an effective address left the 16-bit address range (including link-register calculations) or because a stack operation caused `SADDR` to overflow or underflow its implemented width. The extended status is set as follows: bit 0 = execute was attempted, bit 1 = write was attempted, bit 2 = read was attempted, bit 3 = a stack operation caused `SADDR` to overflow or underflow its implemented width, bit 4 = a link-register calculation overflowed or underflowed the 16-bit address range, bits 5-7 = reserved. |
+| Address overflow | 000 | The computation of an address left the range it is required to stay within, either because an effective address left the 16-bit address range (including link-register calculations) or because a stack operation caused `SADDR` to overflow or underflow its implemented width. The extended status is set as follows: bit 0 = execute was attempted, bit 1 = write was attempted, bit 2 = read was attempted, bit 3 = a stack operation caused `SADDR` to overflow or underflow its implemented width, bit 4 = a link register calculation for `RADDR` or `RETSC` overflowed or underflowed the 16-bit address range, bits 5-7 = reserved. |
 | PC overflow | 001 | The program counter overflowed an unsigned 16-bit value. Extended status is not used. |
 | Privileged access | 010 | An access to memory was attempted while in User Mode (under Privilege Extension) without the appropriate permissions in the MPU regions. The extended status is set as follows: bit 0 = execute was attempted, bit 1 = write was attempted, bit 2 = read was attempted, bits 3-7 = reserved. |
 | Vector write | 011 | A `ST` instruction attempted to write an address between `0xFFF0` and `0xFFFF`, inclusive, which is the reset vector table. The extended status is set as follows: bits 0-2 = `0b010`, bit 3 = reserved, bits 4-7 = the low nibble of the address the store would have written. |
@@ -1247,7 +1247,9 @@ If (Check[CMP]) {
 
 Faults:
 
-- "Address overflow" if the computed value of `RADDR` leaves the 16-bit address range.
+- "Address overflow" if the comparison evaluates true and the computed value of `RADDR` leaves the
+  16-bit address range. A `JAL` whose comparison evaluates false computes no link address and
+  therefore cannot raise this fault.
 
 ### `JMP`
 `JMP` has two variants depending on the branch target. The most significant bit of the instruction
@@ -1324,7 +1326,8 @@ Faults:
   `RETSC` or `RETIR` from User Mode raises "Privileged instruction" rather than either of them.
 - "Conditional context return" if `CSR` is `RETSC` or `RETIR` and `CMP` is not `ALWAYS`. This fault
   is a property of the instruction encoding, and MUST occur whether or not the comparison evaluates
-  true.
+  true. For the same reason it takes precedence over "Improper return context", which describes the
+  context the processor is in rather than the instruction.
 - "Improper return context" if `CSR` is `RETSC` and the processor is either outside of a system call
   context or inside of an interrupt context, or if `CSR` is `RETIR` and the processor is outside of
   an interrupt context.
@@ -1669,7 +1672,9 @@ Faults:
 - "Privileged instruction" if `E` is `0` and the instruction is executed in User Mode under the
   Privilege Extension, as described for `HALT`.
 - "Improper system call" if `E` is `1` and the processor is already in a system call context or in
-  an interrupt context.
+  an interrupt context. This fault takes precedence over any fault raised while entering the system
+  call handler, including the address overflow above and a failure to read the system call vector,
+  because an instruction which is illegal in its context never reaches the entry.
 
 #### `HALT`
 `HALT` functionality as defined in the core architecture is supported under the System Call
@@ -2047,3 +2052,8 @@ occupy independent slots, so an interrupt taken inside a system call context doe
 value that the system call return will restore. Because the restore overwrites `PRIVS` entirely, a
 `WSR` to `PRIVS` performed inside a system call or interrupt context does not affect the ring bit
 after the corresponding return.
+
+A context return performed while the Privilege Extension is disabled MUST NOT restore the saved
+ring bit. Software SHOULD NOT disable the Privilege Extension inside a system call or interrupt
+context, as doing so would cause a `RETSC`/`RETIR` to unconditionally return in Machine Mode, which
+is likely not the expected behavior.
