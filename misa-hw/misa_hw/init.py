@@ -21,6 +21,12 @@ class GpRegInit:
 
 
 @dataclass
+class MpuInit:
+    regions: tuple = field(default = (0x0000, 0x0000, 0x0000, 0x0000))
+    index: int     = field(default = 0b00)
+
+
+@dataclass
 class CsrRegInit:
     saddr: int = field(default = 0x0000)
     raddr: int = field(default = 0x0000)
@@ -37,6 +43,7 @@ class CsrRegInit:
 class CoreInit:
     register: GpRegInit  = field(default_factory = GpRegInit)
     special: CsrRegInit  = field(default_factory = CsrRegInit)
+    mpu: MpuInit         = field(default_factory = MpuInit)
     pc: int              = field(default = 0x0000)
     in_syscall: bool     = field(default = False)
     in_interrupt: bool   = field(default = False)

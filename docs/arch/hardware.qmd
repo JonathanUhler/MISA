@@ -256,10 +256,15 @@ always accessible through additional output ports.
 | `write_csr_reg` | 4 | In | The ISA encoding of the special register to write on the current cycle, if `write_enable` is high. |
 | `write_data` | 16 | In | Data to write to `write_csr_reg` on the current cycle, if `write_enable` is high.  |
 | `write_enable` | 1 | In | Whether to write `write_data` into `write_csr_reg` on the current cycle.  |
+| `mpu_query_addr` | 16 | In | The address to ask the memory protection unit about on the current cycle.  |
 | `read_data` | 16 | Out | The contents of `read_csr_reg` from the current cycle.  |
 | `flags_data` | 4 | Out | The contents of the `FLAGS` register on the current cycle.  |
 | `extns_data` | 4 | Out | The contents of the `EXTNS` register on the current cycle.  |
 | `privs_data` | 1 | Out | The contents of the `PRIVS` register on the current cycle.  |
+| `mpu_caps` | 3 | Out | The User Mode permissions the memory protection unit grants at `mpu_query_addr`.  |
+
+`MPUCF` is not a register of this file. It is a window onto the region registers of the `MpuUnit`,
+which this file instantiates, so a read or write of `MPUCF` is served by that unit.
 
 #### `DecoderUnit`
 
@@ -298,6 +303,23 @@ The general-purpose register file, which supports up to two reads and one write 
 | `read_data_a` | 8 | Out | The value stored in `read_gp_reg_a` on the current cycle.  |
 | `read_data_b` | 8 | Out | The value stored in `read_gp_reg_b` on the current cycle.  |
 
+#### `MpuUnit`
+
+The memory protection unit, which the Privilege Extension requires. It holds the four region
+registers that `MPUCF` is a window onto.
+
+| Port | Width | Direction | Purpose |
+|----------------|-------|-----------|------------------------------------------------------------------------------------|
+| `write_data` | 16 | In | Contents of `MPUCF` to write to the `MPUCF.Index`th windowed MPU region register.  |
+| `write_enable` | 1 | In | Whether to update the `MPUCF.Index`th MPU region register with `write_data` on the current cycle.  |
+| `query_addr` | 16 | In | The address to report User Mode permissions for.  |
+| `read_data` | 16 | Out | The region register that the `MPUCF.Index` field of the last write selected.  |
+| `query_caps` | 3 | Out | The permissions granted at `query_addr`: bit 0 = execute, bit 1 = write, bit 2 = read.  |
+
+The unit stores the index of the last write rather than a second copy of the `MPUCF` word, and
+derives `read_data` from the region that index names. A read of `MPUCF` therefore cannot disagree
+with the region the MPU is enforcing.
+
 #### `MisaCore`
 
 The finite state machine which coordinates instruction fetch, decode, and execution. The core also
@@ -311,6 +333,8 @@ Memory bus interactions are described more in the next subsection.
 |--------------------|-------|-----------|-----------------------------------------------------------------------------------------------|
 | `mem_ready` | 1 | In | Whether the memory controller has set `mem_read_data` in response to the last memory request. |
 | `mem_read_data` | 8 | In | When `mem_ready` is high, the value of the requested byte of memory at `mem_addr`.  |
+| `mem_mapped` | 1 | In | Whether the implementation provides memory at `mem_addr`.  |
+| `mem_caps` | 3 | In | The kinds of access the memory at `mem_addr` fundamentally/physically allows (independent of MPU configuration): bit 0 = execute, bit 1 = write, bit 2 = read. |
 | `mem_addr`.  | 16 | Out | The address to perform a memory transaction on when `mem_request` is set high.  |
 | `mem_write_data` | 8 | Out | The data to write to `mem_addr` if `mem_write_enable` is high when `mem_request` is set high. |
 | `mem_write_enable` | 1 | Out | Whether the memory transaction when `mem_request` is set high shall be a write.  |
@@ -328,12 +352,17 @@ Memory transactions are driven combinationally, and thus only apply for the cycl
 state making a memory transaction is active. Memory-related states will self-loop until the memory
 controller responds to the request.
 
+Two of the memory usage faults, "Unmapped address" and "Invalid access", describe the memory itself,
+and those fault conditions are then determined by the core based on what information it's given by
+the memory controller.
+
 Each numbered step below is one clock cycle.
 
 #### Memory Read
 
-1. `mem_addr` $\leftarrow$ absolute read address, `mem_write_enable` $\leftarrow 0$,
-   `mem_request` $\leftarrow 1$
+1. `mem_addr` $\leftarrow$ absolute read address, `mem_write_enable` $\leftarrow 0$. If the access
+   is refused, by the MPU or by `mem_mapped` and `mem_caps`, the core faults on this cycle and
+   `mem_request` is never raised. Otherwise `mem_request` $\leftarrow 1$
 2. **while** `mem_ready` $= 0$
    1. hold every bus output unchanged, and wait for the controller to set `mem_ready` $\leftarrow 1$
 3. **on the first cycle where** `mem_ready` $= 1$
@@ -343,9 +372,42 @@ Each numbered step below is one clock cycle.
 #### Memory Write
 
 1. `mem_addr` $\leftarrow$ absolute write address, `mem_write_data` $\leftarrow$ data to write,
-   `mem_write_enable` $\leftarrow 1$, `mem_request` $\leftarrow 1$
+   `mem_write_enable` $\leftarrow 1$. If the access is refused the core faults on this cycle and
+   `mem_request` is never raised, so nothing is written. Otherwise `mem_request` $\leftarrow 1$
 2. **while** `mem_ready` $= 0$
    1. hold every bus output unchanged, and wait for the controller to set `mem_ready` $\leftarrow 1$
 3. **on the first cycle where** `mem_ready` $= 1$
    1. the byte has been committed by the controller, and the core leaves the accessing state on that
       clock edge
+
+### Fault Selection
+
+`MisaCore` alone is responsible for determining memory fault conditions, based on the information
+it has from its own internal state and whatever is given by the memory controller. The faults are
+checked in the order specified by the ISA chapter:
+
+| Rank | Fault | Decided by | Where |
+|------|-------------------|--------------------------------------|----------------------------------|
+| 1 | PC overflow | A program counter of `0xFFFF`, or a sequential increment leaving the address range | `elaborate_fetch_lo` and `advance` |
+| 2 | Address overflow | An effective address, stack address, or link register computation leaving its range | The load, store, branch, and decode states |
+| 3 | Privileged access | `MpuUnit`, in User Mode only | `elaborate_access_check` |
+| 4 | Unmapped address | `mem_mapped` | `elaborate_access_check` |
+| 5 | Vector write | A store whose target is in `0xFFF0 - 0xFFFF` | `elaborate_access_check` |
+| 6 | Invalid access | `mem_caps` | `elaborate_access_check` |
+
+### Trap Sequence
+
+A fault, system call, interrupt, and reset all reach their handler through one sequence of states,
+collectively termed a "trap". The appropriate handler address is read before any logic related to
+the handler entry (e.g. saving state for an interrupt), so a failed vector read does not have any
+side effects. The trap sequence is:
+
+| State | Purpose |
+|-------------------|------------------------------------------------------------------------------|
+| `TRAP_CAUSE` | Record `CAUSE`. A fault and a system call start here, and an interrupt or reset do not (because they cannot/do not affect `CAUSE`). |
+| `VECTOR_LO` | Read the low byte of the handler address. An interrupt and reset start here. |
+| `VECTOR_HI` | Read the high byte of the handler address into a buffer. |
+| `TRAP_LINK` | Record `FAULT`, `RETSC`, or `RETIR` based on the kind of trap. |
+| `TRAP_ENTER` | Clear `PRIVS.R`, save the displaced ring bit and the shadow registers (for interrupts), enter the context (for system calls and interrupts), and set the program counter from the buffer. |
+| `TRAP_HALT_CAUSE` | Record `CAUSE` for a fault handler address which could not be read. |
+| `TRAP_HALT_FAULT` | Record `FAULT` as `0xFFFC` and halt. |

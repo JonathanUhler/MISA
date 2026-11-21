@@ -51,7 +51,7 @@ class DecoderUnit(Component):
                 m.d.comb += csr_available.eq((self.extns & Extn.SYSCALL).any())
             with m.Case(CsrReg.RETIR):
                 m.d.comb += csr_available.eq((self.extns & Extn.INTERRUPT).any())
-            with m.Case(CsrReg.PRIVS):
+            with m.Case(CsrReg.PRIVS, CsrReg.MPUCF):
                 m.d.comb += csr_available.eq((self.extns & Extn.PRIVILEGE).any())
             with m.Default():
                 m.d.comb += csr_available.eq(0)

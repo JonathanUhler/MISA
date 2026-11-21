@@ -1,3 +1,4 @@
+from dataclasses import replace
 from enum import StrEnum
 
 from amaranth import C, Cat, Module, Mux, Signal, Value
@@ -9,7 +10,7 @@ from .cmp_unit import CmpUnit
 from .csr_reg_file import CsrRegFile
 from .decoder_unit import DecoderUnit
 from .gp_reg_file import GpRegFile
-from .grammar import CmpFlag, CsrReg, Extn, FaultKind, GpReg, Op
+from .grammar import AccessKind, CmpFlag, CsrReg, Extn, FaultKind, GpReg, OverflowKind, Op
 from .init import CoreInit
 
 
@@ -45,15 +46,19 @@ class CoreState(StrEnum):
     EXECUTE_HALT     = "EXECUTE_HALT"
     HALTED           = "HALTED"
 
-    TRAP_CAUSE = "TRAP_CAUSE"
-    TRAP_LINK  = "TRAP_LINK"
-    TRAP_ENTER = "TRAP_ENTER"
+    TRAP_CAUSE      = "TRAP_CAUSE"
+    TRAP_LINK       = "TRAP_LINK"
+    TRAP_ENTER      = "TRAP_ENTER"
+    TRAP_HALT_CAUSE = "TRAP_HALT_CAUSE"
+    TRAP_HALT_FAULT = "TRAP_HALT_FAULT"
 
 
 class MisaCore(Component):
 
     mem_ready: In(1)
     mem_read_data: In(8)
+    mem_mapped: In(1)
+    mem_caps: In(3)
     interrupt: In(1)
 
     mem_addr: Out(16)
@@ -64,10 +69,14 @@ class MisaCore(Component):
     halt_code: Out(7)
 
 
-    def __init__(self, init_data: CoreInit = None):
+    def __init__(self, init_data: CoreInit = None, reset_extns: int = None):
         self.init_data: CoreInit = init_data or CoreInit()
+        if (reset_extns is not None):
+            self.init_data = replace(
+                self.init_data, special = replace(self.init_data.special, extns = reset_extns)
+            )
         self.init_state: CoreState = CoreState.VECTOR_LO
-        if init_data is not None:
+        if (init_data is not None):
             self.init_state = CoreState.HALTED if init_data.halted else CoreState.FETCH_LO
         super().__init__()
 
@@ -102,7 +111,9 @@ class MisaCore(Component):
             (CoreState.HALTED,           self.elaborate_halted),
             (CoreState.TRAP_CAUSE,       self.elaborate_trap_cause),
             (CoreState.TRAP_LINK,        self.elaborate_trap_link),
-            (CoreState.TRAP_ENTER,       self.elaborate_trap_enter)
+            (CoreState.TRAP_ENTER,       self.elaborate_trap_enter),
+            (CoreState.TRAP_HALT_CAUSE,  self.elaborate_trap_halt_cause),
+            (CoreState.TRAP_HALT_FAULT,  self.elaborate_trap_halt_fault)
         ]
 
         with m.FSM(init = self.init_state):
@@ -116,7 +127,7 @@ class MisaCore(Component):
     def elaborate_submodules(self, m: Module) -> None:
         self.alu_unit = AluUnit()
         self.cmp_unit = CmpUnit()
-        self.csr_reg_file = CsrRegFile(self.init_data.special)
+        self.csr_reg_file = CsrRegFile(self.init_data.special, self.init_data.mpu)
         self.decoder_unit = DecoderUnit()
         self.gp_reg_file = GpRegFile(self.init_data.register)
 
@@ -143,6 +154,7 @@ class MisaCore(Component):
 
         # Intermediate values (for states in the FSM to store persistent data)
         self.cause: Signal = Signal(16)
+        self.fault_loc: Signal = Signal(16)
         self.vector_sel: Signal = Signal(VectorSelect, init = VectorSelect.RESET)
         self.data_buf: Signal = Signal(8)
 
@@ -174,9 +186,12 @@ class MisaCore(Component):
         self.eff_carry: Signal = Signal(1)
         self.addr_fault: Signal = Signal(1)
         self.store_addr: Signal = Signal(16)
-        self.vector_write: Signal = Signal(1)
         self.privilege_enabled: Signal = Signal(1)
         self.user_mode: Signal = Signal(1)
+        self.access_kind: Signal = Signal(3)
+        self.vector_read: Signal = Signal(1)
+        self.access_denied: Signal = Signal(1)
+        self.access_cause: Signal = Signal(16)
 
         pc_sum: Signal = Signal(17)
         eff_sum: Signal = Signal(17)
@@ -199,13 +214,13 @@ class MisaCore(Component):
             self.store_addr.eq(
                 Mux(self.stack_variant, self.csr_reg_file.read_data, self.eff_addr)
             ),
-            self.vector_write.eq(self.store_addr[4:16] == 0xFFF),
 
             self.privilege_enabled.eq((self.csr_reg_file.extns_data & Extn.PRIVILEGE).any()),
             self.user_mode.eq(self.privilege_enabled & self.csr_reg_file.privs_data)
         ]
 
         self.elaborate_interrupt_sampling(m)
+        self.elaborate_access_check(m)
 
 
     def elaborate_interrupt_sampling(self, m: Module) -> None:
@@ -234,6 +249,51 @@ class MisaCore(Component):
         return Cat(fault_kind, C(0b00, 2), status)
 
 
+    def elaborate_access_check(self, m: Module) -> None:
+        mpu_denied: Value = (
+            self.user_mode & ~self.vector_read
+            & ~(self.csr_reg_file.mpu_caps & self.access_kind).any()
+        )
+        vector_write: Value = \
+            (self.access_kind == AccessKind.WRITE) & (self.mem_addr[4:16] == 0xFFF)
+
+        m.d.comb += self.csr_reg_file.mpu_query_addr.eq(self.mem_addr)
+        with m.If(self.access_kind.any()):
+            # Privileged access
+            with m.If(mpu_denied):
+                m.d.comb += [
+                    self.access_denied.eq(1),
+                    self.access_cause.eq(
+                        self.cause_value(FaultKind.PRIV_ACCESS, self.access_kind)
+                    )
+                ]
+            # Unmapped address
+            with m.Elif(~self.mem_mapped):
+                m.d.comb += [
+                    self.access_denied.eq(1),
+                    self.access_cause.eq(
+                        self.cause_value(FaultKind.UNMAPPED_ADDRESS, self.access_kind)
+                    )
+                ]
+            # Vector write
+            with m.Elif(vector_write):
+                m.d.comb += [
+                    self.access_denied.eq(1),
+                    self.access_cause.eq(self.cause_value(
+                        FaultKind.VECTOR_WRITE,
+                        Cat(C(AccessKind.WRITE, 3), C(0, 1), self.mem_addr[0:4])
+                    ))
+                ]
+            # Invalid access
+            with m.Elif(~(self.mem_caps & self.access_kind).any()):
+                m.d.comb += [
+                    self.access_denied.eq(1),
+                    self.access_cause.eq(
+                        self.cause_value(FaultKind.INVALID_ACCESS, self.access_kind)
+                    )
+                ]
+
+
     def advance(self, m: Module) -> None:
         with m.If(self.pc_carry):
             self.trap(m, FaultKind.PC_OVERFLOW, C(0x00, 8))
@@ -243,46 +303,77 @@ class MisaCore(Component):
 
 
     def trap(self, m: Module, fault_kind: FaultKind, status: Value) -> None:
+        self.trap_value(m, self.cause_value(fault_kind, status), self.pc)
+
+
+    def trap_value(self, m: Module, cause: Value, loc: Value) -> None:
         m.d.sync += [
-            self.cause.eq(self.cause_value(fault_kind, status)),
+            self.cause.eq(cause),
+            self.fault_loc.eq(loc),
             self.vector_sel.eq(VectorSelect.FAULT)
         ]
         m.next = CoreState.TRAP_CAUSE
 
 
+    def vector_fault(self, m: Module) -> None:
+        m.d.sync += [
+            self.cause.eq(self.access_cause),
+            self.fault_loc.eq(self.vector_addr(0))
+        ]
+        with m.If(self.vector_sel == VectorSelect.FAULT):
+            m.next = CoreState.TRAP_HALT_CAUSE
+        with m.Else():
+            m.d.sync += self.vector_sel.eq(VectorSelect.FAULT)
+            m.next = CoreState.TRAP_CAUSE
+
+
     def elaborate_vector_lo(self, m: Module) -> None:
         m.d.comb += [
             self.mem_addr.eq(self.vector_addr(0)),
-            self.mem_request.eq(1)
+            self.access_kind.eq(AccessKind.READ),
+            self.vector_read.eq(1)
         ]
-        with m.If(self.mem_ready):
-            m.d.sync += self.inst[0:8].eq(self.mem_read_data)
-            m.next = CoreState.VECTOR_HI
+        with m.If(self.access_denied):
+            self.vector_fault(m)
+        with m.Else():
+            m.d.comb += self.mem_request.eq(1)
+            with m.If(self.mem_ready):
+                m.d.sync += self.inst[0:8].eq(self.mem_read_data)
+                m.next = CoreState.VECTOR_HI
 
 
     def elaborate_vector_hi(self, m: Module) -> None:
         m.d.comb += [
             self.mem_addr.eq(self.vector_addr(1)),
-            self.mem_request.eq(1)
+            self.access_kind.eq(AccessKind.READ),
+            self.vector_read.eq(1)
         ]
-        with m.If(self.mem_ready):
-            m.d.sync += self.pc.eq(Cat(self.inst[0:8], self.mem_read_data))
-            m.next = CoreState.FETCH_LO
+        with m.If(self.access_denied):
+            self.vector_fault(m)
+        with m.Else():
+            m.d.comb += self.mem_request.eq(1)
+            with m.If(self.mem_ready):
+                m.d.sync += self.inst[8:16].eq(self.mem_read_data)
+                m.next = CoreState.TRAP_LINK
 
 
     def elaborate_fetch_lo(self, m: Module) -> None:
+        m.d.comb += [
+            self.mem_addr.eq(self.pc),
+            self.access_kind.eq(AccessKind.EXECUTE)
+        ]
         with m.If(self.int_pending & self.can_interrupt):
             m.d.comb += self.boundary_passed.eq(1)
             m.d.sync += self.vector_sel.eq(VectorSelect.INTERRUPT)
-            m.next = CoreState.TRAP_LINK
+            m.next = CoreState.VECTOR_LO
         with m.Elif(self.pc == 0xFFFF):
             m.d.comb += self.boundary_passed.eq(1)
             self.trap(m, FaultKind.PC_OVERFLOW, C(0x00, 8))
+        with m.Elif(self.access_denied):
+            m.d.comb += self.boundary_passed.eq(1)
+            self.trap_value(m, self.access_cause, self.pc)
         with m.Else():
-            m.d.comb += [
-                self.mem_addr.eq(self.pc),
-                self.mem_request.eq(1)
-            ]
+            m.d.comb += self.mem_request.eq(1)
             with m.If(self.mem_ready):
                 m.d.comb += self.boundary_passed.eq(1)
                 m.d.sync += self.inst[0:8].eq(self.mem_read_data)
@@ -292,11 +383,15 @@ class MisaCore(Component):
     def elaborate_fetch_hi(self, m: Module) -> None:
         m.d.comb += [
             self.mem_addr.eq(self.pc + 1),
-            self.mem_request.eq(1)
+            self.access_kind.eq(AccessKind.EXECUTE)
         ]
-        with m.If(self.mem_ready):
-            m.d.sync += self.inst[8:16].eq(self.mem_read_data)
-            m.next = CoreState.DECODE
+        with m.If(self.access_denied):
+            self.trap_value(m, self.access_cause, self.pc)
+        with m.Else():
+            m.d.comb += self.mem_request.eq(1)
+            with m.If(self.mem_ready):
+                m.d.sync += self.inst[8:16].eq(self.mem_read_data)
+                m.next = CoreState.DECODE
 
 
     def elaborate_decode(self, m: Module) -> None:
@@ -362,7 +457,9 @@ class MisaCore(Component):
                     with m.Else():
                         m.next = CoreState.EXECUTE_BRANCH
                 with m.Case(Op.HALT):
-                    with m.If(decoder.is_syscall):
+                    with m.If(decoder.is_syscall & self.pc_carry):
+                        self.trap(m, FaultKind.ADDR_OVERFLOW, C(OverflowKind.LINK, 8))
+                    with m.Elif(decoder.is_syscall):
                         m.d.sync += [
                             self.cause.eq(self.cause_value(
                                 FaultKind.HALT, self.gp_reg_file.read_data_a
@@ -404,15 +501,17 @@ class MisaCore(Component):
     def elaborate_execute_ld(self, m: Module) -> None:
         m.d.comb += [
             self.gp_reg_file.read_gp_reg_a.eq(self.decoder_unit.n2),
-            self.gp_reg_file.read_gp_reg_b.eq(self.decoder_unit.n2 + 1)
+            self.gp_reg_file.read_gp_reg_b.eq(self.decoder_unit.n2 + 1),
+
+            self.mem_addr.eq(self.eff_addr),
+            self.access_kind.eq(AccessKind.READ)
         ]
         with m.If(self.addr_fault):
-            self.trap(m, FaultKind.ADDR_OVERFLOW, C(0x00, 8))
+            self.trap(m, FaultKind.ADDR_OVERFLOW, C(OverflowKind.READ, 8))
+        with m.Elif(self.access_denied):
+            self.trap_value(m, self.access_cause, self.pc)
         with m.Else():
-            m.d.comb += [
-                self.mem_addr.eq(self.eff_addr),
-                self.mem_request.eq(1)
-            ]
+            m.d.comb += self.mem_request.eq(1)
             with m.If(self.mem_ready):
                 m.d.comb += [
                     self.gp_reg_file.write_gp_reg.eq(self.decoder_unit.n1),
@@ -423,12 +522,18 @@ class MisaCore(Component):
 
 
     def elaborate_execute_ld_stk(self, m: Module) -> None:
-        m.d.comb += self.csr_reg_file.read_csr_reg.eq(CsrReg.SADDR)
+        m.d.comb += [
+            self.csr_reg_file.read_csr_reg.eq(CsrReg.SADDR),
+
+            self.mem_addr.eq(self.eff_addr),
+            self.access_kind.eq(AccessKind.READ)
+        ]
         with m.If(self.addr_fault):
-            self.trap(m, FaultKind.ADDR_OVERFLOW, C(0x00, 8))
+            self.trap(m, FaultKind.ADDR_OVERFLOW, C(OverflowKind.SADDR, 8))
+        with m.Elif(self.access_denied):
+            self.trap_value(m, self.access_cause, self.pc)
         with m.Else():
             m.d.comb += [
-                self.mem_addr.eq(self.eff_addr),
                 self.mem_request.eq(1),
 
                 self.csr_reg_file.write_csr_reg.eq(CsrReg.SADDR),
@@ -453,15 +558,17 @@ class MisaCore(Component):
     def elaborate_execute_st(self, m: Module) -> None:
         m.d.comb += [
             self.gp_reg_file.read_gp_reg_a.eq(self.decoder_unit.n2),
-            self.gp_reg_file.read_gp_reg_b.eq(self.decoder_unit.n2 + 1)
+            self.gp_reg_file.read_gp_reg_b.eq(self.decoder_unit.n2 + 1),
+
+            self.mem_addr.eq(self.store_addr),
+            self.access_kind.eq(AccessKind.WRITE)
         ]
         with m.If(self.addr_fault):
-            self.trap(m, FaultKind.ADDR_OVERFLOW, C(0x00, 8))
-        with m.Elif(self.vector_write):
-            self.trap(m, FaultKind.VECTOR_WRITE, Cat(self.store_addr[0:4], C(0, 4)))
+            self.trap(m, FaultKind.ADDR_OVERFLOW, C(OverflowKind.WRITE, 8))
+        with m.Elif(self.access_denied):
+            self.trap_value(m, self.access_cause, self.pc)
         with m.Else():
             m.d.comb += [
-                self.mem_addr.eq(self.eff_addr),
                 self.mem_write_data.eq(self.data_buf),
                 self.mem_write_enable.eq(1),
                 self.mem_request.eq(1)
@@ -473,15 +580,17 @@ class MisaCore(Component):
     def elaborate_execute_st_stk(self, m: Module) -> None:
         m.d.comb += [
             self.csr_reg_file.read_csr_reg.eq(CsrReg.SADDR),
-            self.gp_reg_file.read_gp_reg_a.eq(self.decoder_unit.n1)
+            self.gp_reg_file.read_gp_reg_a.eq(self.decoder_unit.n1),
+
+            self.mem_addr.eq(self.store_addr),
+            self.access_kind.eq(AccessKind.WRITE)
         ]
         with m.If(self.addr_fault):
-            self.trap(m, FaultKind.ADDR_OVERFLOW, C(0x00, 8))
-        with m.Elif(self.vector_write):
-            self.trap(m, FaultKind.VECTOR_WRITE, Cat(self.store_addr[0:4], C(0, 4)))
+            self.trap(m, FaultKind.ADDR_OVERFLOW, C(OverflowKind.SADDR, 8))
+        with m.Elif(self.access_denied):
+            self.trap_value(m, self.access_cause, self.pc)
         with m.Else():
             m.d.comb += [
-                self.mem_addr.eq(self.csr_reg_file.read_data),
                 self.mem_write_data.eq(self.gp_reg_file.read_data_a),
                 self.mem_write_enable.eq(1),
                 self.mem_request.eq(1),
@@ -534,14 +643,17 @@ class MisaCore(Component):
             self.gp_reg_file.read_gp_reg_b.eq(self.decoder_unit.n2)
         ]
         with m.If(self.cmp_unit.true):
-            with m.If(self.decoder_unit.op == Op.JAL):
-                m.d.comb += [
-                    self.csr_reg_file.write_csr_reg.eq(CsrReg.RADDR),
-                    self.csr_reg_file.write_data.eq(self.pc_next),
-                    self.csr_reg_file.write_enable.eq(1)
-                ]
-            m.d.sync += self.pc.eq(self.base)
-            m.next = CoreState.FETCH_LO
+            with m.If((self.decoder_unit.op == Op.JAL) & self.pc_carry):
+                self.trap(m, FaultKind.ADDR_OVERFLOW, C(OverflowKind.LINK, 8))
+            with m.Else():
+                with m.If(self.decoder_unit.op == Op.JAL):
+                    m.d.comb += [
+                        self.csr_reg_file.write_csr_reg.eq(CsrReg.RADDR),
+                        self.csr_reg_file.write_data.eq(self.pc_next),
+                        self.csr_reg_file.write_enable.eq(1)
+                    ]
+                m.d.sync += self.pc.eq(self.base)
+                m.next = CoreState.FETCH_LO
         with m.Else():
             self.advance(m)
 
@@ -632,7 +744,7 @@ class MisaCore(Component):
             self.csr_reg_file.write_data.eq(self.cause),
             self.csr_reg_file.write_enable.eq(1)
         ]
-        m.next = CoreState.TRAP_LINK
+        m.next = CoreState.VECTOR_LO
 
 
     def elaborate_trap_link(self, m: Module) -> None:
@@ -640,7 +752,7 @@ class MisaCore(Component):
             with m.Case(VectorSelect.FAULT):
                 m.d.comb += [
                     self.csr_reg_file.write_csr_reg.eq(CsrReg.FAULT),
-                    self.csr_reg_file.write_data.eq(self.pc),
+                    self.csr_reg_file.write_data.eq(self.fault_loc),
                     self.csr_reg_file.write_enable.eq(1)
                 ]
             with m.Case(VectorSelect.SYSCALL):
@@ -682,4 +794,23 @@ class MisaCore(Component):
                     self.int_rscratch.eq(self.base),
                     self.in_interrupt.eq(1)
                 ]
-        m.next = CoreState.VECTOR_LO
+        m.d.sync += self.pc.eq(self.inst)
+        m.next = CoreState.FETCH_LO
+
+
+    def elaborate_trap_halt_cause(self, m: Module) -> None:
+        m.d.comb += [
+            self.csr_reg_file.write_csr_reg.eq(CsrReg.CAUSE),
+            self.csr_reg_file.write_data.eq(self.cause),
+            self.csr_reg_file.write_enable.eq(1)
+        ]
+        m.next = CoreState.TRAP_HALT_FAULT
+
+
+    def elaborate_trap_halt_fault(self, m: Module) -> None:
+        m.d.comb += [
+            self.csr_reg_file.write_csr_reg.eq(CsrReg.FAULT),
+            self.csr_reg_file.write_data.eq(self.fault_loc),
+            self.csr_reg_file.write_enable.eq(1)
+        ]
+        m.next = CoreState.HALTED

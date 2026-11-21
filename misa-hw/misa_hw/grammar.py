@@ -59,6 +59,7 @@ class CsrReg(IntEnum, shape = 4):
     RETSC = 0b1000
     RETIR = 0b1001
     PRIVS = 0b1010
+    MPUCF = 0b1011
 
 
 class Extn(IntEnum, shape = 4):
@@ -96,9 +97,25 @@ class FaultKind(IntEnum, shape = 6):
     PC_OVERFLOW      = 0b001010
     PRIV_ACCESS      = 0b010010
     VECTOR_WRITE     = 0b011010
+    INVALID_ACCESS   = 0b100010
+    UNMAPPED_ADDRESS = 0b101010
     IMPROPER_RETURN  = 0b000011
     COND_RETURN      = 0b001011
     IMPROPER_SYSCALL = 0b010011
+
+
+class AccessKind(IntEnum, shape = 3):
+    EXECUTE = 0b001
+    WRITE   = 0b010
+    READ    = 0b100
+
+
+class OverflowKind(IntEnum, shape = 5):
+    EXECUTE = AccessKind.EXECUTE
+    WRITE   = AccessKind.WRITE
+    READ    = AccessKind.READ
+    SADDR   = 0b01000
+    LINK    = 0b10000
 
 
 def in_enum(x: Value, enum: IntEnum) -> Value:
