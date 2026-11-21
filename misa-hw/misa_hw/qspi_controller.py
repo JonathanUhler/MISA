@@ -1,6 +1,6 @@
 from enum import StrEnum
 
-from amaranth import C, Cat, Module, Mux, Signal, Value
+from amaranth import C, Cat, Module, Signal, Value
 from amaranth.lib.enum import IntEnum
 from amaranth.lib.wiring import Component, In, Out
 
@@ -8,34 +8,18 @@ from .grammar import AccessKind
 
 
 class QspiCmd(IntEnum, shape = 8):
-    WRITE      = 0x02
-    FAST_READ  = 0x0B
-    ENTER_QUAD = 0x35
-    RESET_EN   = 0x66
-    RESET      = 0x99
-    READ_ID    = 0x9F
+    WRITE     = 0x02
+    FAST_READ = 0x0B
 
 
 class ChipSelect(IntEnum, shape = 2):
-    FLASH = 0
-    RAM_A = 1
-    RAM_B = 2
-
-
-class InitStep(IntEnum, shape = 2):
-    RESET_EN = 0
-    RESET    = 1
-    PROBE    = 2
-    QUAD     = 3
+    RAM_A = 0
+    RAM_B = 1
+    FLASH = 2
 
 
 class QspiState(StrEnum):
-    POWER_UP      = "POWER_UP"
-    INIT_SETUP    = "INIT_SETUP"
-    INIT_SHIFT    = "INIT_SHIFT"
-    INIT_IDENTITY = "INIT_IDENTITY"
-    INIT_GAP      = "INIT_GAP"
-    DEAD_BUS      = "DEAD_BUS"
+    BUS_RELEASED = "BUS_RELEASED"
 
     IDLE       = "IDLE"
     CLOSE      = "CLOSE"
@@ -47,21 +31,36 @@ class QspiState(StrEnum):
     WRITE_DATA = "WRITE_DATA"
 
 
+# As with `MisaCore.CORE_STATE_CODES` (see that comment for more info), this is the mapping of
+# encodings for QspiState.
+QSPI_STATE_CODES: dict = {
+    QspiState.BUS_RELEASED: 0,
+    QspiState.IDLE:         1,
+    QspiState.CLOSE:        2,
+    QspiState.CMD:          3,
+    QspiState.READ_DATA:    4,
+    QspiState.LOOKAHEAD:    5,
+    QspiState.ADDR:         6,
+    QspiState.WRITE_DATA:   7,
+    QspiState.WAIT:         8
+}
+
+QSPI_STATE_BITS: int = (len(QSPI_STATE_CODES) - 1).bit_length()
+
 CMD_PERIODS: int = 2
 ADDR_PERIODS: int = 6
 BYTE_PERIODS: int = 2
 WAIT_PERIODS: int = 4
 
-PROBE_CMD_BITS: int = 8 + 24
-IDENTITY_BITS: int = 8
-PROBE_PERIODS: int = PROBE_CMD_BITS + IDENTITY_BITS
+MAX_PERIODS: int = max(CMD_PERIODS, ADDR_PERIODS, BYTE_PERIODS, WAIT_PERIODS)
+READ_FRAME_PERIODS: int = CMD_PERIODS + ADDR_PERIODS + WAIT_PERIODS + BYTE_PERIODS
 
 PAGE_BITS: int = 10
 
+TCEM_PERIODS: int = 48
 TCEM_MARGIN: int = 4
 
 SD_OE_QUAD: int = 0b1111
-SD_OE_SINGLE: int = 0b1101
 SD_OE_NONE: int = 0b0000
 
 
@@ -84,22 +83,22 @@ class QspiController(Component):
     sd_o: Out(4)
     sd_oe: Out(4)
     sd_i: In(4)
+
+    # Host/top connections
+    bus_granted: In(1)
+    device_select: In(ChipSelect)
     bus_claim: Out(1)
 
-    # Diagnostics for TtUmMisa uo_out
-    device_id: Out(8)
-    device_found: Out(1)
+    state_data: Out(QSPI_STATE_BITS)
 
 
-    def __init__(self, power_up_cycles: int = 4800, tcem_periods: int = 48, psram_id: int = 0x0D):
-        if (tcem_periods < PROBE_PERIODS):
+    def __init__(self, tcem_periods: int = TCEM_PERIODS):
+        if (tcem_periods < READ_FRAME_PERIODS + TCEM_MARGIN):
             raise ValueError(
-                f"tcem_periods={tcem_periods} cannot hold the {PROBE_PERIODS} period identity"
-                f"probe, so SCK is too slow for this part: raise the clock or shorten the probe"
+                f"tcem_periods={tcem_periods} cannot hold the {READ_FRAME_PERIODS} period read "
+                f"frame plus the {TCEM_MARGIN} period margin"
             )
-        self.power_up_cycles: int = power_up_cycles
         self.tcem_periods: int = tcem_periods
-        self.psram_id: int = psram_id
         super().__init__()
 
 
@@ -111,26 +110,25 @@ class QspiController(Component):
         self.elaborate_pins(m)
 
         states: list = [
-            (QspiState.POWER_UP,      self.elaborate_power_up),
-            (QspiState.INIT_SETUP,    self.elaborate_init_setup),
-            (QspiState.INIT_SHIFT,    self.elaborate_init_shift),
-            (QspiState.INIT_IDENTITY, self.elaborate_init_identity),
-            (QspiState.INIT_GAP,      self.elaborate_init_gap),
-            (QspiState.DEAD_BUS,      self.elaborate_dead_bus),
-            (QspiState.IDLE,          self.elaborate_idle),
-            (QspiState.CLOSE,         self.elaborate_close),
-            (QspiState.CMD,           self.elaborate_cmd),
-            (QspiState.ADDR,          self.elaborate_addr),
-            (QspiState.WAIT,          self.elaborate_wait),
-            (QspiState.READ_DATA,     self.elaborate_read_data),
-            (QspiState.LOOKAHEAD,     self.elaborate_lookahead),
-            (QspiState.WRITE_DATA,    self.elaborate_write_data)
+            (QspiState.BUS_RELEASED, self.elaborate_bus_released),
+            (QspiState.IDLE,         self.elaborate_idle),
+            (QspiState.CLOSE,        self.elaborate_close),
+            (QspiState.CMD,          self.elaborate_cmd),
+            (QspiState.ADDR,         self.elaborate_addr),
+            (QspiState.WAIT,         self.elaborate_wait),
+            (QspiState.READ_DATA,    self.elaborate_read_data),
+            (QspiState.LOOKAHEAD,    self.elaborate_lookahead),
+            (QspiState.WRITE_DATA,   self.elaborate_write_data)
         ]
 
-        with m.FSM(init = QspiState.POWER_UP):
+        with m.FSM(init = QspiState.BUS_RELEASED) as fsm:
             for state, elaborator in states:
                 with m.State(state):
                     elaborator(m)
+
+        assert dict(fsm.encoding) == QSPI_STATE_CODES, \
+            "QspiController: QSPI_STATE_CODES does not agree with the Amaranth FSM encodings"
+        m.d.comb += self.state_data.eq(fsm.state)
 
         return m
 
@@ -153,12 +151,8 @@ class QspiController(Component):
     def elaborate_datapath(self, m: Module) -> None:
         self.shift_out: Signal = Signal(32)
         self.shift_in: Signal = Signal(8)
-        self.count: Signal = Signal(range(PROBE_CMD_BITS + 1))
-        self.quad: Signal = Signal(1)
+        self.count: Signal = Signal(range(MAX_PERIODS + 1))
         self.cs_assert: Signal = Signal(1)
-        self.selected: Signal = Signal(ChipSelect, init = ChipSelect.RAM_A)
-        self.init_step: Signal = Signal(InitStep)
-        self.startup: Signal = Signal(range(self.power_up_cycles + 1))
         self.writing: Signal = Signal(1)
 
         self.burst_open: Signal = Signal(1)
@@ -171,10 +165,9 @@ class QspiController(Component):
 
         m.d.comb += [
             self.mem_mapped.eq(1),
-            self.mem_caps.eq(AccessKind.EXECUTE | AccessKind.WRITE | AccessKind.READ)
+            self.mem_caps.eq(AccessKind.EXECUTE | AccessKind.WRITE | AccessKind.READ),
+            self.bus_claim.eq(1)
         ]
-
-        m.d.sync += self.bus_claim.eq(1)
 
         self.elaborate_requests(m)
         self.elaborate_tcem(m)
@@ -213,11 +206,9 @@ class QspiController(Component):
 
     def elaborate_pins(self, m: Module) -> None:
         for index in range(len(ChipSelect)):
-            m.d.comb += self.cs_n[index].eq(~(self.cs_assert & (self.selected == index)))
+            m.d.comb += self.cs_n[index].eq(~(self.cs_assert & (self.device_select == index)))
 
-        m.d.comb += self.sd_o.eq(
-            Mux(self.quad, self.shift_out[28:32], Cat(self.shift_out[31], C(0, 1), C(0b11, 2)))
-        )
+        m.d.comb += self.sd_o.eq(self.shift_out[28:32])
 
 
     def count_period(self, m: Module) -> Value:
@@ -243,30 +234,8 @@ class QspiController(Component):
         return self.count_period(m)
 
 
-    def shift_out_single(self, m: Module) -> Value:
-        m.d.comb += [self.clocking.eq(1), self.sd_oe.eq(SD_OE_SINGLE)]
-        with m.If(self.tick):
-            m.d.sync += self.shift_out.eq(self.shift_out << 1)
-        return self.count_period(m)
-
-
-    def shift_in_single(self, m: Module) -> Value:
-        m.d.comb += [self.clocking.eq(1), self.sd_oe.eq(SD_OE_SINGLE)]
-        with m.If(self.tick):
-            m.d.sync += self.shift_in.eq(self.identity_byte())
-        return self.count_period(m)
-
-
     def data_byte(self) -> Value:
         return Cat(self.sample, self.shift_in[0:4])
-
-
-    def identity_byte(self) -> Value:
-        return Cat(self.sample[1], self.shift_in[0:7])
-
-
-    def load_init_cmd(self, m: Module, opcode: QspiCmd, bits: int = 8) -> None:
-        m.d.sync += [self.shift_out.eq(C(int(opcode), 8) << 24), self.count.eq(bits)]
 
 
     def start_frame(self, m: Module, opcode: QspiCmd) -> None:
@@ -287,71 +256,20 @@ class QspiController(Component):
         m.next = QspiState.CLOSE
 
 
-    def elaborate_power_up(self, m: Module) -> None:
-        with m.If(self.startup >= self.power_up_cycles):
-            m.next = QspiState.INIT_SETUP
-        with m.Else():
-            m.d.sync += self.startup.eq(self.startup + 1)
-
-
-    def elaborate_init_setup(self, m: Module) -> None:
-        with m.If(self.tick):
-            m.d.sync += [self.cs_assert.eq(1), self.quad.eq(0)]
-            with m.Switch(self.init_step):
-                with m.Case(InitStep.RESET_EN):
-                    self.load_init_cmd(m, QspiCmd.RESET_EN)
-                with m.Case(InitStep.RESET):
-                    self.load_init_cmd(m, QspiCmd.RESET)
-                with m.Case(InitStep.PROBE):
-                    self.load_init_cmd(m, QspiCmd.READ_ID, bits = PROBE_CMD_BITS)
-                with m.Case(InitStep.QUAD):
-                    self.load_init_cmd(m, QspiCmd.ENTER_QUAD)
-            m.next = QspiState.INIT_SHIFT
-
-
-    def elaborate_init_shift(self, m: Module) -> None:
-        with m.If(self.shift_out_single(m)):
-            with m.Switch(self.init_step):
-                with m.Case(InitStep.PROBE):
-                    m.d.sync += self.count.eq(IDENTITY_BITS)
-                    m.next = QspiState.INIT_IDENTITY
-                with m.Case(InitStep.QUAD):
-                    m.d.sync += [self.cs_assert.eq(0), self.quad.eq(1)]
-                    m.next = QspiState.CLOSE
-                with m.Default():
-                    m.d.sync += [self.cs_assert.eq(0), self.init_step.eq(self.init_step + 1)]
-                    m.next = QspiState.INIT_GAP
-
-
-    def elaborate_init_identity(self, m: Module) -> None:
-        identity: Value = self.identity_byte()
-
-        with m.If(self.shift_in_single(m)):
-            m.d.sync += [self.cs_assert.eq(0), self.device_id.eq(identity)]
-            with m.If(identity == self.psram_id):
-                m.d.sync += [self.device_found.eq(1), self.init_step.eq(InitStep.QUAD)]
-                m.next = QspiState.INIT_GAP
-            with m.Elif(self.selected == ChipSelect.RAM_A):
-                m.d.sync += [
-                    self.selected.eq(ChipSelect.RAM_B),
-                    self.init_step.eq(InitStep.RESET_EN)
-                ]
-                m.next = QspiState.INIT_GAP
-            with m.Else():
-                m.next = QspiState.DEAD_BUS
-
-
-    def elaborate_init_gap(self, m: Module) -> None:
-        with m.If(self.tick):
-            m.next = QspiState.INIT_SETUP
-
-
-    def elaborate_dead_bus(self, m: Module) -> None:
-        m.d.comb += self.mem_ready.eq(self.mem_request)
+    def elaborate_bus_released(self, m: Module) -> None:
+        m.d.comb += self.bus_claim.eq(0)
+        m.d.sync += self.look_valid.eq(0)
+        with m.If(self.bus_granted):
+            m.next = QspiState.IDLE
 
 
     def elaborate_idle(self, m: Module) -> None:
-        with m.If(self.read_request & self.hit_look):
+        with m.If(~self.bus_granted):
+            with m.If(self.burst_open):
+                self.close_burst(m)
+            with m.Else():
+                m.next = QspiState.BUS_RELEASED
+        with m.Elif(self.read_request & self.hit_look):
             m.d.comb += [self.mem_read_data.eq(self.look_data), self.mem_ready.eq(1)]
             m.d.sync += self.look_valid.eq(0)
         with m.Elif(~self.tick):

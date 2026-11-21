@@ -18,8 +18,8 @@ decisions:
   `CAUSE` Types "Unmapped address" and "Invalid access" never occur. A memory map file may narrow
   this, which is how the simulator models an implementation that provides less than all of memory.
   See the Memory Map File section.
-- Every architecture extension is supported, including the Dynamic Hardware Extension, so the
-  memory protection unit required by the Privilege Extension is provided.
+- Every architecture extension is supported, including the Dynamic Hardware Extension, so the memory
+  protection unit required by the Privilege Extension is provided.
 
 There are two primary modes of operation when using `misa-spec`.
 
@@ -261,7 +261,11 @@ always accessible through additional output ports.
 | `flags_data` | 4 | Out | The contents of the `FLAGS` register on the current cycle.  |
 | `extns_data` | 4 | Out | The contents of the `EXTNS` register on the current cycle.  |
 | `privs_data` | 1 | Out | The contents of the `PRIVS` register on the current cycle.  |
+| `cause_data` | 16 | Out | The contents of the `CAUSE` register on the current cycle.  |
+| `fault_data` | 16 | Out | The contents of the `FAULT` register on the current cycle.  |
 | `mpu_caps` | 3 | Out | The User Mode permissions the memory protection unit grants at `mpu_query_addr`.  |
+
+: {tbl-colwidths="[25, 8, 12, 55]"}
 
 `MPUCF` is not a register of this file. It is a window onto the region registers of the `MpuUnit`,
 which this file instantiates, so a read or write of `MPUCF` is served by that unit.
@@ -289,6 +293,8 @@ legal under the current set of enabled architecture extensions.
 | `is_syscall` | 1 | Out | Whether the instruction word is a `SYSCALL`.  |
 | `is_illegal` | 1 | Out | Whether the instruction word is illegal under the current set of enabled architecture extensions. |
 
+: {tbl-colwidths="[25, 8, 12, 55]"}
+
 #### `GpRegFile`
 
 The general-purpose register file, which supports up to two reads and one write per cycle.
@@ -303,6 +309,8 @@ The general-purpose register file, which supports up to two reads and one write 
 | `read_data_a` | 8 | Out | The value stored in `read_gp_reg_a` on the current cycle.  |
 | `read_data_b` | 8 | Out | The value stored in `read_gp_reg_b` on the current cycle.  |
 
+: {tbl-colwidths="[20, 8, 12, 60]"}
+
 #### `MpuUnit`
 
 The memory protection unit, which the Privilege Extension requires. It holds the four region
@@ -315,6 +323,8 @@ registers that `MPUCF` is a window onto.
 | `query_addr` | 16 | In | The address to report User Mode permissions for.  |
 | `read_data` | 16 | Out | The region register that the `MPUCF.Index` field of the last write selected.  |
 | `query_caps` | 3 | Out | The permissions granted at `query_addr`: bit 0 = execute, bit 1 = write, bit 2 = read.  |
+
+: {tbl-colwidths="[20, 8, 12, 60]"}
 
 The unit stores the index of the last write rather than a second copy of the `MPUCF` word, and
 derives `read_data` from the region that index names. A read of `MPUCF` therefore cannot disagree
@@ -335,11 +345,89 @@ Memory bus interactions are described more in the next subsection.
 | `mem_read_data` | 8 | In | When `mem_ready` is high, the value of the requested byte of memory at `mem_addr`.  |
 | `mem_mapped` | 1 | In | Whether the implementation provides memory at `mem_addr`.  |
 | `mem_caps` | 3 | In | The kinds of access the memory at `mem_addr` fundamentally/physically allows (independent of MPU configuration): bit 0 = execute, bit 1 = write, bit 2 = read. |
-| `mem_addr`.  | 16 | Out | The address to perform a memory transaction on when `mem_request` is set high.  |
+| `interrupt` | 1 | In | An interrupt request. The core synchronizes and edge-detects this signal itself, so it may be driven asynchronously. |
+| `mem_addr` | 16 | Out | The address to perform a memory transaction on when `mem_request` is set high.  |
 | `mem_write_data` | 8 | Out | The data to write to `mem_addr` if `mem_write_enable` is high when `mem_request` is set high. |
 | `mem_write_enable` | 1 | Out | Whether the memory transaction when `mem_request` is set high shall be a write.  |
-| `halted` | 1 | Out | Whether the core is currently halted.  |
-| `halt_code` | 7 | Out | If `halted` is high, the lower 7 bits of `CAUSE.ExtendedStatus`.  |
+| `mem_request` | 1 | Out | Whether a memory transaction on `mem_addr` is being requested on the current cycle.  |
+| `cause_data` | 16 | Out | The current value of the `CAUSE` special register.  |
+| `fault_data` | 16 | Out | The current value of the `FAULT` special register.  |
+| `pc_data` | 16 | Out | The current program counter.  |
+| `state_data` | 5 | Out | The encoding of the state that the core's finite state machine is currently in.  |
+| `in_syscall_data` | 1 | Out | Whether the core is in a canonical system call context.  |
+| `in_interrupt_data` | 1 | Out | Whether the core is in a canonical interrupt context.  |
+| `int_pending_data` | 1 | Out | Whether an interrupt request has been latched but not yet taken.  |
+| `user_mode_data` | 1 | Out | Whether the core is executing in User Mode.  |
+
+: {tbl-colwidths="[25, 8, 12, 55]"}
+
+The ports suffixed `_data` are views into certain important state, which the `TtUmMisa` top module
+can mux to the output data pins (see Diagnostic Views below). They report state directly rather than
+through the `CsrRegFile` read port, which would take several cycles each time the data were needed.
+
+#### `QspiController`
+
+The memory controller, which connects the `MisaCore` memory bus to an external memory (intended to
+be the Tiny Tapeout QSPI Pmod, or an equivalent model/device). The memory controller serves
+single-byte transactions in quad mode.
+
+The memory controller requires that the memory device be pre-initialized (i.e. reset, have quad mode
+enabled, and have a program loaded into the memory). The memory controller is incapable of
+initializing a memory itself, in order to save area and complexity in the hardware design.
+
+Further, the memory controller assumes that all 64kB of memory are mapped with inherent read, write,
+and execute capabilities. This decision was also motivated by complexity (and avoiding committing to
+a particular memory map in silicon). If a memory is attached which does not meet those properties,
+the core will halt/fault (if a read is not served) or the transaction will be dropped (if a write is
+not served).
+
+| Port | Width | Direction | Purpose |
+|-------------------|-------|-----------|-------------------------------------------------------------------------------|
+| `mem_addr` | 16 | In | The address of the requested transaction.  |
+| `mem_write_data` | 8 | In | The byte to write, when `mem_write_enable` is high.  |
+| `mem_write_enable`| 1 | In | Whether the requested transaction is a write.  |
+| `mem_request` | 1 | In | Whether a transaction is being requested on the current cycle.  |
+| `sd_i` | 4 | In | The sampled state of the four Pmod data lines.  |
+| `bus_granted` | 1 | In | Whether the host has granted the memory device bus to the controller.  |
+| `device_select` | 2 | In | Which memory device to address, as a `ChipSelect` encoding.  |
+| `mem_ready` | 1 | Out | Whether the requested transaction has completed on the current cycle.  |
+| `mem_read_data` | 8 | Out | When `mem_ready` is high, the byte read from `mem_addr`.  |
+| `mem_mapped` | 1 | Out | Constantly high: the memory device must provide memory at every address.  |
+| `mem_caps` | 3 | Out | Constantly read-write-execute.  |
+| `sck` | 1 | Out | The memory device clock.  |
+| `cs_n` | 3 | Out | The active-low chip selects, indexed by `ChipSelect`.  |
+| `sd_o` | 4 | Out | The values to drive onto the four Pmod data lines.  |
+| `sd_oe` | 4 | Out | Which of the four data lines to drive, as the direction varies by transfer phase. |
+| `bus_claim` | 1 | Out | Whether the controller is driving the memory device bus.  |
+| `state_data` | 4 | Out | The encoding of the state the controller's finite state machine is currently in. |
+
+: {tbl-colwidths="[25, 8, 12, 55]"}
+
+There are two important constraints that the controller is aware of:
+
+1. QSPI burst operations wrap within a 1kB page, so a burst transaction must be closed and reopened
+   at memory device page boundaries.
+2. The memory controller does not assume that extra hardware exists to prevent transactions which
+   exceed the memory device's tCEM time. The controller thus tracks its own open-transaction time
+   and will close/reopen a transaction if tCEM is about to expire.
+
+#### `TtUmMisa`
+
+The Tiny Tapeout top level, which instantiates one `MisaCore` and one `QspiController`, connects
+their memory buses, and maps everything else onto the package pins. The port names, widths, and
+directions are fixed by the shuttle, which instantiates this module by name, and are described under
+Tiny Tapeout Pin Assignments below.
+
+| Port | Width | Direction | Purpose |
+|-----------|-------|-----------|-------------------------------------------------------------------------------------|
+| `ui_in` | 8 | In | The dedicated input pins.  |
+| `uio_in` | 8 | In | The sampled state of the bidirectional pins.  |
+| `ena` | 1 | In | Held high by the shuttle whenever the design is powered. Carries no information and is unused. |
+| `clk` | 1 | In | The clock.  |
+| `rst_n` | 1 | In | The active-low reset.  |
+| `uo_out` | 8 | Out | The dedicated output pins.  |
+| `uio_out` | 8 | Out | The values to drive onto the bidirectional pins.  |
+| `uio_oe` | 8 | Out | Which bidirectional pins to drive, active high, where 0 is an input and 1 an output. |
 
 ### Memory Bus Architecture
 
@@ -380,10 +468,238 @@ Each numbered step below is one clock cycle.
    1. the byte has been committed by the controller, and the core leaves the accessing state on that
       clock edge
 
+### Memory Device Ownership and Boot Flow
+
+The PSRAM on the Pmod is volatile and the design contains no boot ROM, so a program has to be placed
+into it by the host on the Tiny Tapeout demo board before the design's reset is released. The host
+and the design share one bus with the attached memory, so the design's `ui_in[1]` pin is used by the
+host to grant or revoke the design's access to the bus.
+
+The design is booted with the following steps:
+
+1. Power is applied. The host owns the memory bus. The design loops in `BUS_RELEASED`, which does
+   not drive any of the memory bus pins, and drives `bus_claim` low.
+2. The host owns the memory bus. After initializing the memory, the host stops driving any of the
+   memory bus pins, and drives `bus_granted` high.
+3. The design now owns the memory bus. The memory controller state machine advances to `IDLE`,
+   drives `bus_claim` high, and begins serving memory transactions to the core.
+   
+As stated in the prior subsection, the design never resets, identifies, or otherwise configures the
+memory device. The host is responsible for initializing the memory in step 1 above.
+
+The `bus_granted` pin is checked by the memory controller every time it enters the `IDLE` state, so
+the host may revoke access to the bus at any time (e.g. to inspect memory). The host must wait until
+`bus_claim` is low before driving any of the memory bus pins. The bus can be re-granted to the
+design using the steps from above. Revoking access to the bus does not affect the core's state, and
+will simply cause the core to stall the next time it attempts to perform a memory transaction with
+the memory controller.
+
+### Tiny Tapeout Pin Assignments
+
+The bidirectional pins are entirely consumed by the Pmod, whose pinout is fixed by the board. Note
+that the data lines are not contiguous (SD2 and SD3 sit above the clock rather than beside SD0 and
+SD1):
+
+| Pin | Pmod Signal | Driver |
+|-----------|--------------|------------------------------|
+| `uio[0]` | CS0, flash | `cs_n[ChipSelect.FLASH]` |
+| `uio[1]` | SD0 | `sd_o[0]` / `sd_i[0]` |
+| `uio[2]` | SD1 | `sd_o[1]` / `sd_i[1]` |
+| `uio[3]` | SCK | `sck` |
+| `uio[4]` | SD2 | `sd_o[2]` / `sd_i[2]` |
+| `uio[5]` | SD3 | `sd_o[3]` / `sd_i[3]` |
+| `uio[6]` | CS1, RAM A | `cs_n[ChipSelect.RAM_A]` |
+| `uio[7]` | CS2, RAM B | `cs_n[ChipSelect.RAM_B]` |
+
+The input-only pins are used for interrupt requests, the bus grant, selecting the Pmod device to
+address, and a selector for which diagnostic view appears on the output-only pins:
+
+| Pin | Purpose |
+|-------------|------------------------------------------------------------------------------------|
+| `ui_in[0]` | The active-high interrupt request.  |
+| `ui_in[1]` | The memory device bus grant, described under Memory Device Ownership above.  |
+| `ui_in[3:2]`| The memory device to address: 00 = RAM A, 01 = RAM B, 10 = flash, 11 = RAM A (again).  |
+| `ui_in[6:4]`| Which diagnostic view to present on `uo_out`.  |
+| `ui_in[7]` | Reserved.  |
+
+#### Diagnostic Views
+
+`uo_out` is one byte of a view selected by `ui_in[6:4]`.
+
+**`CORE_STATUS`**: Information about the core's state machine state and contexts.
+
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        {"name": "core state", "bits": 5},
+        {"name": "in syscall", "bits": 1},
+        {"name": "in interrupt", "bits": 1},
+        {"name": "int pending", "bits": 1}
+    ],
+    "config": {"bits": 8}
+})).tostring())
+```
+
+**`CAUSE_LO`**: The low byte of the `CAUSE` register.
+
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        {"name": "CAUSE.Reason", "bits": 3},
+        {"name": "CAUSE.Type", "bits": 3},
+        {"name": "CAUSE.Reserved", "bits": 2}
+    ],
+    "config": {"bits": 8}
+})).tostring())
+```
+
+**`CAUSE_HI`**: The high byte of the `CAUSE` register.
+
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        {"name": "CAUSE.Extended status", "bits": 8}
+    ],
+    "config": {"bits": 8}
+})).tostring())
+```
+
+**`MEMORY_STATUS`**: Information about the memory controller and User Mode.
+
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        {"name": "qspi state", "bits": 4},
+        {"name": "device select", "bits": 2},
+        {"name": "bus claim", "bits": 1},
+        {"name": "user mode", "bits": 1}
+    ],
+    "config": {"bits": 8}
+})).tostring())
+```
+
+**`PC_LO`**: The low byte of the program counter.
+
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        {"name": "PC (low byte)", "bits": 8}
+    ],
+    "config": {"bits": 8}
+})).tostring())
+```
+
+**`PC_HI`**: The high byte of the program counter.
+
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        {"name": "PC (high byte)", "bits": 8}
+    ],
+    "config": {"bits": 8}
+})).tostring())
+```
+
+**`FAULT_LO`**: The low byte of the `FAULT` register.
+
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        {"name": "FAULT (low byte)", "bits": 8}
+    ],
+    "config": {"bits": 8}
+})).tostring())
+```
+
+**`FAULT_HI`**: The high byte of the `FAULT` register.
+
+```{python}
+#| echo: false
+import wavedrom
+from IPython.display import SVG
+SVG(wavedrom.render(str({
+    "reg": [
+        {"name": "FAULT (high byte)", "bits": 8}
+    ],
+    "config": {"bits": 8}
+})).tostring())
+```
+
+The state fields for the core and memory controller report raw state encodings. Because Amaranth
+does not allow int enumerations for `FSM`, and assigns encodings in a non-intuitive way, the
+encodings are enumerated below. Changes to the state code are checked by an assertion.
+
+`MisaCore.state_data`:
+
+| Code | State |
+|------|----------|
+| 0 | `VECTOR_LO` |
+| 1 | `TRAP_HALT_CAUSE` |
+| 2 | `TRAP_CAUSE` |
+| 3 | `VECTOR_HI` |
+| 4 | `TRAP_LINK` |
+| 5 | `FETCH_LO` |
+| 6 | `FETCH_HI` |
+| 7 | `DECODE` |
+| 8 | `EXECUTE_ALU` |
+| 9 | `EXECUTE_SET` |
+| 10 | `EXECUTE_LD_STK` |
+| 11 | `EXECUTE_LD` |
+| 12 | `EXECUTE_ST_STK` |
+| 13 | `EXECUTE_ST_DATA` |
+|  14 | `EXECUTE_RSR_HI` |
+|  15 | `EXECUTE_WSR` |
+| 16 | `EXECUTE_JMP_CSR` |
+| 17 | `EXECUTE_BRANCH` |
+| 18 | `EXECUTE_HALT` |
+| 19 | `EXECUTE_ST` |
+| 20 | `EXECUTE_RSR_LO` |
+| 21 | `EXECUTE_RETIR_HI` |
+| 22 | `EXECUTE_RETIR_LO` |
+| 23 | `HALTED` |
+| 24 | `TRAP_ENTER` |
+| 25 | `TRAP_HALT_FAULT` |
+
+
+`QspiController.state_data`:
+
+| Code | State |
+|------|----------------|
+| 0 | `BUS_RELEASED` |
+| 1 | `IDLE` |
+| 2 | `CLOSE` |
+| 3 | `CMD` |
+| 4 | `READ_DATA` |
+| 5 | `LOOKAHEAD` |
+| 6 | `ADDR` |
+| 7 | `WRITE_DATA` |
+| 8 | `WAIT` |
+
 ### Fault Selection
 
-`MisaCore` alone is responsible for determining memory fault conditions, based on the information
-it has from its own internal state and whatever is given by the memory controller. The faults are
+`MisaCore` alone is responsible for determining memory fault conditions, based on the information it
+has from its own internal state and whatever is given by the memory controller. The faults are
 checked in the order specified by the ISA chapter:
 
 | Rank | Fault | Decided by | Where |

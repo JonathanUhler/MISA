@@ -16,7 +16,9 @@ class CsrRegFile(Component):
 
     read_data: Out(16)
     flags_data: Out(4)
+    cause_data: Out(16)
     extns_data: Out(4)
+    fault_data: Out(16)
     privs_data: Out(1)
     mpu_caps: Out(3)
 
@@ -96,7 +98,9 @@ class CsrRegFile(Component):
 
         m.d.comb += [
             self.flags_data.eq(self.flags),
+            self.cause_data.eq(self.cause),
             self.extns_data.eq(self.extns),
+            self.fault_data.eq(self.fault),
             self.privs_data.eq(self.privs)
         ]
 
