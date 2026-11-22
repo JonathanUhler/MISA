@@ -1,7 +1,7 @@
-.PHONY: all memtest
+.PHONY: all firsttest memtest
 
 
-all: memtest
+all: firsttest memtest
 
 
 %.bin: %.S common/handlers.S common/vectors.S common/memmap.ld
@@ -9,6 +9,9 @@ all: memtest
 	misa-as $< common/handlers.S common/vectors.S \
             -l="-M common/memmap.ld -g bin/$*.g"    \
             -o bin/$@
+
+
+firsttest: firsttest.bin
 
 
 memtest: memtest.bin
