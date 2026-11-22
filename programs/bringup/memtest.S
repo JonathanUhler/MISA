@@ -4,7 +4,7 @@
 
 Reset_Handler:
         SET2 RAB 0x0000
-        SET2 RCD 0x0C00
+        SET2 RCD 0xC000
         SET  RE  0x01
         SET  RF  0x00
         SET  RU  0xAA
