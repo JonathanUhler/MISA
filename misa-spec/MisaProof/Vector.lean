@@ -147,7 +147,9 @@ theorem st_preserves_vectors (q : State) (rd : GpReg) (rsb : GpReg) (imm : HalfW
 
 -- Executing a decoded instruction leaves the reset vector table unchanged. Every instruction is
 -- covered, not only the two that reach memory, so the result does not depend on which instructions
--- were thought to be able to write.
+-- were thought to be able to write. Unfolding all eighteen of them is what costs the extra budget:
+-- a read is a table lookup now, so the frames below are rewritten rather than computed away.
+set_option maxHeartbeats 1000000 in
 theorem decodeAndExecute_preserves_vectors (q : State) (a : AddrWord)
     (h : inVectorTable a = true) :
     (decodeAndExecute q).memory a = q.memory a := by
@@ -167,12 +169,14 @@ theorem decodeAndExecute_preserves_vectors (q : State) (a : AddrWord)
                       executeAnd, executeOr, executeXor, executeRrc, executeSet, executeRsr,
                       executeWsr, executeJal, executeJmp, executeJmpCsr]
            repeat (any_goals split)
+           -- The memory frames come first: they are cheap, where rfl would try to evaluate a
+           -- table lookup against a symbolic table before failing
            all_goals first
-             | rfl
+             | (simp [next_memory, State.writeReg_memory, State.writeSpecial_memory]
+                done)
              | exact (fault_frame _ _).2.1 a
              | exact (faultAt_frame _ _ _).2.1 a
-             | simp [next_memory, State.writeReg_memory, State.writeSpecial_memory,
-                     State.writeFlags])
+             | rfl)
 
 
 -- Fetching and executing leaves the reset vector table unchanged

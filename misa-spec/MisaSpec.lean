@@ -6,6 +6,7 @@ import MisaSpec.CsrReg
 import MisaSpec.GpReg
 import MisaSpec.MemMap
 import MisaSpec.Mpu
+import MisaSpec.Table
 import MisaSpec.State
 import MisaSpec.Inst
 import MisaSpec.Fetch

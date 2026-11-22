@@ -116,14 +116,14 @@ theorem sub_z_is_eq (a : DataWord) (b : DataWord) : (subFlags a b).z = (a == b) 
 theorem executeSub_flags (q : State) (rd : GpReg) (rs1 : GpReg) (rs2 : GpReg) :
     CsrFlags.dec ((executeSub q rd rs1 rs2).special CsrReg.flags)
       = subFlags (q.register rs1) (q.register rs2) := by
-  simp [executeSub, State.next_flags, State.writeFlags, CsrFlags.dec_enc, subFlags]
+  simp [executeSub, State.next_flags, CsrFlags.dec_enc, subFlags]
 
 
 -- Every comparison after a SUB evaluates subFlags of the two source registers
 theorem executeSub_check (q : State) (rd : GpReg) (rs1 : GpReg) (rs2 : GpReg) (cmp : CmpFlag) :
     (executeSub q rd rs1 rs2).check cmp
       = (subFlags (q.register rs1) (q.register rs2)).eval cmp := by
-  simp [executeSub, State.next_check, State.writeFlags, subFlags]
+  simp [executeSub, State.next_check, subFlags]
 
 
 -- EQUAL and NOT_EQUAL after a CMP decide equality of its operands, which is the assumption the
@@ -196,7 +196,7 @@ theorem executeAnd_flags (q : State) (rd : GpReg) (rs1 : GpReg) (rs2 : GpReg) :
     let res := q.register rs1 &&& q.register rs2
     let f := CsrFlags.dec ((executeAnd q rd rs1 rs2).special CsrReg.flags)
     f.z = (res == 0x00#8) /\ f.c = false /\ f.n = res.getLsbD 7 /\ f.v = false := by
-  simp [executeAnd, State.next_flags, State.writeFlags, CsrFlags.dec_enc]
+  simp [executeAnd, State.next_flags, CsrFlags.dec_enc]
 
 
 -- An OR sets Z and N from its result and clears C and V
@@ -204,7 +204,7 @@ theorem executeOr_flags (q : State) (rd : GpReg) (rs1 : GpReg) (rs2 : GpReg) :
     let res := q.register rs1 ||| q.register rs2
     let f := CsrFlags.dec ((executeOr q rd rs1 rs2).special CsrReg.flags)
     f.z = (res == 0x00#8) /\ f.c = false /\ f.n = res.getLsbD 7 /\ f.v = false := by
-  simp [executeOr, State.next_flags, State.writeFlags, CsrFlags.dec_enc]
+  simp [executeOr, State.next_flags, CsrFlags.dec_enc]
 
 
 -- A XOR sets Z and N from its result and clears C and V
@@ -212,7 +212,7 @@ theorem executeXor_flags (q : State) (rd : GpReg) (rs1 : GpReg) (rs2 : GpReg) :
     let res := q.register rs1 ^^^ q.register rs2
     let f := CsrFlags.dec ((executeXor q rd rs1 rs2).special CsrReg.flags)
     f.z = (res == 0x00#8) /\ f.c = false /\ f.n = res.getLsbD 7 /\ f.v = false := by
-  simp [executeXor, State.next_flags, State.writeFlags, CsrFlags.dec_enc]
+  simp [executeXor, State.next_flags, CsrFlags.dec_enc]
 
 
 -- A RRC stores the low eight bits of the nine bit value formed by C and the source shifted right
@@ -223,14 +223,14 @@ theorem executeRrc_val (q : State) (rd : GpReg) (rs : GpReg) (h : Ne rd GpReg.r0
       = (BitVec.ofBool cin ++ q.register rs).extractLsb' 1 8 := by
   cases hc : (CsrFlags.dec (q.special CsrReg.flags)).c
   all_goals
-    simp [executeRrc, hc, State.next_register, State.writeFlags,
+    simp [executeRrc, hc, State.next_register,
           State.writeReg_self _ _ _ h] <;> bv_decide
 
 
 -- A RRC sets C from bit 0 of its source register rather than from the adder
 theorem executeRrc_c (q : State) (rd : GpReg) (rs : GpReg) :
     (CsrFlags.dec ((executeRrc q rd rs).special CsrReg.flags)).c = (q.register rs).getLsbD 0 := by
-  simp [executeRrc, State.next_flags, State.writeFlags, CsrFlags.dec_enc]
+  simp [executeRrc, State.next_flags, CsrFlags.dec_enc]
 
 
 -- An ADD sets the same flags whatever its destination register, so the flags come from the ALU
@@ -238,14 +238,14 @@ theorem executeRrc_c (q : State) (rd : GpReg) (rs : GpReg) :
 theorem executeAdd_flags_independent_of_rd (q : State) (rd : GpReg) (rs1 : GpReg) (rs2 : GpReg) :
     (executeAdd q rd rs1 rs2).special CsrReg.flags
       = (executeAdd q GpReg.r0 rs1 rs2).special CsrReg.flags := by
-  simp [executeAdd, State.next_flags, State.writeFlags]
+  simp [executeAdd, State.next_flags]
 
 
 -- A SUB sets the same flags whatever its destination register, which is what makes CMP work
 theorem executeSub_flags_independent_of_rd (q : State) (rd : GpReg) (rs1 : GpReg) (rs2 : GpReg) :
     (executeSub q rd rs1 rs2).special CsrReg.flags
       = (executeSub q GpReg.r0 rs1 rs2).special CsrReg.flags := by
-  simp [executeSub, State.next_flags, State.writeFlags]
+  simp [executeSub, State.next_flags]
 
 
 end MisaSpec

@@ -229,11 +229,11 @@ def State.deserialize (content : String) : Option State := do
       | some n => BitVec.ofNat 16 n
       | none   => 0x0000#16
   return {
-    register     := regFn,
-    special      := specFn,
-    memory       := memFn,
+    regs         := regsOfFn regFn,
+    csrs         := csrsOfFn specFn,
+    mem          := Table.ofFn memFn,
     caps         := MemMap.toCaps capRegions,
-    mpuRegion    := mpuFn,
+    mpu          := Table.ofFn mpuFn,
     check        := CsrFlags.eval (CsrFlags.dec (specFn .flags)),
     pc           := BitVec.ofNat 16 pcN,
     inSyscall    := scalarBool p.scalars "inSyscall"   false,

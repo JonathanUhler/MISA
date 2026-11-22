@@ -57,7 +57,7 @@ theorem faultAt_enters_machine_mode (q : State) (c : CsrCause) (loc : AddrWord) 
     (q.faultAt c loc).userMode = false := by
   refine userMode_of_privsUpdate_zero q _ ?_ ?_
   all_goals (simp only [State.faultAt]; split)
-  all_goals simp [State.writeSpecial, CsrReg.enc]
+  all_goals simp [State.writeSpecial, CsrReg.enc, State.special, State.setCsr]
 
 
 theorem fault_enters_machine_mode (q : State) (c : CsrCause) : (q.fault c).userMode = false :=
@@ -80,7 +80,7 @@ theorem syscall_enters_machine_mode (q : State) (rs : GpReg) :
       next => exact faultAt_enters_machine_mode _ _ _
       next =>
         refine userMode_of_privsUpdate_zero q _ ?_ ?_
-        all_goals simp [State.writeSpecial, CsrReg.enc]
+        all_goals simp [State.writeSpecial, CsrReg.enc, State.special, State.setCsr]
 
 
 -- Taking an interrupt leaves the processor in Machine Mode, whether it enters its handler or faults
@@ -90,7 +90,7 @@ theorem interrupt_enters_machine_mode (q : State) : q.interrupt.userMode = false
   split
   next =>
     refine userMode_of_privsUpdate_zero q _ ?_ ?_
-    all_goals simp [State.writeSpecial, CsrReg.enc]
+    all_goals simp [State.writeSpecial, CsrReg.enc, State.special, State.setCsr]
   next => exact faultAt_enters_machine_mode _ _ _
 
 
@@ -100,7 +100,7 @@ theorem faultAt_privs_update (q : State) (c : CsrCause) (loc : AddrWord) :
       = q.privsUpdate 0x0000 &&& CsrReg.privs.writeMask := by
   simp only [State.faultAt]
   split
-  all_goals simp [State.writeSpecial, CsrReg.enc]
+  all_goals simp [State.writeSpecial, CsrReg.enc, State.special, State.setCsr]
 
 
 theorem fault_privs_update (q : State) (c : CsrCause) :
@@ -127,7 +127,7 @@ theorem interrupt_preserves_privs_when_extension_disabled (q : State) (hwf : q.W
       = q.privsUpdate 0x0000 &&& CsrReg.privs.writeMask := by
     simp only [State.interrupt]
     split
-    next => simp [State.writeSpecial, CsrReg.enc]
+    next => simp [State.writeSpecial, CsrReg.enc, State.special, State.setCsr]
     next => exact faultAt_privs_update _ _ _
   rw [hv, privsUpdate_disabled q 0x0000 h]
   exact privs_mask_self q hwf
@@ -148,7 +148,7 @@ theorem syscall_preserves_privs_when_extension_disabled (q : State) (hwf : q.WF)
       next =>
         split
         next => exact faultAt_privs_update _ _ _
-        next => simp [State.writeSpecial, CsrReg.enc]
+        next => simp [State.writeSpecial, CsrReg.enc, State.special, State.setCsr]
   rw [hv, privsUpdate_disabled q 0x0000 h]
   exact privs_mask_self q hwf
 
@@ -207,8 +207,8 @@ theorem fault_enters_fault_handler (q : State) (c : CsrCause) : (q.fault c).inFa
 theorem interrupt_pc_eq_intVector (q : State) (hv : q.intVectorReadable) :
     q.interrupt.pc = q.interrupt.intVector := by
   have h : q.readVector 0xFFF8 = Except.ok q.intVector := hv
-  simp only [State.interrupt, h]
-  simp [State.intVector, State.writeSpecial]
+  simp only [State.interrupt, h, State.intVector, State.memory]
+  simp [State.writeSpecial, State.setCsr]
 
 
 -- An interrupt is contained the same way a fault is: it lands on the interrupt handler address, or
@@ -287,35 +287,35 @@ theorem decodeAndExecute_contained (s : State) (hu : s.userMode = true) :
     next =>
       simp only [executeAdd]
       refine next_contained3 s _ hu ?_
-      simp [State.userMode, State.writeReg_special, State.writeFlags, CsrReg.enc]
+      simp [State.userMode, State.writeReg_special, CsrReg.enc]
     next =>
       simp only [executeAdc]
       refine next_contained3 s _ hu ?_
-      simp [State.userMode, State.writeReg_special, State.writeFlags, CsrReg.enc]
+      simp [State.userMode, State.writeReg_special, CsrReg.enc]
     next =>
       simp only [executeSub]
       refine next_contained3 s _ hu ?_
-      simp [State.userMode, State.writeReg_special, State.writeFlags, CsrReg.enc]
+      simp [State.userMode, State.writeReg_special, CsrReg.enc]
     next =>
       simp only [executeSbb]
       refine next_contained3 s _ hu ?_
-      simp [State.userMode, State.writeReg_special, State.writeFlags, CsrReg.enc]
+      simp [State.userMode, State.writeReg_special, CsrReg.enc]
     next =>
       simp only [executeAnd]
       refine next_contained3 s _ hu ?_
-      simp [State.userMode, State.writeReg_special, State.writeFlags, CsrReg.enc]
+      simp [State.userMode, State.writeReg_special, CsrReg.enc]
     next =>
       simp only [executeOr]
       refine next_contained3 s _ hu ?_
-      simp [State.userMode, State.writeReg_special, State.writeFlags, CsrReg.enc]
+      simp [State.userMode, State.writeReg_special, CsrReg.enc]
     next =>
       simp only [executeXor]
       refine next_contained3 s _ hu ?_
-      simp [State.userMode, State.writeReg_special, State.writeFlags, CsrReg.enc]
+      simp [State.userMode, State.writeReg_special, CsrReg.enc]
     next =>
       simp only [executeRrc]
       refine next_contained3 s _ hu ?_
-      simp [State.userMode, State.writeReg_special, State.writeFlags, CsrReg.enc]
+      simp [State.userMode, State.writeReg_special, CsrReg.enc]
     next =>
       simp only [executeSet]
       refine next_contained3 s _ hu ?_
@@ -410,7 +410,7 @@ theorem decodeAndExecute_contained (s : State) (hu : s.userMode = true) :
             have ht := readVector_ok_value s 0xFFFA t hok
             rw [ha] at ht
             refine Or.inr (Or.inr ?_)
-            simp only [State.syscallVector, State.writeSpecial]
+            simp only [State.syscallVector, State.writeSpecial, State.special, State.setCsr]
             exact ht.symm
 
 
@@ -560,11 +560,10 @@ theorem wsr_cannot_reach_int_slots (q : State) (rs1 : GpReg) (rs2 : GpReg) (csr 
       /\ q'.intFlags = q.intFlags
       /\ q'.intPrivs = q.intPrivs
       /\ q'.syscallPrivs = q.syscallPrivs := by
-  simp only [executeWsr, State.next, State.writeSpecial]
-  repeat (any_goals split)
-  all_goals first
-    | exact And.intro rfl (And.intro rfl (And.intro rfl rfl))
-    | exact (State.fault_int_frame _ _).2
+  simp only [executeWsr]
+  split
+  next => exact (State.fault_int_frame _ _).2
+  next => simp [State.next_int_frame, State.writeSpecial_int_frame]
 
 
 -- Executing a decoded instruction leaves the pending interrupt flag and the interrupt save slots
@@ -580,7 +579,8 @@ theorem decodeAndExecute_int_frame (q : State) :
   repeat (any_goals split)
   all_goals
     simp [State.writeReg_int_frame, State.writeSpecial_int_frame, State.next_int_frame,
-          State.writeFlags, State.writeMem, State.fault_int_frame, State.faultAt_int_frame]
+          State.writeMem, State.fault_int_frame, State.faultAt_int_frame, State.writeFlags,
+          State.setCsr, State.setMem]
 
 
 -- Fetching and executing leaves the pending interrupt flag and the interrupt save slots unchanged
@@ -633,7 +633,7 @@ theorem syscall_saves_privs (q : State) (rs : GpReg)
 theorem interrupt_saves_privs (q : State) (hv : q.intVectorReadable) :
     q.interrupt.intPrivs = q.special CsrReg.privs := by
   have h : q.readVector 0xFFF8 = Except.ok q.intVector := hv
-  simp only [State.interrupt, h]
+  simp only [State.interrupt, h, State.intVector, State.memory]
 
 
 -- Taking an interrupt sets RETIR to the address of the preempted instruction, so the return
@@ -641,8 +641,8 @@ theorem interrupt_saves_privs (q : State) (hv : q.intVectorReadable) :
 theorem interrupt_saves_preempted_pc (q : State) (hv : q.intVectorReadable) :
     q.interrupt.special CsrReg.retir = q.pc := by
   have h : q.readVector 0xFFF8 = Except.ok q.intVector := hv
-  simp only [State.interrupt, h]
-  simp [State.writeSpecial, CsrReg.enc, CsrReg.writeMask] <;> bv_decide
+  simp only [State.interrupt, h, State.intVector, State.memory]
+  simp [State.writeSpecial, CsrReg.enc, CsrReg.writeMask, State.special, State.setCsr] <;> bv_decide
 
 
 -- A SYSCALL sets RETSC to the address after itself, since the SYSCALL is the instruction that
@@ -654,7 +654,7 @@ theorem syscall_saves_next_pc (q : State) (rs : GpReg)
   have hr : q.readVector 0xFFFA = Except.ok q.syscallVector := hv
   simp only [executeSyscall, hr]
   simp [hs, hi, linkAddr_of_lt q.pc hpc, State.writeSpecial, CsrReg.enc,
-        CsrReg.writeMask] <;> bv_decide
+        CsrReg.writeMask, State.special, State.setCsr] <;> bv_decide
 
 
 -- Taking an interrupt continues execution at the interrupt handler address in the reset vector
@@ -662,7 +662,7 @@ theorem syscall_saves_next_pc (q : State) (rs : GpReg)
 theorem interrupt_jumps_to_vector (q : State) (hv : q.intVectorReadable) :
     q.interrupt.pc = q.intVector := by
   have h : q.readVector 0xFFF8 = Except.ok q.intVector := hv
-  simp only [State.interrupt, h]
+  simp only [State.interrupt, h, State.intVector, State.memory]
 
 
 -- A SYSCALL continues execution at the syscall handler address in the reset vector table
@@ -679,8 +679,8 @@ theorem syscall_jumps_to_vector (q : State) (rs : GpReg)
 theorem interrupt_preserves_cause (q : State) (hv : q.intVectorReadable) :
     q.interrupt.special CsrReg.cause = q.special CsrReg.cause := by
   have h : q.readVector 0xFFF8 = Except.ok q.intVector := hv
-  simp only [State.interrupt, h]
-  simp [State.writeSpecial, CsrReg.enc]
+  simp only [State.interrupt, h, State.intVector, State.memory]
+  simp [State.writeSpecial, CsrReg.enc, State.special, State.setCsr]
 
 
 -- A JMP to RETIR from an interrupt context restores the saved registers, flags, and PRIVS from the
@@ -704,14 +704,9 @@ theorem retir_restores (q : State) (hu : q.userMode = false) (hi : q.inInterrupt
     next hc => simp at hc
     next =>
       refine And.intro ?_ (And.intro ?_ (And.intro ?_ (And.intro ?_ (And.intro ?_ rfl))))
-      next =>
-        simp [State.writeSpecial_register, State.writeFlags, State.writeReg_other,
-              State.writeReg_self]
-      next =>
-        simp [State.writeSpecial_register, State.writeFlags, State.writeReg_self]
-      next => simp [State.writeSpecial_other, State.writeFlags]
-      next => simp [State.writeSpecial_self, State.writeFlags, State.writeReg]
-      next => simp [State.writeFlags, State.writeReg_special, CsrReg.enc]
+      all_goals
+        simp [State.register, State.special, State.writeSpecial, State.writeFlags, State.writeReg,
+              State.setCsr, State.setReg, GpReg.enc, CsrReg.enc, CsrReg.writeMask]
 
 
 -- Under the Privilege Extension a JMP to RETIR restores exactly the ring bit the interrupt
@@ -799,7 +794,7 @@ theorem interrupt_privs_round_trip (q : State) (hwf : q.WF) (hv : q.intVectorRea
   have he : q.interrupt.special CsrReg.extns = q.special CsrReg.extns := by
     simp only [State.interrupt]
     split
-    next => simp [State.writeSpecial, CsrReg.enc]
+    next => simp [State.writeSpecial, CsrReg.enc, State.special, State.setCsr]
     next => exact (faultAt_frame _ _ _).2.2.2.2.2.2.1
   rw [interrupt_saves_privs q hv]
   unfold State.privsUpdate
@@ -889,7 +884,7 @@ theorem retsc_leaves_syscall_context (q : State) (_hwf : q.WF) (hu : q.userMode 
     q'.inSyscall = false
       /\ q'.pc = q.special CsrReg.retsc
       /\ q'.special CsrReg.privs = q.privsUpdate q.syscallPrivs &&& CsrReg.privs.writeMask := by
-  simp [executeJmpCsr, hu, hs, hi, State.writeSpecial]
+  simp [executeJmpCsr, hu, hs, hi, State.writeSpecial, State.special, State.setCsr]
 
 
 -- Under the Privilege Extension a JMP to RETSC restores exactly the ring bit the SYSCALL displaced
@@ -935,7 +930,7 @@ theorem halt_sets_halted (q : State) (rs : GpReg) (hu : q.userMode = false) :
            = (CsrCause.haltInstruction (q.register rs)).enc &&& CsrReg.cause.writeMask := by
   refine And.intro ?_ ?_
   next => simp [executeHalt, hu]
-  next => simp [executeHalt, hu, State.writeSpecial]
+  next => simp [executeHalt, hu, State.writeSpecial, State.special, State.setCsr]
 
 
 -- Every step clears the pending interrupt flag, so pin activity that cannot be taken is discarded

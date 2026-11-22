@@ -4,17 +4,18 @@ import MisaSpec.CsrReg
 import MisaSpec.CmpFlag
 import MisaSpec.MemMap
 import MisaSpec.Mpu
+import MisaSpec.Table
 
 
 namespace MisaSpec
 
 
 structure State where
-  register     : GpReg -> DataWord
-  special      : CsrReg -> SpecWord
-  memory       : AddrWord -> DataWord
+  regs         : Table DataWord 4
+  csrs         : Table SpecWord 4
+  mem          : Table DataWord 16
   caps         : AddrWord -> Option MemCaps
-  mpuRegion    : BitVec 2 -> SpecWord
+  mpu          : Table SpecWord 2
   check        : CmpFlag -> Bool
   pc           : AddrWord
   inSyscall    : Bool
@@ -27,20 +28,50 @@ structure State where
   halted       : Bool
 
 
+def State.register (q : State) (r : GpReg) : DataWord :=
+  q.regs.get r.enc
+
+
+def State.special (q : State) (c : CsrReg) : SpecWord :=
+  q.csrs.get c.enc
+
+
+def State.mpuRegion (q : State) (i : BitVec 2) : SpecWord :=
+  q.mpu.get i
+
+
+def State.memory (q : State) (a : AddrWord) : DataWord :=
+  q.mem.get a
+
+
+def State.setReg (q : State) (r : GpReg) (v : DataWord) : State :=
+  { q with regs := q.regs.set r.enc v }
+
+
+def State.setCsr (q : State) (c : CsrReg) (v : SpecWord) : State :=
+  { q with csrs := q.csrs.set c.enc v }
+
+
+def State.setMpu (q : State) (i : BitVec 2) (v : SpecWord) : State :=
+  { q with mpu := q.mpu.set i v }
+
+
+def State.setMem (q : State) (a : AddrWord) (v : DataWord) : State :=
+  { q with mem := q.mem.set a v }
+
+
 def State.writeReg (q : State) (r : GpReg) (v : DataWord) : State :=
   match r with
   | .r0 => q
-  | _   => { q with register := fun r' => if r'.enc == r.enc then v else q.register r' }
+  | _   => q.setReg r v
 
 
 def State.writeMem (q : State) (addr : AddrWord) (v : DataWord) : State :=
-  { q with memory := fun a => if a == addr then v else q.memory a }
+  q.setMem addr v
 
 
 def State.writeFlags (q : State) (f : CsrFlags) : State :=
-  { q with
-    special := fun c => if c.enc == CsrReg.flags.enc then f.enc else q.special c,
-    check   := CsrFlags.eval f }
+  { (q.setCsr CsrReg.flags f.enc) with check := CsrFlags.eval f }
 
 
 def State.writeSpecial (q : State) (c : CsrReg) (v : SpecWord) : State :=
@@ -49,17 +80,14 @@ def State.writeSpecial (q : State) (c : CsrReg) (v : SpecWord) : State :=
   | .extns =>
     let cur := q.special .extns
     if (CsrExtns.dec cur).dynamichw then
-      let v' := (v &&& 0xFFFE#16) ||| (cur &&& 0x0001#16)
-      { q with special := fun c' => if c'.enc == CsrReg.extns.enc then v' else q.special c' }
+      q.setCsr .extns ((v &&& 0xFFFE#16) ||| (cur &&& 0x0001#16))
     else
       q
   | .flags => q.writeFlags (CsrFlags.dec v)
   | .mpucf =>
     let idx := (MpuRegion.dec v).index
-    { q with
-      special   := fun c' => if c'.enc == CsrReg.mpucf.enc then v else q.special c',
-      mpuRegion := fun i => if i == idx then v else q.mpuRegion i }
-  | _      => { q with special := fun c' => if c'.enc == c.enc then v else q.special c' }
+    (q.setCsr .mpucf v).setMpu idx v
+  | _      => q.setCsr c v
 
 
 def linkAddr (pc : AddrWord) : Option AddrWord :=
@@ -123,15 +151,15 @@ def State.fault (q : State) (cause : CsrCause) : State :=
 
 
 def State.init (bytes : ByteArray) (extns : SpecWord) (map : MemMap) : State :=
-  let mem : AddrWord -> DataWord := fun a =>
+  let mem : Table DataWord 16 := Table.ofFn (fun a =>
     let i := a.toNat
-    if i < bytes.size then BitVec.ofNat 8 (bytes.get! i).toNat else 0
-  { register     := fun _ => 0x00#8,
-    special      := fun c =>
-      if c.enc == CsrReg.extns.enc then extns &&& CsrReg.extns.writeMask else 0x0000#16,
-    memory       := mem,
+    if i < bytes.size then BitVec.ofNat 8 (bytes.get! i).toNat else 0)
+  { regs         := regsOfFn (fun _ => 0x00#8),
+    csrs         := csrsOfFn (fun c =>
+      if c.enc == CsrReg.extns.enc then extns &&& CsrReg.extns.writeMask else 0x0000#16),
+    mem          := mem,
     caps         := MemMap.toCaps map,
-    mpuRegion    := fun _ => 0x0000#16,
+    mpu          := Table.ofFn (fun _ => 0x0000#16),
     check        := CsrFlags.eval (CsrFlags.dec 0x0000#16),
     pc           := 0x0000#16,
     inSyscall    := false,

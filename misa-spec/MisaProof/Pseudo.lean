@@ -18,7 +18,7 @@ theorem nop_is_pc_increment (q : State) (imm : DataWord) :
 -- A MOV copies its source register into its destination register
 theorem mov_result (q : State) (hwf : q.WF) (rd : GpReg) (rs : GpReg) (h : Ne rd GpReg.r0) :
     (executeOr q rd rs GpReg.r0).register rd = q.register rs := by
-  simp only [executeOr, State.next_register, State.writeFlags]
+  simp only [executeOr, State.next_register, State.register_writeFlags]
   rw [State.writeReg_self q rd _ h, hwf.zeroReg]
   bv_decide
 
@@ -26,7 +26,7 @@ theorem mov_result (q : State) (hwf : q.WF) (rd : GpReg) (rs : GpReg) (h : Ne rd
 -- A MOV updates FLAGS, unlike a NOP, so it cannot be placed between a comparison and its branch
 theorem mov_clobbers_flags (q : State) (hwf : q.WF) (rd : GpReg) (rs : GpReg) :
     (executeOr q rd rs GpReg.r0).check .equal = (q.register rs == 0x00#8) := by
-  simp only [executeOr, State.next_check, State.writeFlags, CsrFlags.eval]
+  simp only [executeOr, State.next_check, State.check_writeFlags, CsrFlags.eval]
   rw [hwf.zeroReg]
   bv_decide
 
@@ -34,13 +34,13 @@ theorem mov_clobbers_flags (q : State) (hwf : q.WF) (rd : GpReg) (rs : GpReg) :
 -- A CMP leaves every register unchanged
 theorem cmp_preserves_registers (q : State) (rs1 : GpReg) (rs2 : GpReg) (r : GpReg) :
     (executeSub q GpReg.r0 rs1 rs2).register r = q.register r := by
-  simp [executeSub, State.next_register, State.writeFlags, State.writeReg_r0]
+  simp [executeSub, State.next_register, State.writeReg_r0]
 
 
 -- A CMP leaves memory unchanged
 theorem cmp_preserves_memory (q : State) (rs1 : GpReg) (rs2 : GpReg) (a : AddrWord) :
     (executeSub q GpReg.r0 rs1 rs2).memory a = q.memory a := by
-  simp [executeSub, next_memory, State.writeFlags, State.writeReg_r0]
+  simp [executeSub, next_memory, State.writeReg_r0]
 
 
 -- A CLR zeroes the FLAGS special register
@@ -137,8 +137,8 @@ theorem jal_taken_sets_raddr (q : State) (rs1 : GpReg) (rs2 : GpReg) (cmp : CmpF
       /\ (executeJal q rs1 rs2 cmp).pc = (q.register rs1 ++ q.register rs2) := by
   refine And.intro ?_ ?_
   next =>
-    simp [executeJal, h, linkAddr_of_lt q.pc hpc, State.writeSpecial, CsrReg.writeMask]
-      <;> bv_decide
+    simp [executeJal, h, linkAddr_of_lt q.pc hpc, State.writeSpecial, State.special,
+          State.setCsr, CsrReg.enc, CsrReg.writeMask] <;> bv_decide
   next => simp [executeJal, h, linkAddr_of_lt q.pc hpc]
 
 

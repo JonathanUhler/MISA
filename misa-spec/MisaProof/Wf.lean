@@ -1,4 +1,4 @@
-import MisaProof.Encoding
+import MisaProof.Table
 
 
 namespace MisaSpec
@@ -64,7 +64,7 @@ theorem State.writeSpecial_self (q : State) (c : CsrReg) (v : SpecWord)
     have hm : (v &&& CsrReg.flags.writeMask) &&& ~~~ CsrReg.flags.writeMask = 0x0000#16 := by
       simp only [CsrReg.writeMask]
       bv_decide
-    simp [State.writeSpecial, State.writeFlags, CsrFlags.enc_dec _ hm]
+    simp [State.writeSpecial, CsrFlags.enc_dec _ hm]
   all_goals simp [State.writeSpecial]
 
 
@@ -78,7 +78,7 @@ theorem State.writeSpecial_other (q : State) (c : CsrReg) (c' : CsrReg) (v : Spe
     simp only [State.writeSpecial]
     split
     all_goals simp [he]
-  all_goals simp [State.writeSpecial, State.writeFlags, he]
+  all_goals simp [State.writeSpecial, he]
 
 
 -- No special register write can set a reserved bit
@@ -107,14 +107,21 @@ theorem State.writeSpecial_masked (q : State) (c : CsrReg) (c' : CsrReg) (v : Sp
 theorem State.writeFlags_sync (q : State) (f : CsrFlags) (cmp : CmpFlag) :
     (q.writeFlags f).check cmp
       = CsrFlags.eval (CsrFlags.dec ((q.writeFlags f).special CsrReg.flags)) cmp := by
-  simp [State.writeFlags, CsrFlags.dec_enc]
+  simp [CsrFlags.dec_enc]
+
+
+-- A flags write leaves every other special register unchanged
+theorem State.writeFlags_other (q : State) (c : CsrReg) (f : CsrFlags) (h : Ne c CsrReg.flags) :
+    (q.writeFlags f).special c = q.special c := by
+  have he : Ne c.enc CsrReg.flags.enc := fun hEq => h (CsrReg.enc_inj c CsrReg.flags hEq)
+  simp [he]
 
 
 -- A special register write naming FLAGS also refreshes the cached check function
 theorem State.writeSpecial_flags_sync (q : State) (v : SpecWord) (cmp : CmpFlag) :
     (q.writeSpecial CsrReg.flags v).check cmp
       = CsrFlags.eval (CsrFlags.dec (v &&& CsrReg.flags.writeMask)) cmp := by
-  simp [State.writeSpecial, State.writeFlags]
+  simp [State.writeSpecial]
 
 
 -- A register write leaves every special register unchanged
@@ -272,7 +279,7 @@ theorem State.next_flags (q : State) :
     (State.next q).special CsrReg.flags = q.special CsrReg.flags := by
   simp only [State.next, State.fault, State.faultAt]
   repeat (any_goals split)
-  all_goals rfl
+  all_goals simp [State.writeSpecial, State.special, State.setCsr, CsrReg.enc]
 
 
 -- A register write preserves well-formedness, since a write naming R0 is dropped
@@ -281,7 +288,7 @@ theorem State.writeReg_wf (q : State) (r : GpReg) (v : DataWord) (h : q.WF) :
   cases r
   case r0 => exact h
   all_goals exact
-    { zeroReg   := by simp [State.writeReg, GpReg.enc, h.zeroReg],
+    { zeroReg   := (State.writeReg_other q _ GpReg.r0 v (by decide)).trans h.zeroReg,
       csrMasked := h.csrMasked,
       checkSync := h.checkSync,
       mpuWindow := h.mpuWindow }
@@ -295,12 +302,12 @@ theorem State.writeFlags_wf (q : State) (f : CsrFlags) (h : q.WF) : (q.writeFlag
   next =>
     intro c
     cases c
-    case flags => simp [State.writeFlags, CsrFlags.enc, CsrReg.writeMask] <;> bv_decide
-    all_goals exact h.csrMasked _
+    case flags => simp [CsrFlags.enc, CsrReg.writeMask] <;> bv_decide
+    all_goals (rw [State.writeFlags_other q _ f (by decide)]; exact h.csrMasked _)
   next => exact State.writeFlags_sync q f
   next =>
     refine State.mpuWindow_of q _ h ?_ (fun _ => rfl)
-    simp [State.writeFlags, CsrReg.enc]
+    simp [CsrReg.enc]
 
 
 -- A special register write preserves well-formedness
@@ -319,7 +326,7 @@ theorem State.writeSpecial_wf (q : State) (c : CsrReg) (v : SpecWord) (h : q.WF)
       intro cmp
       simp only [State.writeSpecial]
       split
-      all_goals exact h.checkSync cmp
+      all_goals simp [CsrReg.enc, h.checkSync cmp]
     next =>
       refine State.mpuWindow_of q _ h ?_ ?_
       next =>
@@ -337,7 +344,9 @@ theorem State.writeSpecial_wf (q : State) (c : CsrReg) (v : SpecWord) (h : q.WF)
     constructor
     next => exact h.zeroReg
     next => exact fun c' => State.writeSpecial_masked q _ c' v h
-    next => exact h.checkSync
+    next =>
+      intro cmp
+      simp [State.writeSpecial, CsrReg.enc, h.checkSync cmp]
     next =>
       first
         | (refine State.mpuWindow_of q _ h ?_ (fun _ => rfl)
@@ -409,11 +418,15 @@ theorem State.init_wf (bytes : ByteArray) (extns : SpecWord) (map : MemMap) :
   next => rfl
   next =>
     intro c
-    cases c <;> simp [State.init, CsrReg.enc, CsrReg.writeMask] <;> bv_decide
+    cases c <;>
+      (simp only [State.init, State.special, csrsOfFn_get]
+       simp [CsrReg.enc, CsrReg.writeMask] <;> bv_decide)
   next =>
     intro f
     rfl
-  next => simp [State.init, CsrReg.enc]
+  next =>
+    simp only [State.init, State.special, State.mpuRegion, csrsOfFn_get, Table.get_ofFn]
+    simp [CsrReg.enc]
 
 
 -- Reset produces a well-formed state, whether or not it could read the reset vector
@@ -433,7 +446,7 @@ theorem State.first_pc (bytes : ByteArray) (extns : SpecWord) (map : MemMap)
     (State.first bytes extns map).pc = (State.first bytes extns map).resetVector := by
   have h : (State.init bytes extns map).readVector 0xFFFE
       = Except.ok (State.init bytes extns map).resetVector := hv
-  simp only [State.first, h, State.resetVector]
+  simp only [State.first, h, State.resetVector, State.memory]
 
 
 -- A reset vector which cannot be read faults like any other vector, so the machine comes up in the
@@ -476,24 +489,24 @@ theorem State.deserialize_wf (content : String) (q : State)
           intro x
           bv_decide
         cases hc : (lookup? (parseStateText content).specials c.name).bind parseNumeral? with
-        | none   => simp [hc] <;> bv_decide
-        | some n => simp [hc, hm] <;> bv_decide
+        | none   => simp [State.special, hc] <;> bv_decide
+        | some n => simp [State.special, hc, hm] <;> bv_decide
       next =>
         intro f
         rfl
-      next => simp
+      next => simp [State.special, State.mpuRegion]
 
 
 -- Well-formedness constrains only the registers, the special registers, the cached comparisons,
 -- and the region registers, so an update leaving those four alone preserves it
 theorem State.wf_of_fields (q : State) (q' : State) (h : q.WF)
-    (hr : q'.register = q.register) (hs : q'.special = q.special) (hc : q'.check = q.check)
-    (hm : q'.mpuRegion = q.mpuRegion) : q'.WF := by
+    (hr : q'.regs = q.regs) (hs : q'.csrs = q.csrs) (hc : q'.check = q.check)
+    (hm : q'.mpu = q.mpu) : q'.WF := by
   constructor
-  next => rw [hr]; exact h.zeroReg
-  next => rw [hs]; exact h.csrMasked
-  next => rw [hc, hs]; exact h.checkSync
-  next => rw [hs, hm]; exact h.mpuWindow
+  next => simp only [State.register, hr]; exact h.zeroReg
+  next => intro c; simp only [State.special, hs]; exact h.csrMasked c
+  next => intro f; simp only [hc, State.special, hs]; exact h.checkSync f
+  next => simp only [State.special, State.mpuRegion, hs, hm]; exact h.mpuWindow
 
 
 -- Executing a decoded instruction preserves well-formedness, because every instruction reaches

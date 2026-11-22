@@ -65,7 +65,7 @@ theorem faultAt_frame (q : State) (c : CsrCause) (loc : AddrWord) :
   repeat (any_goals apply And.intro)
   all_goals intros
   all_goals (simp only [State.faultAt]; split)
-  all_goals rfl
+  all_goals simp [State.writeSpecial, State.register, State.memory, State.special, State.setCsr, CsrReg.enc]
 
 
 theorem fault_frame (q : State) (c : CsrCause) :
@@ -88,7 +88,7 @@ theorem faultAt_preserves_context (q : State) (c : CsrCause) (loc : AddrWord) :
       /\ (q.faultAt c loc).inInterrupt = q.inInterrupt := by
   refine And.intro ?_ ?_
   all_goals (simp only [State.faultAt]; split)
-  all_goals rfl
+  all_goals simp [State.writeSpecial, State.setCsr, CsrReg.enc]
 
 
 theorem fault_preserves_context (q : State) (c : CsrCause) :
@@ -103,7 +103,7 @@ theorem faultAt_records_loc (q : State) (c : CsrCause) (loc : AddrWord)
     (hv : q.faultVectorReadable) : (q.faultAt c loc).special CsrReg.fault = loc := by
   have h : q.readVector 0xFFFC = Except.ok q.faultVector := hv
   simp only [State.faultAt, h]
-  simp [State.writeSpecial, CsrReg.writeMask] <;> bv_decide
+  simp [State.writeSpecial, State.special, State.setCsr, CsrReg.enc, CsrReg.writeMask] <;> bv_decide
 
 
 theorem fault_records_pc (q : State) (c : CsrCause) (hv : q.faultVectorReadable) :
@@ -117,7 +117,7 @@ theorem faultAt_sets_cause (q : State) (c : CsrCause) (loc : AddrWord)
     (q.faultAt c loc).special CsrReg.cause = c.enc &&& CsrReg.cause.writeMask := by
   have h : q.readVector 0xFFFC = Except.ok q.faultVector := hv
   simp only [State.faultAt, h]
-  rfl
+  simp [State.writeSpecial, State.special, State.setCsr, CsrReg.enc]
 
 
 theorem fault_sets_cause (q : State) (c : CsrCause) (hv : q.faultVectorReadable) :
@@ -155,10 +155,12 @@ theorem faultAt_vector_unreadable_halts (q : State) (c : CsrCause) (loc : AddrWo
       /\ (q.faultAt c loc).special CsrReg.fault = 0xFFFC := by
   refine And.intro ?_ (And.intro ?_ ?_)
   next => simp only [State.faultAt, h]
-  next => simp only [State.faultAt, h]; rfl
   next =>
     simp only [State.faultAt, h]
-    simp [State.writeSpecial, CsrReg.writeMask] <;> bv_decide
+    simp [State.writeSpecial, State.special, State.setCsr, CsrReg.enc]
+  next =>
+    simp only [State.faultAt, h]
+    simp [State.writeSpecial, State.special, State.setCsr, CsrReg.enc, CsrReg.writeMask] <;> bv_decide
 
 
 -- Every fault either enters the fault handler or halts the processor, so a fault never continues
@@ -266,7 +268,7 @@ theorem first_unreadable_reset_enters_handler (bytes : ByteArray) (extns : SpecW
 -- A successful HALT leaves FAULT unchanged
 theorem halt_preserves_fault_reg (q : State) (rs : GpReg) (hu : q.userMode = false) :
     (executeHalt q rs).special CsrReg.fault = q.special CsrReg.fault := by
-  simp [executeHalt, hu, State.writeSpecial, CsrReg.enc]
+  simp [executeHalt, hu, State.writeSpecial, State.special, State.setCsr, CsrReg.enc]
 
 
 -- A successful SYSCALL leaves FAULT unchanged
@@ -276,7 +278,7 @@ theorem syscall_preserves_fault_reg (q : State) (rs : GpReg)
     (executeSyscall q rs).special CsrReg.fault = q.special CsrReg.fault := by
   have h : q.readVector 0xFFFA = Except.ok q.syscallVector := hv
   simp only [executeSyscall, hs, hi, linkAddr_of_lt q.pc hpc, h, Bool.or_self]
-  simp [State.writeSpecial, CsrReg.enc]
+  simp [State.writeSpecial, State.special, State.setCsr, CsrReg.enc]
 
 
 -- Below the end of the address space the program counter advances by two without recording a cause
@@ -334,7 +336,7 @@ theorem jmp_taken_no_overflow (q : State) (rs1 : GpReg) (rs2 : GpReg) (cmp : Cmp
     (h : q.check cmp = true) :
     (executeJmp q rs1 rs2 cmp).pc = (q.register rs1 ++ q.register rs2)
       /\ (executeJmp q rs1 rs2 cmp).special CsrReg.cause = q.special CsrReg.cause := by
-  simp [executeJmp, h]
+  simp [executeJmp, h, State.special]
 
 
 -- A taken JAL sets the program counter from its target and cannot raise a PC overflow
@@ -342,7 +344,7 @@ theorem jal_taken_no_overflow (q : State) (rs1 : GpReg) (rs2 : GpReg) (cmp : Cmp
     (h : q.check cmp = true) (hpc : q.pc < 0xFFFE#16) :
     (executeJal q rs1 rs2 cmp).pc = (q.register rs1 ++ q.register rs2)
       /\ (executeJal q rs1 rs2 cmp).special CsrReg.cause = q.special CsrReg.cause := by
-  simp [executeJal, h, linkAddr_of_lt q.pc hpc, State.writeSpecial, CsrReg.enc]
+  simp [executeJal, h, linkAddr_of_lt q.pc hpc, State.writeSpecial, State.special, State.setCsr, CsrReg.enc]
 
 
 -- An instruction that completes before its sequential increment overflows keeps its effects, which
@@ -569,7 +571,7 @@ theorem st_stack_order (q : State) (rd : GpReg) (imm : HalfWord) (s : AddrWord)
   refine And.intro ?_ ?_
   next =>
     rw [next_memory]
-    simp [State.writeSpecial, State.writeMem, CsrReg.enc]
+    simp [State.writeSpecial, State.writeMem]
   next =>
     rw [next_saddr, State.writeSpecial_self _ CsrReg.saddr s (by decide)]
     simp [CsrReg.writeMask] <;> bv_decide
@@ -629,6 +631,17 @@ theorem halt_preserves_flags (q : State) (rs : GpReg) :
   all_goals first
     | rfl
     | exact (fault_frame q _).2.2.2.2.2.1
+    | exact State.next_flags _
+    -- The record update an instruction ends in hides the writes beneath it from the lemmas keyed
+    -- on them. Take the frames that are keyed on an accessor first, while the accessor is still
+    -- the head of the term, and only then reach the table underneath.
+    | (try simp only [State.next_flags, State.writeReg_special]
+       try simp [State.special, State.writeSpecial, State.setCsr,
+                 CsrReg.enc]
+       done)
+    | (simp only [State.special, State.writeSpecial, State.setCsr]
+       simp [CsrReg.enc]
+       done)
 
 
 -- A LD leaves FLAGS unchanged
@@ -639,7 +652,17 @@ theorem ld_preserves_flags (q : State) (rd : GpReg) (rsb : GpReg) (imm : HalfWor
   all_goals first
     | rfl
     | exact (fault_frame q _).2.2.2.2.2.1
-    | simp [State.next_flags, State.writeReg_special, State.writeSpecial, CsrReg.enc]
+    | exact State.next_flags _
+    -- The record update an instruction ends in hides the writes beneath it from the lemmas keyed
+    -- on them. Take the frames that are keyed on an accessor first, while the accessor is still
+    -- the head of the term, and only then reach the table underneath.
+    | (try simp only [State.next_flags, State.writeReg_special]
+       try simp [State.special, State.writeSpecial, State.setCsr,
+                 CsrReg.enc]
+       done)
+    | (simp only [State.special, State.writeSpecial, State.setCsr]
+       simp [CsrReg.enc]
+       done)
 
 
 -- A ST leaves FLAGS unchanged
@@ -650,6 +673,17 @@ theorem st_preserves_flags (q : State) (rd : GpReg) (rsb : GpReg) (imm : HalfWor
   all_goals first
     | rfl
     | exact (fault_frame q _).2.2.2.2.2.1
+    | exact State.next_flags _
+    -- The record update an instruction ends in hides the writes beneath it from the lemmas keyed
+    -- on them. Take the frames that are keyed on an accessor first, while the accessor is still
+    -- the head of the term, and only then reach the table underneath.
+    | (try simp only [State.next_flags]
+       try simp [State.special, State.writeSpecial, State.setCsr, State.writeMem, State.setMem,
+                 CsrReg.enc]
+       done)
+    | (simp only [State.special, State.writeSpecial, State.setCsr]
+       simp [CsrReg.enc]
+       done)
     | simp [State.next_flags, State.writeSpecial, State.writeMem, CsrReg.enc]
 
 
@@ -670,7 +704,7 @@ theorem jal_preserves_flags (q : State) (rs1 : GpReg) (rs2 : GpReg) (cmp : CmpFl
   next =>
     split
     next => exact (fault_frame q _).2.2.2.2.2.1
-    next => simp [State.writeSpecial, CsrReg.enc]
+    next => simp [State.writeSpecial, State.special, State.setCsr, CsrReg.enc]
   next => exact State.next_flags q
 
 
@@ -697,7 +731,13 @@ theorem jmpCsr_preserves_flags (q : State) (csr : CsrReg) (cmp : CmpFlag)
       | rfl
       | exact (fault_frame q _).2.2.2.2.2.1
       | exact State.next_flags q
-      | simp [State.writeSpecial, CsrReg.enc]
+      -- A context return ends in a record update, which hides the PRIVS write beneath it from the
+      -- lemmas keyed on that write, so reach the table underneath instead
+      | (simp [State.writeSpecial]
+         done)
+      | (simp only [State.special, State.writeSpecial, State.setCsr]
+         simp [CsrReg.enc]
+         done)
 
 
 -- A WSR only reaches FLAGS when FLAGS is the register it names, never through the ALU output

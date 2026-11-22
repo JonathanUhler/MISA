@@ -93,7 +93,7 @@ theorem State.first_mpu_grants_nothing (bytes : ByteArray) (extns : SpecWord) (m
     intro i
     simp only [State.first, State.faultAt]
     repeat (any_goals split)
-    all_goals rfl
+    all_goals simp [State.init, State.mpuRegion, State.writeSpecial, State.setCsr]
   exact Mpu.caps_zero _ h a
 
 
@@ -107,7 +107,8 @@ theorem mpucf_writeMask_id (v : SpecWord) : v &&& CsrReg.mpucf.writeMask = v := 
 theorem State.writeSpecial_mpucf_region (q : State) (v : SpecWord) (i : BitVec 2) :
     (q.writeSpecial CsrReg.mpucf v).mpuRegion i
       = if i == (MpuRegion.dec v).index then v else q.mpuRegion i := by
-  simp only [State.writeSpecial, mpucf_writeMask_id]
+  simp only [State.writeSpecial, mpucf_writeMask_id, State.mpuRegion_setMpu,
+             State.mpuRegion_setCsr]
 
 
 -- A WSR on MPUCF reports back the word it wrote, which carries both the region information and
