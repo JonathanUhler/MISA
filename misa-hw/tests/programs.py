@@ -89,6 +89,30 @@ def syscall_inst(rs: int = GpReg.R0, reserved: int = 0) -> int:
     return halt_inst(rs, reserved) | SYSCALL_BIT
 
 
+def cause_word(kind: int, status: int = 0x00) -> int:
+    return (kind & 0x3F) | ((status & 0xFF) << 8)
+
+
+def cause_reason(cause: int) -> int:
+    return cause & 0b111
+
+
+def cause_type(cause: int) -> int:
+    return (cause >> 3) & 0b111
+
+
+def cause_reserved(cause: int) -> int:
+    return (cause >> 6) & 0b11
+
+
+def cause_status(cause: int) -> int:
+    return (cause >> 8) & 0xFF
+
+
+def flags_word(z: int, c: int, n: int, v: int) -> int:
+    return (z & 1) | ((c & 1) << 1) | ((n & 1) << 2) | ((v & 1) << 3)
+
+
 def mpu_region(base: int, size: int, index: int, caps: int) -> int:
     return ((base & 0xFF) << 8) | ((size & 0b111) << 5) | ((index & 0b11) << 3) | (caps & 0b111)
 
@@ -116,7 +140,8 @@ def patterned_memory() -> bytearray:
     return bytearray((addr ^ (addr >> 8)) & 0xFF for addr in range(MEMORY_SIZE))
 
 
-def block_image(blocks: dict, vectors: dict = None, memory: bytearray = None) -> bytes:
+def block_image(blocks: dict, vectors: dict = None, memory: bytearray = None,
+                data: dict = None) -> bytes:
     image: bytearray = filled_memory() if (memory is None) else memory
     if (len(image) != MEMORY_SIZE):
         raise ValueError(f"the image is {len(image)} bytes, expected {MEMORY_SIZE}")
@@ -128,6 +153,11 @@ def block_image(blocks: dict, vectors: dict = None, memory: bytearray = None) ->
             raise ValueError(f"the block at {addr:#06x} does not fit in memory")
         for index, word in enumerate(words):
             image[addr + 2 * index:addr + 2 * index + 2] = word_bytes(word)
+
+    for addr, datum in (data or {}).items():
+        if (addr + len(datum) > MEMORY_SIZE):
+            raise ValueError(f"the {len(datum)} bytes at {addr:#06x} do not fit in memory")
+        image[addr:addr + len(datum)] = datum
 
     for addr, target in (vectors or {}).items():
         if (not (VECTOR_TABLE_LO <= addr < MEMORY_SIZE)) or (addr % 2):

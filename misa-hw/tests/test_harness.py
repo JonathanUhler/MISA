@@ -13,7 +13,7 @@ from memory import (
     MEMORY_SIZE, MemMap, MemoryBfm
 )
 from programs import (
-    FAULT_VECTOR, RESET_VECTOR, SYSCALL_VECTOR, VECTOR_TABLE_LO, encode, patched
+    FAULT_VECTOR, RESET_VECTOR, SYSCALL_VECTOR, VECTOR_TABLE_LO, cause_word, encode, patched
 )
 from spec import SpecDriver, split_records
 from state import MisaState
@@ -38,9 +38,9 @@ PARTIAL_VECTORS: MemMap = MemMap.from_rows((
     (RESET_VECTOR, RESET_VECTOR, "rx")
 ))
 
-CAUSE_UNMAPPED_READ: int = FaultKind.UNMAPPED_ADDRESS | (AccessKind.READ << 8)
-CAUSE_INVALID_READ: int = FaultKind.INVALID_ACCESS | (AccessKind.READ << 8)
-CAUSE_INVALID_WRITE: int = FaultKind.INVALID_ACCESS | (AccessKind.WRITE << 8)
+CAUSE_UNMAPPED_READ: int = cause_word(FaultKind.UNMAPPED_ADDRESS, AccessKind.READ)
+CAUSE_INVALID_READ: int = cause_word(FaultKind.INVALID_ACCESS, AccessKind.READ)
+CAUSE_INVALID_WRITE: int = cause_word(FaultKind.INVALID_ACCESS, AccessKind.WRITE)
 
 MPU_REGION_1: int = 0x0A08
 

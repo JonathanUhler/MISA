@@ -42,6 +42,7 @@ The following pytest markers are also available:
 | `test_harness.py` | Tests the testbench itself (state file serdes, state record replay, the memory BFM, instruction boundary detection, etc).  |
 | `test_units.py` | `AluUnit`, `CmpUnit`, `DecoderUnit`, `GpRegFile`, `CsrRegFile` and `MpuUnit` individual tests. `--exhaustive` covers every ALU operand pair and every instruction word against every `EXTNS` value. |
 | `test_sweep.py` | Executes one instruction from a known state and compares the whole architectural state, for every one of the 65536 instruction words. |
+| `test_directed.py` | A set of directed tests that verify conformance for behavior in the ISA manual (decode legality, flags, addressing, fault precedence, vector reads, special registers, and each extension). |
 
 ### `test_units` Reference Model
 

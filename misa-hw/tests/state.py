@@ -1,6 +1,7 @@
 import base64
 from dataclasses import dataclass, replace
 
+from misa_hw.grammar import CsrReg, Extn
 from misa_hw.init import CoreInit, CsrRegInit, GpRegInit, MpuInit
 
 from memory import MEMORY_SIZE, MemMap
@@ -25,6 +26,15 @@ CSR_WRITE_MASKS: dict = {
     "privs": 0x0001,
     "mpucf": 0xFFFF
 }
+CSR_EXTENSIONS: dict = {
+    CsrReg.SADDR: 0, CsrReg.RADDR: 0, CsrReg.FLAGS: 0,
+    CsrReg.CAUSE: 0, CsrReg.EXTNS: 0, CsrReg.FAULT: 0,
+    CsrReg.RETSC: Extn.SYSCALL, CsrReg.RETIR: Extn.INTERRUPT,
+    CsrReg.PRIVS: Extn.PRIVILEGE, CsrReg.MPUCF: Extn.PRIVILEGE
+}
+RESERVED_CSRS: tuple = (0b0000, 0b0111, 0b1100, 0b1101, 0b1110, 0b1111)
+USER_READABLE_CSRS: tuple = (CsrReg.SADDR, CsrReg.RADDR, CsrReg.FLAGS, CsrReg.PRIVS)
+USER_WRITABLE_CSRS: tuple = (CsrReg.SADDR, CsrReg.RADDR, CsrReg.FLAGS)
 SHADOW_MASKS: dict = {
     "int_rscratch": 0xFFFF,
     "int_flags": 0x000F,
@@ -80,6 +90,13 @@ def parse_spec_text(text: str) -> SpecRecord:
             record.scalars[key] = value
 
     return record
+
+
+def csr_available(csr: int, extns: int) -> bool:
+    required: int = CSR_EXTENSIONS.get(csr)
+    if (required is None):
+        return False
+    return (required == 0) or bool(extns & required)
 
 
 def mpu_window_index(region: int) -> int:

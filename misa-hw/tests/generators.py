@@ -13,6 +13,10 @@ from state import GP_REG_NAMES, MPU_REGION_COUNT, MisaState
 
 
 HANDLER_BASE: int = 0xD000
+SYSCALL_BASE: int = 0xD100
+INTERRUPT_BASE: int = 0xD200
+
+DEFAULT_EXTNS: int = 0xF
 
 HALT_CAUSE: int = 0x0001
 

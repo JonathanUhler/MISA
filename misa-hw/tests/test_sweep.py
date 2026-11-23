@@ -7,8 +7,8 @@ from misa_hw.init import CoreInit
 
 from compare import DivergenceError, lockstep, single_step
 from generators import (
-    ALL_ENCODINGS, HALT_RESERVED, HANDLER_BASE, NIBBLE_RESERVED, SEEDS, Seed, SeedProgram,
-    representative_encodings, seed_problems, seed_program
+    ALL_ENCODINGS, DEFAULT_EXTNS, HALT_RESERVED, HANDLER_BASE, NIBBLE_RESERVED, SEEDS, Seed,
+    SeedProgram, representative_encodings, seed_problems, seed_program
 )
 from memory import MemMap, MemoryLatency
 from programs import PAGE_SIZE, PROGRAM_BASE, patched, set_inst, word_bytes
@@ -19,7 +19,6 @@ from target import RunResult, Target
 
 SWEEP_MEMMAP: MemMap = MemMap.everything()
 
-DEFAULT_EXTNS: int = 0xF
 SWEEP_EXTNS: tuple = (0xF, 0x0)
 QUICK_EXTNS: tuple = (0xF,)
 

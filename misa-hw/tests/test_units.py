@@ -12,7 +12,10 @@ from misa_hw.mpu_unit import MpuUnit
 
 from memory import CAPS_RWX
 from programs import mpu_pages, mpu_region
-from state import CSR_REG_NAMES, CSR_WRITE_MASKS, GP_REG_NAMES, MPU_REGION_COUNT
+from state import (
+    CSR_REG_NAMES, CSR_WRITE_MASKS, GP_REG_NAMES, MPU_REGION_COUNT, RESERVED_CSRS,
+    USER_READABLE_CSRS, USER_WRITABLE_CSRS, csr_available
+)
 from target import PackedView
 
 
@@ -217,16 +220,6 @@ DECODER_FIELDS: tuple = (
     "csr_user_readable", "csr_user_writable", "is_jmp_csr", "is_syscall", "is_illegal"
 )
 
-CSR_EXTENSIONS: dict = {
-    CsrReg.SADDR: 0, CsrReg.RADDR: 0, CsrReg.FLAGS: 0,
-    CsrReg.CAUSE: 0, CsrReg.EXTNS: 0, CsrReg.FAULT: 0,
-    CsrReg.RETSC: Extn.SYSCALL, CsrReg.RETIR: Extn.INTERRUPT,
-    CsrReg.PRIVS: Extn.PRIVILEGE, CsrReg.MPUCF: Extn.PRIVILEGE
-}
-RESERVED_CSRS: tuple = (0b0000, 0b0111, 0b1100, 0b1101, 0b1110, 0b1111)
-USER_READABLE_CSRS: tuple = (CsrReg.SADDR, CsrReg.RADDR, CsrReg.FLAGS, CsrReg.PRIVS)
-USER_WRITABLE_CSRS: tuple = (CsrReg.SADDR, CsrReg.RADDR, CsrReg.FLAGS)
-
 GATED_WORDS: tuple = (
     (Op.RSR | (CsrReg.RETSC << 12), Extn.SYSCALL),
     (Op.RSR | (CsrReg.RETIR << 12), Extn.INTERRUPT),
@@ -240,13 +233,6 @@ GATED_WORDS: tuple = (
 )
 
 EXTNS_BLIND_STRIDE: int = 101
-
-
-def csr_available(csr: int, extns: int) -> bool:
-    required: int = CSR_EXTENSIONS.get(csr)
-    if (required is None):
-        return False
-    return (required == 0) or bool(extns & required)
 
 
 def decode_model(word: int, extns: int) -> dict:
