@@ -39,7 +39,7 @@ The basic command line usage is:
 
 ```
 misa-spec q0 <memfile>
-    [-e <extension ...>] [-i <step ...>] [-n <steps>] [-M <mapfile>] [-o <outfile>]
+    [-e <extension ...>] [-i <step ...>] [-n <steps>] [-M <mapfile>] [-o <outfile>] [-t]
 ```
 
 ### Running From Arbitrary State
@@ -54,8 +54,40 @@ state of the machine, so nothing is left for the user to provide.
 The basic command line usage is:
 
 ```
-misa-spec qi <statefile> [-i <step ...>] [-n <steps>] [-o <outfile>]
+misa-spec qi <statefile> [-i <step ...>] [-n <steps>] [-o <outfile>] [-t]
 ```
+
+### Running A Sweep Of Patched Images
+
+Checking another implementation against `misa-spec` often means running a large number of short
+programs which differ from one another in only a few places. To avoid large overheads caused by
+loading 64kB memory files, `misa-spec` can instead tkae one memory file and a list of patches to
+apply to it, and run every patched copy with minimal reload/reset between. This "sweep" mode
+operates on job files that specify the patches to make.
+
+Each line of the job file is one job. A job is a list of patch groups separated by `;`, where
+patches for a group are given as memory writes `<addr> : <byte> ...`. For each patch, the memory
+beginning at the absolute address `<addr>` is replaced with the byte sequence `<byte> ...`. The byte
+arrays are given least-significant-byte first. For example, a job file which sweeps the instruction
+at `0xC000` through the first few possible, with the third job also moving the reset vector, looks
+like this:
+
+```
+0xC000 : 0x00 0x00
+0xC000 : 0x01 0x00
+0xC000 : 0x02 0x00 ; 0xFFFE : 0x00 0xC0
+```
+
+Every job starts from the canonical initial state of its own patched image. The basic command line
+usage is:
+
+```
+misa-spec sweep <memfile> <jobfile>
+    [-e <extension ...>] [-i <step ...>] [-n <steps>] [-M <mapfile>] [-o <outfile>]
+```
+
+Sweep mode always reports one record per job, in the order the jobs appear in the job file. Because
+jobs are independent, the interrupt schedule and the step count apply to each job separately.
 
 ### Interrupt Injection
 
@@ -201,6 +233,42 @@ A state file is considered semantically correct if and only if there exists an i
 `memfile.bin`, a set of extensions `extns ...`, an interrupt schedule `ints ...`, a memory map file
 `map.ld`, and a step count `n` such that every field in the state file matches the output of
 `misa-spec q0 memfile.bin -n n -e extns ... -i ints ... -M map.ld`.
+
+### Reporting Every Transition
+
+By default `misa-spec` reports only the state a run ends in. To allow checking other implementations
+against `misa-spec` without the overhead of launching `misa-spec` for each state transition, the
+"trace" mode is provided, which emits state information after each transition.
+
+Information for each state is separated by a `---` delimiter in the output of `misa-spec`. Only the
+first state record is complete, and every subsequent record is reported as the list of differences
+from the previous record.
+
+Records use the state file grammar, with two differences:
+
+1. A heading whose section is empty (e.g. one which is not changed between states) is omitted rather
+   than written with no rows under it. A consequence of this is that the `caps` section never
+   appears, because no state transition writes the capability map.
+2. The `memory` field is replaced by a `writes` section listing the addresses whose contents
+   changed, which is at most one address per transition because `ST` is the only instruction that
+   writes memory and it writes a single byte:
+   
+An example of a state record other than the first might be:
+
+```yaml
+pc          : 0xC014
+registers:
+  rf : 0xAA
+writes:
+  0x0000 : 0xAA
+```
+
+This record says that: the program counter was updated to `0xC014`, the register `RF` had the value
+`0xAA` stored in it, and the same value was written to memory address `0x0000`.
+
+A record may hold nothing at all between its separators, which means the transition changed no field
+of the state. A trace ends when the step count is exhausted or the machine halts, so a run which
+halts early reports fewer records than the step count asked for.
 
 ## Hardware Reference
 

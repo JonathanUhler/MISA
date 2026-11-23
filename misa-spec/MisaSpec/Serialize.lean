@@ -101,34 +101,91 @@ def capsRuns (q : State) : List (Nat × Nat × MemCaps) :=
   ((List.range 65536).foldl step []).reverse
 
 
-def State.serialize (q : State) : String :=
-  let capsLines := String.join (capsRuns q |>.map fun (lo, hi, c) =>
+def nameCol (s : String) : String :=
+  s.pushn ' ' (12 - s.length)
+
+
+def scalarBoolLine (ref : Option State) (q : State) (name : String) (get : State -> Bool) : String 
+  := if (ref.map get) == some (get q) then "" else s!"{nameCol name}: {get q}\n"
+
+
+def scalarWordLine (ref : Option State) (q : State) (name : String)
+    (get : State -> SpecWord) : String :=
+  if (ref.map get) == some (get q) then "" else s!"{nameCol name}: 0x{toHex 4 (get q).toNat}\n"
+
+
+def scalarLines (ref : Option State) (q : State) : String :=
+  scalarBoolLine ref q "halted"       (·.halted) ++
+  scalarBoolLine ref q "inSyscall"    (·.inSyscall) ++
+  scalarWordLine ref q "syscallPrivs" (·.syscallPrivs) ++
+  scalarBoolLine ref q "inInterrupt"  (·.inInterrupt) ++
+  scalarBoolLine ref q "intPending"   (·.intPending) ++
+  scalarWordLine ref q "intRscratch"  (·.intRscratch) ++
+  scalarWordLine ref q "intFlags"     (·.intFlags) ++
+  scalarWordLine ref q "intPrivs"     (·.intPrivs) ++
+  scalarWordLine ref q "pc"           (·.pc)
+
+
+def specialLines (ref : Option State) (q : State) : String :=
+  String.join (CsrReg.all.filterMap fun c =>
+    if (ref.map (·.special c)) == some (q.special c) then none
+    else some s!"  {c.name} : 0x{toHex 4 (q.special c).toNat}\n")
+
+
+def registerLines (ref : Option State) (q : State) : String :=
+  String.join (GpReg.all.filterMap fun r =>
+    if (ref.map (·.register r)) == some (q.register r) then none
+    else some s!"  {r.name} : 0x{toHex 2 (q.register r).toNat}\n")
+
+
+def mpuLines (ref : Option State) (q : State) : String :=
+  String.join (MpuRegion.indices.filterMap fun i =>
+    if (ref.map (·.mpuRegion i)) == some (q.mpuRegion i) then none
+    else some s!"  {i.toNat} : 0x{toHex 4 (q.mpuRegion i).toNat}\n")
+
+
+def capsLines (q : State) : String :=
+  String.join (capsRuns q |>.map fun (lo, hi, c) =>
     s!"  0x{toHex 4 lo} - 0x{toHex 4 hi} : {c.name}\n")
-  let mpuLines := String.join (MpuRegion.indices.map fun i =>
-    s!"  {i.toNat} : 0x{toHex 4 (q.mpuRegion i).toNat}\n")
-  let specLines := String.join (CsrReg.all.map fun c =>
-    s!"  {c.name} : 0x{toHex 4 (q.special c).toNat}\n")
-  let regLines := String.join (GpReg.all.map fun r =>
-    s!"  {r.name} : 0x{toHex 2 (q.register r).toNat}\n")
-  s!"halted      : {q.halted}\n" ++
-  s!"inSyscall   : {q.inSyscall}\n" ++
-  s!"syscallPrivs: 0x{toHex 4 q.syscallPrivs.toNat}\n" ++
-  s!"inInterrupt : {q.inInterrupt}\n" ++
-  s!"intPending  : {q.intPending}\n" ++
-  s!"intRscratch : 0x{toHex 4 q.intRscratch.toNat}\n" ++
-  s!"intFlags    : 0x{toHex 4 q.intFlags.toNat}\n" ++
-  s!"intPrivs    : 0x{toHex 4 q.intPrivs.toNat}\n" ++
-  s!"pc          : 0x{toHex 4 q.pc.toNat}\n" ++
-  "special:\n" ++
-  specLines ++
-  "registers:\n" ++
-  regLines ++
-  "caps:\n" ++
-  capsLines ++
-  "mpu:\n" ++
-  mpuLines ++
+
+
+def memWritesAux (p q : Array DataWord) :
+    Nat -> List (Nat × DataWord) -> List (Nat × DataWord)
+  | 0,      acc => acc
+  | i + 1, acc =>
+    if p[i]! == q[i]! then memWritesAux p q i acc else memWritesAux p q i ((i, q[i]!) :: acc)
+
+
+def memWrites (p q : State) : List (Nat × DataWord) :=
+  let pe := p.mem.entries.toArray
+  let qe := q.mem.entries.toArray
+  memWritesAux pe qe qe.size []
+
+
+def writeLines (p q : State) : String :=
+  String.join ((memWrites p q).map fun (a, v) => s!"  0x{toHex 4 a} : 0x{toHex 2 v.toNat}\n")
+
+
+def labeled (ref : Option State) (name : String) (body : String) : String :=
+  if ref.isSome && body.isEmpty then "" else s!"{name}:\n" ++ body
+
+
+def State.serialize (q : State) : String :=
+  scalarLines none q ++
+  labeled none "special"   (specialLines none q) ++
+  labeled none "registers" (registerLines none q) ++
+  labeled none "caps"      (capsLines q) ++
+  labeled none "mpu"       (mpuLines none q) ++
   "memory: " ++
   memBase64 q ++ "\n"
+
+
+def State.serializeDelta (p q : State) : String :=
+  scalarLines (some p) q ++
+  labeled (some p) "special"   (specialLines (some p) q) ++
+  labeled (some p) "registers" (registerLines (some p) q) ++
+  labeled (some p) "mpu"       (mpuLines (some p) q) ++
+  labeled (some p) "writes"    (writeLines p q)
 
 
 structure Parsed where

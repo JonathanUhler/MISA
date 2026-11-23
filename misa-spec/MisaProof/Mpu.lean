@@ -91,7 +91,7 @@ theorem State.first_mpu_grants_nothing (bytes : ByteArray) (extns : SpecWord) (m
     Mpu.caps (State.first bytes extns map).mpuRegion a = MemCaps.empty := by
   have h : forall i : BitVec 2, (State.first bytes extns map).mpuRegion i = 0x0000#16 := by
     intro i
-    simp only [State.first, State.faultAt]
+    simp only [State.first, State.start, State.faultAt]
     repeat (any_goals split)
     all_goals simp [State.init, State.mpuRegion, State.writeSpecial, State.setCsr]
   exact Mpu.caps_zero _ h a

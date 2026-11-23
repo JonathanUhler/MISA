@@ -172,11 +172,14 @@ def State.init (bytes : ByteArray) (extns : SpecWord) (map : MemMap) : State :=
     halted       := false }
 
 
-def State.first (bytes : ByteArray) (extns : SpecWord) (map : MemMap) : State :=
-  let q := State.init bytes extns map
+def State.start (q : State) : State :=
   match q.readVector 0xFFFE with
   | .ok target => { q with pc := target }
   | .error c   => q.faultAt c 0xFFFE
+
+
+def State.first (bytes : ByteArray) (extns : SpecWord) (map : MemMap) : State :=
+  State.start (State.init bytes extns map)
 
 
 def State.next (q : State) : State :=

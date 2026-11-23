@@ -119,7 +119,7 @@ theorem runN_caps (pin : Nat -> Bool) (n : Nat) (q : State) :
 -- vector out of it, and a model given no map provides the entire address range
 theorem State.first_caps (bytes : ByteArray) (extns : SpecWord) (map : MemMap) :
     (State.first bytes extns map).caps = MemMap.toCaps map := by
-  simp only [State.first]
+  simp only [State.first, State.start]
   split
   next => rfl
   next => exact State.faultAt_caps _ _ _

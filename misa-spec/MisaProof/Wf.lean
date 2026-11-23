@@ -433,7 +433,7 @@ theorem State.init_wf (bytes : ByteArray) (extns : SpecWord) (map : MemMap) :
 theorem State.first_wf (bytes : ByteArray) (extns : SpecWord) (map : MemMap) :
     (State.first bytes extns map).WF := by
   have h := State.init_wf bytes extns map
-  simp only [State.first]
+  simp only [State.first, State.start]
   split
   next => exact { zeroReg := h.zeroReg, csrMasked := h.csrMasked, checkSync := h.checkSync,
                   mpuWindow := h.mpuWindow }
@@ -446,7 +446,7 @@ theorem State.first_pc (bytes : ByteArray) (extns : SpecWord) (map : MemMap)
     (State.first bytes extns map).pc = (State.first bytes extns map).resetVector := by
   have h : (State.init bytes extns map).readVector 0xFFFE
       = Except.ok (State.init bytes extns map).resetVector := hv
-  simp only [State.first, h, State.resetVector, State.memory]
+  simp only [State.first, State.start, h, State.resetVector, State.memory]
 
 
 -- A reset vector which cannot be read faults like any other vector, so the machine comes up in the
@@ -454,7 +454,7 @@ theorem State.first_pc (bytes : ByteArray) (extns : SpecWord) (map : MemMap)
 theorem State.first_unreadable_reset (bytes : ByteArray) (extns : SpecWord) (map : MemMap)
     (c : CsrCause) (h : (State.init bytes extns map).readVector 0xFFFE = Except.error c) :
     State.first bytes extns map = (State.init bytes extns map).faultAt c 0xFFFE := by
-  simp only [State.first, h]
+  simp only [State.first, State.start, h]
 
 
 -- Reset starts outside any system call or interrupt context and discards pre-reset interrupt pin
@@ -463,7 +463,7 @@ theorem State.first_contexts (bytes : ByteArray) (extns : SpecWord) (map : MemMa
     (State.first bytes extns map).inSyscall = false
       /\ (State.first bytes extns map).inInterrupt = false
       /\ (State.first bytes extns map).intPending = false := by
-  simp only [State.first, State.faultAt]
+  simp only [State.first, State.start, State.faultAt]
   repeat (any_goals split)
   all_goals exact And.intro rfl (And.intro rfl rfl)
 

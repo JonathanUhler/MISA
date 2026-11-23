@@ -48,11 +48,18 @@ help_text: str = (
     "  q0\tRun from the canonical initial state."
     "\n"
     "  qi\tRun from an arbitrary state defined by a YAML-like file."
+    "\n"
+    "  sweep\tRun many patched copies of one memory file, one after another."
     "\n\n"
-    "In q0 mode, the memory the simulated implementation provides can be described with a memory "
-    "map file passed with the -M option. This is the same file format that the misa-ld linker "
-    "uses. When -M is not specified, the simulator provides the entire 16-bit address space and "
-    "permits every kind of access to any address."
+    "In q0 and sweep mode, the memory the simulated implementation provides can be described with "
+    "a memory map file passed with the -M option. This is the same file format that the misa-ld "
+    "linker uses. When -M is not specified, the simulator provides the entire 16-bit address space "
+    "and permits every kind of access to any address."
+    "\n\n"
+    "By default only the state the run ends in is reported. The -t option instead reports one "
+    "record per state transition. Sweep mode always reports one record per job. In both cases the "
+    "first record is complete and every later record lists only what changes from the previous "
+    "record."
 )
 
 
@@ -72,18 +79,33 @@ def format_interrupts(steps: list) -> str:
     return ",".join(str(step) for step in steps)
 
 
-def run_from_q0(mem_path: Path, steps: str, extns: int, ints: str, map_path: Path) -> (bool, str):
+def trace_args(trace: bool) -> list:
+    return ["trace"] if trace else []
+
+
+def run_from_q0(mem_path: Path, steps: str, extns: int, ints: str, map_path: Path,
+                trace: bool) -> (bool, str):
     result: CompletedProcess = subprocess.run(
-        ["misa-spec-exe", "q0", mem_path, steps, str(extns), ints, map_path],
+        ["misa-spec-exe", "q0", mem_path, steps, str(extns), ints, map_path] + trace_args(trace),
         capture_output = True
     )
     ran: bool = result.returncode == 0
     return ran, format_subprocess_output(result)
 
 
-def run_from_qi(state_path: Path, steps: str, ints: str) -> (bool, str):
+def run_from_qi(state_path: Path, steps: str, ints: str, trace: bool) -> (bool, str):
     result: CompletedProcess = subprocess.run(
-        ["misa-spec-exe", "qi", state_path, steps, ints],
+        ["misa-spec-exe", "qi", state_path, steps, ints] + trace_args(trace),
+        capture_output = True
+    )
+    ran: bool = result.returncode == 0
+    return ran, format_subprocess_output(result)
+
+
+def run_sweep(mem_path: Path, steps: str, extns: int, ints: str, map_path: Path,
+              jobs_path: Path) -> (bool, str):
+    result: CompletedProcess = subprocess.run(
+        ["misa-spec-exe", "sweep", mem_path, steps, str(extns), ints, map_path, jobs_path],
         capture_output = True
     )
     ran: bool = result.returncode == 0
@@ -116,6 +138,8 @@ def main() -> None:
                            help = "write the final state information to <output>")
     q0_parser.add_argument("-M", "--memmap", metavar = "<memmap>",
                            help = "use the memory map file at <memmap>")
+    q0_parser.add_argument("-t", "--trace", action = "store_true",
+                           help = "report one record per state transition, not just the last state")
     q0_parser.add_argument("memfile", type = Path, metavar = "<memfile>",
                            help = "initialize simulator memory from binary file <memfile>")
 
@@ -127,8 +151,30 @@ def main() -> None:
                            help = "run for maximum <n> state transitions (default: until halt)")
     qi_parser.add_argument("-o", "--output", metavar = "<file>",
                            help = "write the final state information to <output>")
+    qi_parser.add_argument("-t", "--trace", action = "store_true",
+                           help = "report one record per state transition, not just the last state")
     qi_parser.add_argument("statefile", type = Path, metavar = "<statefile>",
                            help = "initialize simulator from YAML-like state file <statefile>")
+
+    sweep_parser: ArgumentParser = subparsers.add_parser("sweep")
+    sweep_parser.add_argument("-e", "--extension", nargs = "*", metavar = "<extension>",
+                              default = [],
+                              choices = {"dynamichw", "syscall", "privilege", "interrupt"},
+                              help = "enable architecture extension <extension> in the simulator")
+    sweep_parser.add_argument("-i", "--interrupt", nargs = "*", metavar = "<step>", default = [],
+                              type = int,
+                              help = "assert the interrupt pin before each state transition <step>")
+    sweep_parser.add_argument("-n", "--steps", type = steps_type, metavar = "<n>", default = "-",
+                              help = "run each job for maximum <n> state transitions "
+                                     "(default: until halt)")
+    sweep_parser.add_argument("-o", "--output", metavar = "<file>",
+                              help = "write the state information to <output>")
+    sweep_parser.add_argument("-M", "--memmap", metavar = "<memmap>",
+                              help = "use the memory map file at <memmap>")
+    sweep_parser.add_argument("memfile", type = Path, metavar = "<memfile>",
+                              help = "initialize simulator memory from binary file <memfile>")
+    sweep_parser.add_argument("jobfile", type = Path, metavar = "<jobfile>",
+                              help = "run one job per line of <jobfile>")
 
     args: Namespace = parser.parse_args()
 
@@ -140,13 +186,25 @@ def main() -> None:
             args.steps,
             get_extn_bits(args.extension),
             format_interrupts(args.interrupt),
-            map_path
+            map_path,
+            args.trace
         )
     elif (args.command == "qi"):
         finished, output = run_from_qi(
             args.statefile,
             args.steps,
-            format_interrupts(args.interrupt)
+            format_interrupts(args.interrupt),
+            args.trace
+        )
+    elif (args.command == "sweep"):
+        map_path = "-" if (args.memmap is None) else str(args.memmap)
+        finished, output = run_sweep(
+            args.memfile,
+            args.steps,
+            get_extn_bits(args.extension),
+            format_interrupts(args.interrupt),
+            map_path,
+            args.jobfile
         )
     else:
         error(program_name, f"unsupported action '{args.command}'")
