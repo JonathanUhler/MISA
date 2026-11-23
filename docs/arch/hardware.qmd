@@ -421,6 +421,7 @@ Memory bus interactions are described more in the next subsection.
 | `cause_data` | 16 | Out | The current value of the `CAUSE` special register.  |
 | `fault_data` | 16 | Out | The current value of the `FAULT` special register.  |
 | `pc_data` | 16 | Out | The current program counter.  |
+| `boundary_data` | 1 | Out | Whether the core is at an instruction boundary on the current cycle, described below.  |
 | `state_data` | 5 | Out | The encoding of the state that the core's finite state machine is currently in.  |
 | `in_syscall_data` | 1 | Out | Whether the core is in a canonical system call context.  |
 | `in_interrupt_data` | 1 | Out | Whether the core is in a canonical interrupt context.  |
@@ -432,6 +433,14 @@ Memory bus interactions are described more in the next subsection.
 The ports suffixed `_data` are views into certain important state, which the `TtUmMisa` top module
 can mux to the output data pins (see Diagnostic Views below). They report state directly rather than
 through the `CsrRegFile` read port, which would take several cycles each time the data were needed.
+
+`boundary_data` is pulsed for exactly one cycle at the boundary of each instruction completion. It
+is intended to be used for verification (i.e. running elaborated/synthesized hardware against the
+`misa-spec` golden model). The active cycle is the one where the core leaves `FETCH_LO`. Pulse 0
+identifies the state the reset sequence produced, and pulse $k$ reports the state after $k$
+instructions. The reset sequence itself produces no pulse, and neither does a fault, system call or
+interrupt entry, because none executes a new instruction. A halted core produces no further pulses,
+so the last state of a run is the one held while `state_data` reports `HALTED`.
 
 #### `QspiController`
 
@@ -714,39 +723,41 @@ SVG(wavedrom.render(str({
 })).tostring())
 ```
 
-The state fields for the core and memory controller report raw state encodings. Because Amaranth
-does not allow int enumerations for `FSM`, and assigns encodings in a non-intuitive way, the
-encodings are enumerated below. Changes to the state code are checked by an assertion.
+The state fields for the core and memory controller report raw state encodings. Amaranth does not
+accept an int enumeration for `FSM`, and may auto-assign encodings in unexpected ways. The encodings
+are fixed by `CORE_STATE_CODES` and `QSPI_STATE_CODES` respectively. An assertion checks that each
+table enumerates every state of its machine correctly. Yosys synthesis also preserves these
+encodings.
 
 `MisaCore.state_data`:
 
 | Code | State |
 |------|----------|
 | 0 | `VECTOR_LO` |
-| 1 | `TRAP_HALT_CAUSE` |
-| 2 | `TRAP_CAUSE` |
-| 3 | `VECTOR_HI` |
-| 4 | `TRAP_LINK` |
-| 5 | `FETCH_LO` |
-| 6 | `FETCH_HI` |
-| 7 | `DECODE` |
-| 8 | `EXECUTE_ALU` |
-| 9 | `EXECUTE_SET` |
-| 10 | `EXECUTE_LD_STK` |
-| 11 | `EXECUTE_LD` |
-| 12 | `EXECUTE_ST_STK` |
-| 13 | `EXECUTE_ST_DATA` |
-|  14 | `EXECUTE_RSR_HI` |
-|  15 | `EXECUTE_WSR` |
+| 1 | `VECTOR_HI` |
+| 2 | `FETCH_LO` |
+| 3 | `FETCH_HI` |
+| 4 | `DECODE` |
+| 5 | `EXECUTE_ALU` |
+| 6 | `EXECUTE_SET` |
+| 7 | `EXECUTE_LD` |
+| 8 | `EXECUTE_LD_STK` |
+| 9 | `EXECUTE_ST_DATA` |
+| 10 | `EXECUTE_ST` |
+| 11 | `EXECUTE_ST_STK` |
+| 12 | `EXECUTE_RSR_HI` |
+| 13 | `EXECUTE_RSR_LO` |
+| 14 | `EXECUTE_WSR` |
+| 15 | `EXECUTE_BRANCH` |
 | 16 | `EXECUTE_JMP_CSR` |
-| 17 | `EXECUTE_BRANCH` |
-| 18 | `EXECUTE_HALT` |
-| 19 | `EXECUTE_ST` |
-| 20 | `EXECUTE_RSR_LO` |
-| 21 | `EXECUTE_RETIR_HI` |
-| 22 | `EXECUTE_RETIR_LO` |
-| 23 | `HALTED` |
-| 24 | `TRAP_ENTER` |
+| 17 | `EXECUTE_RETIR_HI` |
+| 18 | `EXECUTE_RETIR_LO` |
+| 19 | `EXECUTE_HALT` |
+| 20 | `HALTED` |
+| 21 | `TRAP_CAUSE` |
+| 22 | `TRAP_LINK` |
+| 23 | `TRAP_ENTER` |
+| 24 | `TRAP_HALT_CAUSE` |
 | 25 | `TRAP_HALT_FAULT` |
 
 
@@ -758,11 +769,11 @@ encodings are enumerated below. Changes to the state code are checked by an asse
 | 1 | `IDLE` |
 | 2 | `CLOSE` |
 | 3 | `CMD` |
-| 4 | `READ_DATA` |
-| 5 | `LOOKAHEAD` |
-| 6 | `ADDR` |
-| 7 | `WRITE_DATA` |
-| 8 | `WAIT` |
+| 4 | `ADDR` |
+| 5 | `WAIT` |
+| 6 | `READ_DATA` |
+| 7 | `LOOKAHEAD` |
+| 8 | `WRITE_DATA` |
 
 ### Fault Selection
 

@@ -31,18 +31,16 @@ class QspiState(StrEnum):
     WRITE_DATA = "WRITE_DATA"
 
 
-# As with `MisaCore.CORE_STATE_CODES` (see that comment for more info), this is the mapping of
-# encodings for QspiState.
 QSPI_STATE_CODES: dict = {
     QspiState.BUS_RELEASED: 0,
     QspiState.IDLE:         1,
     QspiState.CLOSE:        2,
     QspiState.CMD:          3,
-    QspiState.READ_DATA:    4,
-    QspiState.LOOKAHEAD:    5,
-    QspiState.ADDR:         6,
-    QspiState.WRITE_DATA:   7,
-    QspiState.WAIT:         8
+    QspiState.ADDR:         4,
+    QspiState.WAIT:         5,
+    QspiState.READ_DATA:    6,
+    QspiState.LOOKAHEAD:    7,
+    QspiState.WRITE_DATA:   8
 }
 
 QSPI_STATE_BITS: int = (len(QSPI_STATE_CODES) - 1).bit_length()
@@ -122,12 +120,13 @@ class QspiController(Component):
         ]
 
         with m.FSM(init = QspiState.BUS_RELEASED) as fsm:
+            fsm.encoding.update(QSPI_STATE_CODES)
             for state, elaborator in states:
                 with m.State(state):
                     elaborator(m)
 
-        assert dict(fsm.encoding) == QSPI_STATE_CODES, \
-            "QspiController: QSPI_STATE_CODES does not agree with the Amaranth FSM encodings"
+        assert fsm.encoding.keys() == QSPI_STATE_CODES.keys(), \
+            "QspiController: QSPI_STATE_CODES does not enumerate every state of the FSM"
         m.d.comb += self.state_data.eq(fsm.state)
 
         return m

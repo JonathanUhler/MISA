@@ -53,35 +53,32 @@ class CoreState(StrEnum):
     TRAP_HALT_FAULT = "TRAP_HALT_FAULT"
 
 
-# Amaranth does not provide an easy way to get FSM encodings, and assigns encodings in a strange
-# way, so this table is used to map CoreState to encodings. An assertion will fail at elaboration-
-# time if CoreState is changed and this mapping no longer matches.
 CORE_STATE_CODES: dict = {
     CoreState.VECTOR_LO:         0,
-    CoreState.TRAP_HALT_CAUSE:   1,
-    CoreState.TRAP_CAUSE:        2,
-    CoreState.VECTOR_HI:         3,
-    CoreState.TRAP_LINK:         4,
-    CoreState.FETCH_LO:          5,
-    CoreState.FETCH_HI:          6,
-    CoreState.DECODE:            7,
-    CoreState.EXECUTE_ALU:       8,
-    CoreState.EXECUTE_SET:       9,
-    CoreState.EXECUTE_LD_STK:   10,
-    CoreState.EXECUTE_LD:       11,
-    CoreState.EXECUTE_ST_STK:   12,
-    CoreState.EXECUTE_ST_DATA:  13,
-    CoreState.EXECUTE_RSR_HI:   14,
-    CoreState.EXECUTE_WSR:      15,
+    CoreState.VECTOR_HI:         1,
+    CoreState.FETCH_LO:          2,
+    CoreState.FETCH_HI:          3,
+    CoreState.DECODE:            4,
+    CoreState.EXECUTE_ALU:       5,
+    CoreState.EXECUTE_SET:       6,
+    CoreState.EXECUTE_LD:        7,
+    CoreState.EXECUTE_LD_STK:    8,
+    CoreState.EXECUTE_ST_DATA:   9,
+    CoreState.EXECUTE_ST:       10,
+    CoreState.EXECUTE_ST_STK:   11,
+    CoreState.EXECUTE_RSR_HI:   12,
+    CoreState.EXECUTE_RSR_LO:   13,
+    CoreState.EXECUTE_WSR:      14,
+    CoreState.EXECUTE_BRANCH:   15,
     CoreState.EXECUTE_JMP_CSR:  16,
-    CoreState.EXECUTE_BRANCH:   17,
-    CoreState.EXECUTE_HALT:     18,
-    CoreState.EXECUTE_ST:       19,
-    CoreState.EXECUTE_RSR_LO:   20,
-    CoreState.EXECUTE_RETIR_HI: 21,
-    CoreState.EXECUTE_RETIR_LO: 22,
-    CoreState.HALTED:           23,
-    CoreState.TRAP_ENTER:       24,
+    CoreState.EXECUTE_RETIR_HI: 17,
+    CoreState.EXECUTE_RETIR_LO: 18,
+    CoreState.EXECUTE_HALT:     19,
+    CoreState.HALTED:           20,
+    CoreState.TRAP_CAUSE:       21,
+    CoreState.TRAP_LINK:        22,
+    CoreState.TRAP_ENTER:       23,
+    CoreState.TRAP_HALT_CAUSE:  24,
     CoreState.TRAP_HALT_FAULT:  25
 }
 
@@ -103,6 +100,7 @@ class MisaCore(Component):
     cause_data: Out(16)
     fault_data: Out(16)
     pc_data: Out(16)
+    boundary_data: Out(1)
     state_data: Out(CORE_STATE_BITS)
     in_syscall_data: Out(1)
     in_interrupt_data: Out(1)
@@ -158,12 +156,13 @@ class MisaCore(Component):
         ]
 
         with m.FSM(init = self.init_state) as fsm:
+            fsm.encoding.update(CORE_STATE_CODES)
             for state, elaborator in states:
                 with m.State(state):
                     elaborator(m)
 
-        assert dict(fsm.encoding) == CORE_STATE_CODES, \
-            "MisaCore: CORE_STATE_CODES does not agree with the Amaranth FSM encodings"
+        assert fsm.encoding.keys() == CORE_STATE_CODES.keys(), \
+            "MisaCore: CORE_STATE_CODES does not enumerate every state of the FSM"
         m.d.comb += self.state_data.eq(fsm.state)
 
         return m
@@ -264,18 +263,19 @@ class MisaCore(Component):
             self.user_mode.eq(self.privilege_enabled & self.csr_reg_file.privs_data)
         ]
 
+        self.elaborate_interrupt_sampling(m)
+        self.elaborate_access_check(m)
+
         m.d.comb += [
             self.cause_data.eq(self.csr_reg_file.cause_data),
             self.fault_data.eq(self.csr_reg_file.fault_data),
             self.pc_data.eq(self.pc),
+            self.boundary_data.eq(self.boundary_passed),
             self.in_syscall_data.eq(self.in_syscall),
             self.in_interrupt_data.eq(self.in_interrupt),
             self.int_pending_data.eq(self.int_pending),
             self.user_mode_data.eq(self.user_mode)
         ]
-
-        self.elaborate_interrupt_sampling(m)
-        self.elaborate_access_check(m)
 
 
     def elaborate_interrupt_sampling(self, m: Module) -> None:

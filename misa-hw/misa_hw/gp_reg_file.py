@@ -22,7 +22,8 @@ class GpRegFile(Component):
     def __init__(self, init_data: GpRegInit = None):
         init_data = init_data or GpRegInit()
         self.gp_regs: Array = Array([
-            Signal(8, init = reg_data) for reg_data in [0x00, *astuple(init_data)]
+            Signal(8, name = gp_reg.name.lower(), init = reg_data)
+            for gp_reg, reg_data in zip(GpReg, [0x00, *astuple(init_data)])
         ])
         super().__init__()
 
