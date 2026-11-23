@@ -45,6 +45,30 @@ def check_lengths(oracle_states: list, design: RunResult, steps: int) -> None:
     )
 
 
+def single_step(label: str, entry: MisaState, expected: MisaState, design: RunResult,
+                ignore: tuple = BOUNDARY_IGNORED) -> None:
+    if (len(design.states) != 2):
+        halted: bool = bool(design.states) and design.states[-1].halted
+        raise DivergenceError(
+            f"{label}: the design produced {len(design.states)} states for one instruction, "
+            f"where it owes the boundary before it and the state after it (it ran "
+            f"{design.cycles} cycles and {'halted' if (halted) else 'did not halt'})"
+        )
+
+    injected: list = entry.diff(design.states[0], ignore = ignore + ("memory",))
+    if (injected):
+        raise DivergenceError(
+            f"{label}: the design did not start from the injected seed state\n"
+            + format_divergence(0, None, entry, design.states[0], injected)
+        )
+
+    diffs: list = expected.diff(design.states[-1], ignore = ignore)
+    if (diffs):
+        raise DivergenceError(
+            f"{label}\n" + format_divergence(1, entry, expected, design.states[-1], diffs)
+        )
+
+
 def check_reset_arguments(init: CoreInit, state: MisaState, extns: int) -> None:
     if (state is not None) and (init is not None):
         raise ValueError("pass either a MisaState to resume from or a CoreInit, not both")

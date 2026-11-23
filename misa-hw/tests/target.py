@@ -71,6 +71,7 @@ class _RunContext:
 class Target(ABC):
 
     name: str
+    builds: int
 
 
     @abstractmethod
@@ -86,6 +87,7 @@ class AmaranthTarget(Target):
 
 
     def __init__(self) -> None:
+        self.builds: int = 0
         self._cache: dict = {}
         self._context: _RunContext = None
 
@@ -95,6 +97,7 @@ class AmaranthTarget(Target):
 
 
     def _build(self, init: CoreInit, reset_extns: int) -> tuple:
+        self.builds += 1
         core: MisaCore = MisaCore(init, reset_extns = reset_extns)
         module: Module = Module()
         module.submodules.core = core

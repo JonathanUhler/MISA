@@ -12,6 +12,9 @@ from memory import (
     MemoryLatency, ZeroLatency, FixedLatency, RandomLatency,
     MEMORY_SIZE, MemMap, MemoryBfm
 )
+from programs import (
+    FAULT_VECTOR, RESET_VECTOR, SYSCALL_VECTOR, VECTOR_TABLE_LO, encode, patched
+)
 from spec import SpecDriver, split_records
 from state import MisaState
 from target import RunResult, Target
@@ -29,11 +32,6 @@ MEMTEST_HANDLER_PC: int = 0xC046
 RESET_PC: int = 0xC000
 FIRSTTEST_FAULT_PC: int = 0xC004
 
-VECTOR_TABLE_LO: int = 0xFFF0
-SYSCALL_VECTOR: int = 0xFFFA
-FAULT_VECTOR: int = 0xFFFC
-RESET_VECTOR: int = 0xFFFE
-
 PARTIAL_VECTORS: MemMap = MemMap.from_rows((
     (0x0000, SYSCALL_VECTOR - 1, "rwx"),
     (FAULT_VECTOR, FAULT_VECTOR + 1, "r"),
@@ -45,18 +43,6 @@ CAUSE_INVALID_READ: int = FaultKind.INVALID_ACCESS | (AccessKind.READ << 8)
 CAUSE_INVALID_WRITE: int = FaultKind.INVALID_ACCESS | (AccessKind.WRITE << 8)
 
 MPU_REGION_1: int = 0x0A08
-
-
-def encode(op: int, n1: int, rest: int = 0) -> bytes:
-    word: int = op | (n1 << 4) | (rest << 8)
-    return bytes((word & 0xFF, word >> 8))
-
-
-def patched(image: bytes, addr: int, *words: bytes) -> bytes:
-    buffer: bytearray = bytearray(image)
-    for index, word in enumerate(words):
-        buffer[addr + 2 * index:addr + 2 * index + 2] = word
-    return bytes(buffer)
 
 
 @fixture(scope = "session")

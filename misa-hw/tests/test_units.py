@@ -10,6 +10,8 @@ from misa_hw.grammar import AluOp, CmpFlag, CsrReg, Extn, GpReg, Op
 from misa_hw.init import CsrRegInit, GpRegInit, MpuInit
 from misa_hw.mpu_unit import MpuUnit
 
+from memory import CAPS_RWX
+from programs import mpu_pages, mpu_region
 from state import CSR_REG_NAMES, CSR_WRITE_MASKS, GP_REG_NAMES, MPU_REGION_COUNT
 from target import PackedView
 
@@ -556,18 +558,6 @@ def test_mpucf_writes_reach_the_indexed_region() -> None:
     clocked(unit, process)
 
 
-MPU_CAPS_RWX: int = 0b111
-
-
-def mpu_region(base: int, size: int, index: int, caps: int) -> int:
-    return (base << 8) | (size << 5) | (index << 3) | caps
-
-
-def mpu_pages(base: int, size: int) -> range:
-    first: int = (base >> size) << size
-    return range(first, first + (1 << size))
-
-
 def test_mpu_grants_nothing_before_configuration() -> None:
     unit: MpuUnit = MpuUnit()
     sim: CombSim = CombSim(unit, (unit.query_addr,), (unit.query_caps,))
@@ -583,14 +573,14 @@ def test_mpu_grants_nothing_before_configuration() -> None:
 def test_mpu_region_covers_exactly_its_aligned_pages() -> None:
     for size in range(8):
         for base in (0x00, 0x0A, 0x7F, 0xFF):
-            region: int = mpu_region(base, size, 0, MPU_CAPS_RWX)
+            region: int = mpu_region(base, size, 0, CAPS_RWX)
             covered: range = mpu_pages(base, size)
             unit: MpuUnit = MpuUnit(MpuInit(regions = (region, 0x0000, 0x0000, 0x0000), index = 0))
             sim: CombSim = CombSim(unit, (unit.query_addr,), (unit.query_caps,))
 
             def check(vector: tuple, outputs: list) -> None:
                 page: int = vector[0] >> 8
-                expected: int = MPU_CAPS_RWX if (page in covered) else 0b000
+                expected: int = CAPS_RWX if (page in covered) else 0b000
                 assert outputs[0] == expected, (
                     f"base={base:#04x} size={size} covers pages "
                     f"{covered.start:#04x}-{covered.stop - 1:#04x}, but page {page:#04x} "
@@ -602,13 +592,13 @@ def test_mpu_region_covers_exactly_its_aligned_pages() -> None:
 
 
 def test_mpu_retains_the_base_bits_it_ignores() -> None:
-    region: int = mpu_region(0x0A, 3, 0, MPU_CAPS_RWX)
+    region: int = mpu_region(0x0A, 3, 0, CAPS_RWX)
     unit: MpuUnit = MpuUnit(MpuInit(regions = (region, 0x0000, 0x0000, 0x0000), index = 0))
 
     async def process(ctx: object) -> None:
         assert ctx.get(unit.read_data) == region, "the written word is read back unchanged"
         ctx.set(unit.query_addr, 0x0800)
-        assert ctx.get(unit.query_caps) == MPU_CAPS_RWX, "the region starts at page 0x08"
+        assert ctx.get(unit.query_caps) == CAPS_RWX, "the region starts at page 0x08"
         ctx.set(unit.query_addr, 0x0700)
         assert ctx.get(unit.query_caps) == 0b000, "and not at page 0x0A"
 

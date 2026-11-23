@@ -19,6 +19,8 @@ EXE_CANDIDATES: tuple = (
 
 RECORD_SEPARATOR: str = "---"
 
+SWEEP_CHUNK: int = 1024
+
 
 def find_spec_exe() -> Path:
     override: str = os.environ.get(EXE_ENV_VAR)
@@ -148,6 +150,18 @@ class SpecDriver:
                 f"misa-spec sweep returned {len(states) - 1} records for {len(jobs)} jobs"
             )
         return (states[0], states[1:])
+
+
+    def sweep_chunks(self, image: bytes, memmap: MemMap, extns: int, jobs: tuple,
+                     steps: int = None, interrupts: tuple = (),
+                     chunk: int = SWEEP_CHUNK) -> object:
+        if (chunk < 1):
+            raise ValueError(f"a sweep chunk of {chunk} jobs cannot make progress")
+
+        for start in range(0, len(jobs), chunk):
+            batch: tuple = jobs[start:start + chunk]
+            _, finals = self.sweep(image, memmap, extns, batch, steps, interrupts)
+            yield from zip(batch, finals)
 
 
     def _parse_states(self, output: str, cumulative: bool) -> list:

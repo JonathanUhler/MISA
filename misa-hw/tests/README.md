@@ -23,7 +23,7 @@ test behavior:
 | `--compare` | Compare every state ("lockstep") or only the final state after a test program is run.  |
 | `--latency` | The memory access latency pattern to use when `MisaCore` performs memory transactions. |
 | `--exhaustive` | Whether to run the full number of tests for every campaign, or only a quicker subset.  |
-| `--seeds` | The number of random seeds to use per test campaign.  |
+| `--seeds` | The number of seeds to use per test campaign.  |
 
 The following pytest markers are also available:
 
@@ -35,24 +35,34 @@ The following pytest markers are also available:
 | `equivalence` | Formal verification and netlist equivalence tests.  |
 | `slow` | Long-running tests.  |
 
-Some examples of running the tests include:
-
-```
-pytest                                   # amaranth level, lockstep, quick campaign sizes
-pytest --exhaustive                      # amaranth level, lockstep, full campaign sizes
-pytest --latency=fixed4                  # present a 4-cycle memory to MisaCore
-pytest --latency=random                  # present a memory with random latency to MisaCore
-pytest -m subset                         # only run tests in the verilog/gates subset
-pytest tests/test_units.py               # just the standalone units, no oracle needed
-```
-
 ## Campaigns
 
 | Module | Purpose |
 |-------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `test_harness.py` | Tests the testbench itself (state file serdes, state record replay, the memory BFM, instruction boundary detection, etc).  |
 | `test_units.py` | `AluUnit`, `CmpUnit`, `DecoderUnit`, `GpRegFile`, `CsrRegFile` and `MpuUnit` individual tests. `--exhaustive` covers every ALU operand pair and every instruction word against every `EXTNS` value. |
+| `test_sweep.py` | Executes one instruction from a known state and compares the whole architectural state, for every one of the 65536 instruction words. |
+
+### `test_units` Reference Model
 
 `test_units.py` is the only campaign that does not use `misa-spec` as a golden model, because the
 units have no architectural state in common with the `misa-spec` state files. Its uses a separate
 reference model written from the ISA manual.
+
+### `test_sweep` Seeds
+
+Executing one instruction from the canonical reset state is unlikely to catch many bugs, since the
+reset state is highly normal. Instead, the following initial/seed states are provided for the
+one-instruction sweep test campaign:
+
+| Seed | State |
+|------|---------------------------------------------------------------------------------|
+| `S0` | The canonical reset state described in the ISA manual. |
+| `S1` | Distinct register values, and a stack in the middle of memory. |
+| `S2` | `S1` with every useful `FLAGS` bit set. |
+| `S3` | Register pairs and a stack at the bottom of memory. |
+| `S4` | Register pairs and a stack at the top of memory. |
+| `S5` | User Mode with an MPU which grants everything. |
+| `S6` | User Mode with an MPU which grants instruction fetch and nothing else. |
+| `S7` | Inside a system call context. |
+| `S8` | Inside an interrupt context. |

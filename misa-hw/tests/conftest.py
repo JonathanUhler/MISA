@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pytest import Config, FixtureRequest, Parser, fixture
+from pytest import Config, FixtureRequest, MarkDecorator, Parser, fixture, mark
 
 from memory import FixedLatency, MemMap, MemoryLatency, RandomLatency, ZeroLatency
 from spec import SpecDriver
@@ -46,6 +46,15 @@ def pytest_configure(config: Config) -> None:
         config.addinivalue_line("markers", f"{marker}: {description}")
 
 
+def pytest_collection_modifyitems(config: Config, items: list) -> None:
+    if (config.getoption("--exhaustive")):
+        return
+    skip_exhaustive: MarkDecorator = mark.skip(reason = "only runs under --exhaustive")
+    for item in items:
+        if ("exhaustive" in item.keywords):
+            item.add_marker(skip_exhaustive)
+
+
 @fixture(scope = "session")
 def spec() -> SpecDriver:
     return SpecDriver()
@@ -64,6 +73,11 @@ def latency(request: FixtureRequest) -> MemoryLatency:
 @fixture
 def exhaustive(request: FixtureRequest) -> bool:
     return request.config.getoption("--exhaustive")
+
+
+@fixture
+def seed_count(request: FixtureRequest) -> int:
+    return request.config.getoption("--seeds")
 
 
 @fixture(scope = "session")
