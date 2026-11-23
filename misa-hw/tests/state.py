@@ -32,6 +32,7 @@ SHADOW_MASKS: dict = {
     "int_privs": 0x0001
 }
 MPU_REGION_COUNT: int = 4
+MPU_INDEX_SHIFT: int = 3
 BOUNDARY_IGNORED: tuple = ("int_pending",)
 MEMORY_DIFF_LIMIT: int = 20
 _SECTION_NAMES: tuple = ("special", "registers", "caps", "mpu", "writes")
@@ -81,6 +82,10 @@ def parse_spec_text(text: str) -> SpecRecord:
     return record
 
 
+def mpu_window_index(region: int) -> int:
+    return (region >> MPU_INDEX_SHIFT) & (MPU_REGION_COUNT - 1)
+
+
 def _word(text: str) -> int:
     return int(text, 0)
 
@@ -117,7 +122,21 @@ class MisaState:
         return self.csrs[name] & CSR_WRITE_MASKS[name]
 
 
+    def check_mpu_window(self) -> None:
+        named: int = mpu_window_index(self.mpucf)
+        if (named != self.mpu_index):
+            raise ValueError(
+                f"MPUCF {self.mpucf:#06x} sits in region {self.mpu_index} but its own Index "
+                f"field names region {named}. misa-spec has no separate index: it recovers the "
+                f"window from MPUCF.Index, so this state cannot be written to a state file, and "
+                f"injecting it would leave the design and the oracle disagreeing about which "
+                f"region MPUCF names. Only an MPUCF write moves the window, and it writes both."
+            )
+
+
     def to_spec_file(self, memmap: MemMap) -> str:
+        self.check_mpu_window()
+
         scalars: list = [
             ("halted", "true" if (self.halted) else "false"),
             ("inSyscall", "true" if (self.in_syscall) else "false"),
@@ -295,6 +314,8 @@ class MisaState:
 
 
     def to_core_init(self) -> CoreInit:
+        self.check_mpu_window()
+
         return CoreInit(
             register = GpRegInit(*self.gp_regs[1:]),
             special = CsrRegInit(**{name: self.masked_csr(name) for name in CSR_REG_NAMES}),

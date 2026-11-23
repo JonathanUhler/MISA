@@ -1,15 +1,16 @@
+from dataclasses import replace
 from pathlib import Path
 
 from pytest import fixture, mark, raises
 
-from misa_hw.grammar import AccessKind
+from misa_hw.grammar import AccessKind, CsrReg, FaultKind, GpReg, Op
 
 from compare import DivergenceError, check_lengths, final, lockstep
 from conftest import BRINGUP_DIR
 from memory import (
-    CAPS_RWX, CAPS_READ, CAPS_WRITE, caps_from_name, caps_to_name,
+    CAPS_RWX, CAPS_EXECUTE, CAPS_READ, CAPS_WRITE, caps_from_name, caps_to_name,
     MemoryLatency, ZeroLatency, FixedLatency, RandomLatency,
-    MemMap, MemoryBfm
+    MEMORY_SIZE, MemMap, MemoryBfm
 )
 from spec import SpecDriver, split_records
 from state import MisaState
@@ -24,6 +25,38 @@ MEMTEST_STEPS: int = 200
 MEMTEST_FAULT_STEP: int = 10
 MEMTEST_FAULT_PC: int = 0xC012
 MEMTEST_HANDLER_PC: int = 0xC046
+
+RESET_PC: int = 0xC000
+FIRSTTEST_FAULT_PC: int = 0xC004
+
+VECTOR_TABLE_LO: int = 0xFFF0
+SYSCALL_VECTOR: int = 0xFFFA
+FAULT_VECTOR: int = 0xFFFC
+RESET_VECTOR: int = 0xFFFE
+
+PARTIAL_VECTORS: MemMap = MemMap.from_rows((
+    (0x0000, SYSCALL_VECTOR - 1, "rwx"),
+    (FAULT_VECTOR, FAULT_VECTOR + 1, "r"),
+    (RESET_VECTOR, RESET_VECTOR, "rx")
+))
+
+CAUSE_UNMAPPED_READ: int = FaultKind.UNMAPPED_ADDRESS | (AccessKind.READ << 8)
+CAUSE_INVALID_READ: int = FaultKind.INVALID_ACCESS | (AccessKind.READ << 8)
+CAUSE_INVALID_WRITE: int = FaultKind.INVALID_ACCESS | (AccessKind.WRITE << 8)
+
+MPU_REGION_1: int = 0x0A08
+
+
+def encode(op: int, n1: int, rest: int = 0) -> bytes:
+    word: int = op | (n1 << 4) | (rest << 8)
+    return bytes((word & 0xFF, word >> 8))
+
+
+def patched(image: bytes, addr: int, *words: bytes) -> bytes:
+    buffer: bytearray = bytearray(image)
+    for index, word in enumerate(words):
+        buffer[addr + 2 * index:addr + 2 * index + 2] = word
+    return bytes(buffer)
 
 
 @fixture(scope = "session")
@@ -66,17 +99,41 @@ def test_memmap_state_section_coalesces_runs() -> None:
     assert memmap.to_state_file_section() == "  0x0000 - 0xffff : rwx\n"
 
 
-def test_memmap_state_section_round_trip() -> None:
-    memmap: MemMap = MemMap.from_rows((
-        (0x0000, 0x00FF, "rw"), (0x0200, 0x7FFF, "rwx"), (0xC000, 0xFFFF, "rx")
-    ))
+def _reparsed(memmap: MemMap) -> MemMap:
     rows: list = [
         tuple(part.strip() for part in line.split(":"))
         for line in memmap.to_state_file_section().strip().split("\n")
     ]
-    rebuilt: MemMap = MemMap.from_state_file_rows(tuple(rows))
+    return MemMap.from_state_file_rows(tuple(rows))
+
+
+def test_memmap_state_section_round_trip() -> None:
+    memmap: MemMap = MemMap.from_rows((
+        (0x0000, 0x00FF, "rw"), (0x0200, 0x7FFF, "rwx"), (0xC000, 0xFFFF, "rx")
+    ))
+    rebuilt: MemMap = _reparsed(memmap)
     for addr in (0x0000, 0x00FF, 0x0100, 0x0200, 0x7FFF, 0x8000, 0xBFFF, 0xC000, 0xFFFF):
         assert rebuilt.caps_at(addr) == memmap.caps_at(addr), f"at {addr:#06x}"
+
+
+def test_memmap_describes_the_vector_table_byte_by_byte() -> None:
+    memmap: MemMap = PARTIAL_VECTORS
+    assert memmap.caps_at(VECTOR_TABLE_LO) == CAPS_RWX
+    assert memmap.caps_at(SYSCALL_VECTOR) is None, "the syscall vector is unmapped"
+    assert memmap.caps_at(FAULT_VECTOR) == CAPS_READ, "the fault vector is readable but not written"
+    assert memmap.caps_at(RESET_VECTOR) == CAPS_READ | CAPS_EXECUTE
+    assert memmap.caps_at(RESET_VECTOR + 1) is None, "only the low reset byte is mapped"
+
+    rebuilt: MemMap = _reparsed(memmap)
+    for addr in range(VECTOR_TABLE_LO, MEMORY_SIZE):
+        assert rebuilt.caps_at(addr) == memmap.caps_at(addr), f"at {addr:#06x}"
+
+
+def test_state_file_round_trip_with_a_vector_table_hole(spec: SpecDriver,
+                                                        firsttest_image: bytes) -> None:
+    emitted: str = spec.state_file_text(firsttest_image, PARTIAL_VECTORS, 0xF)
+    state, memmap = MisaState.from_spec_text(emitted)
+    assert state.to_spec_file(memmap) == emitted, "a caps section with gaps must survive unchanged"
 
 
 def test_state_file_round_trip_is_byte_identical(spec: SpecDriver, firsttest_image: bytes,
@@ -98,6 +155,18 @@ def test_mpucf_is_derived_not_stored(spec: SpecDriver, firsttest_image: bytes,
                                      everything: MemMap) -> None:
     state, _ = MisaState.from_spec_text(spec.state_file_text(firsttest_image, everything, 0xF))
     assert state.mpucf == state.mpu_regions[state.mpu_index]
+
+
+def test_an_mpu_window_must_name_itself(spec: SpecDriver, firsttest_image: bytes,
+                                        everything: MemMap) -> None:
+    state, _ = MisaState.from_spec_text(spec.state_file_text(firsttest_image, everything, 0xF))
+    state.check_mpu_window()
+
+    moved: MisaState = replace(state, mpu_index = 1)
+    with raises(ValueError, match = "names region 0"):
+        moved.to_spec_file(everything)
+    with raises(ValueError, match = "names region 0"):
+        moved.to_core_init()
 
 
 def test_split_records_keeps_empty_records() -> None:
@@ -264,6 +333,119 @@ def test_fault_entry_is_one_step(target: Target, spec: SpecDriver, memtest_image
     touched: set = {addr for addr in result.bfm.addresses_touched() if (addr >= 0xFFF0)}
     assert touched == {0xFFFC, 0xFFFD, 0xFFFE, 0xFFFF}, \
         f"only the reset and fault vectors should have been read, saw {sorted(touched)}"
+
+
+@mark.subset
+def test_lockstep_with_an_unreadable_reset_vector(target: Target, spec: SpecDriver,
+                                                  firsttest_image: bytes,
+                                                  latency: MemoryLatency) -> None:
+    memmap: MemMap = MemMap.from_rows(((0x0000, FAULT_VECTOR + 1, "rwx"),))
+    states: list = lockstep(target, spec, firsttest_image, memmap, steps = 3, extns = 0xF,
+                            latency = latency)
+
+    assert len(states) == 4, "the reset fault is not a retire, so three steps still run"
+    assert states[0].pc == FIRSTTEST_FAULT_PC, "execution begins in the fault handler"
+    assert states[0].csrs["fault"] == RESET_VECTOR, "the reset vector read is what faulted"
+    assert states[0].masked_csr("cause") == CAUSE_UNMAPPED_READ
+
+    result: RunResult = target.run(firsttest_image, None, 3, (), memmap, latency,
+                                   reset_extns = 0xF)
+    touched: set = {addr for addr in result.bfm.addresses_touched() if (addr >= VECTOR_TABLE_LO)}
+    assert touched == {FAULT_VECTOR, FAULT_VECTOR + 1}, \
+        f"the denied reset vector must never be requested, saw {sorted(touched)}"
+
+
+@mark.subset
+def test_lockstep_with_a_half_mapped_reset_vector(target: Target, spec: SpecDriver,
+                                                  firsttest_image: bytes,
+                                                  latency: MemoryLatency) -> None:
+    memmap: MemMap = MemMap.from_rows((
+        (0x0000, RESET_VECTOR, "rwx"), (RESET_VECTOR + 1, RESET_VECTOR + 1, "-")
+    ))
+    states: list = lockstep(target, spec, firsttest_image, memmap, steps = 1, extns = 0xF,
+                            latency = latency)
+
+    assert states[0].csrs["fault"] == RESET_VECTOR, "FAULT names the vector, not the failing byte"
+    assert states[0].masked_csr("cause") == CAUSE_INVALID_READ, "the high byte is what failed"
+
+    result: RunResult = target.run(firsttest_image, None, 1, (), memmap, latency,
+                                   reset_extns = 0xF)
+    assert RESET_VECTOR in result.bfm.addresses_touched(), "the low byte is readable and is read"
+    assert (RESET_VECTOR + 1) not in result.bfm.addresses_touched(), \
+        "the high byte is refused before the request, so the BFM must never see it"
+
+
+@mark.subset
+@mark.parametrize("memmap, cause", [
+    (MemMap.from_rows(((0x0000, FAULT_VECTOR - 1, "rwx"),)), CAUSE_UNMAPPED_READ),
+    (MemMap.from_rows((
+        (0x0000, FAULT_VECTOR - 1, "rwx"), (FAULT_VECTOR, FAULT_VECTOR + 1, "w")
+    )), CAUSE_INVALID_READ)
+], ids = ["unmapped", "unreadable"])
+def test_lockstep_without_a_retired_instruction(target: Target, spec: SpecDriver,
+                                                firsttest_image: bytes, latency: MemoryLatency,
+                                                memmap: MemMap, cause: int) -> None:
+    states: list = lockstep(target, spec, firsttest_image, memmap, extns = 0xF, latency = latency)
+
+    assert len(states) == 1, "neither side can retire an instruction without a reset vector"
+    assert states[0].halted, "a failed fault vector read is terminal"
+    assert states[0].csrs["fault"] == FAULT_VECTOR, "FAULT describes the fault vector read"
+    assert states[0].masked_csr("cause") == cause, \
+        "the cause of the reset vector read is lost, not reported"
+
+    result: RunResult = target.run(firsttest_image, None, None, (), memmap, latency,
+                                   reset_extns = 0xF)
+    assert not result.bfm.accesses, "every read was refused, so none should have been performed"
+
+
+@mark.subset
+def test_a_refused_store_reaches_neither_memory_nor_the_journal(target: Target, spec: SpecDriver,
+                                                                firsttest_image: bytes,
+                                                                latency: MemoryLatency) -> None:
+    image: bytes = patched(
+        firsttest_image, RESET_PC,
+        encode(Op.SET, GpReg.RA, 0x01),                              # SET RA 0x01  base high byte
+        encode(Op.SET, GpReg.RB, 0x01),                              # SET RB 0x01  base low byte
+        encode(Op.SET, GpReg.RC, 0xAA),                              # SET RC 0xAA  the datum
+        encode(Op.ST, GpReg.RC, GpReg.RA)                            # ST RC RA 0   -> 0x0101
+    )
+    memmap: MemMap = MemMap.from_rows((
+        (0x0000, 0x00FF, "rwx"), (0x0100, 0x01FF, "rx"), (0x0200, 0xFFFF, "rwx")
+    ))
+
+    states: list = lockstep(target, spec, image, memmap, steps = 4, extns = 0xF, latency = latency)
+    assert states[-1].masked_csr("cause") == CAUSE_INVALID_WRITE, "the store should be refused"
+
+    result: RunResult = target.run(image, None, 4, (), memmap, latency, reset_extns = 0xF)
+    assert result.bfm.writes == [], f"the testbench performed {result.bfm.writes}"
+
+
+@mark.subset
+def test_an_mpucf_write_moves_the_window_in_lockstep(target: Target, spec: SpecDriver,
+                                                     firsttest_image: bytes, everything: MemMap,
+                                                     latency: MemoryLatency) -> None:
+    image: bytes = patched(
+        firsttest_image, RESET_PC,
+        encode(Op.SET, GpReg.RA, MPU_REGION_1 >> 8),                 # SET RA 0x0A
+        encode(Op.SET, GpReg.RB, MPU_REGION_1 & 0xFF),               # SET RB 0x08
+        encode(Op.WSR, GpReg.RA, GpReg.RB | (CsrReg.MPUCF << 4))     # WSR MPUCF RA RB
+    )
+    states: list = lockstep(target, spec, image, everything, steps = 3, extns = 0xF,
+                            latency = latency)
+
+    # Every replayed delta has to leave the window and MPUCF naming each other.
+    for state in states:
+        state.check_mpu_window()
+
+    assert states[-2].mpu_index == 0, "the window moves on the WSR, not before it"
+    assert states[-1].mpu_index == 1, "MPUCF.Index selects which region the write lands in"
+    assert states[-1].mpucf == MPU_REGION_1
+    assert states[-1].mpu_regions == (0x0000, MPU_REGION_1, 0x0000, 0x0000)
+
+    resumed: list = lockstep(target, spec, image, everything, state = states[-1], steps = 1,
+                             latency = latency)
+    assert resumed[0].mpu_regions == states[-1].mpu_regions
+    assert resumed[0].mpu_index == states[-1].mpu_index
 
 
 def test_final_comparison_agrees_with_lockstep(target: Target, spec: SpecDriver,

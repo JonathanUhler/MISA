@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from dataclasses import astuple
+from dataclasses import astuple, dataclass
 
 from amaranth import Cat, Module, Value
 from amaranth.sim import Simulator
@@ -49,6 +49,14 @@ class PackedView:
         return packed
 
 
+@dataclass
+class _BusViews:
+    caps: PackedView
+    data: PackedView
+    request: PackedView
+    probe: PackedView
+
+
 class _RunContext:
 
     def __init__(self, bfm: MemoryBfm, steps: int, max_cycles: int) -> None:
@@ -57,7 +65,7 @@ class _RunContext:
         self.max_cycles: int = max_cycles
         self.states: list = []
         self.cycles: int = 0
-        self.stuck: str = None
+        self.failure: str = None
 
 
 class Target(ABC):
@@ -94,37 +102,48 @@ class AmaranthTarget(Target):
         simulator: Simulator = Simulator(module)
         simulator.add_clock(1e-6)
 
-        drive_view: PackedView = PackedView((
-            core.mem_ready, core.mem_read_data, core.mem_mapped, core.mem_caps
-        ))
-        bus_view: PackedView = PackedView((
-            core.mem_addr, core.mem_request, core.mem_write_enable, core.mem_write_data,
-            core.state_data, core.boundary_data
-        ))
+        views: _BusViews = _BusViews(
+            caps = PackedView((core.mem_mapped, core.mem_caps)),
+            data = PackedView((core.mem_ready, core.mem_read_data)),
+            request = PackedView((
+                core.mem_addr, core.mem_request, core.mem_write_enable, core.mem_write_data
+            )),
+            probe = PackedView((core.state_data, core.boundary_data))
+        )
 
         async def drive(ctx: object) -> None:
-            await self._drive(ctx, core, drive_view, bus_view)
+            await self._drive(ctx, core, views)
 
         simulator.add_testbench(drive)
         return (core, simulator)
 
 
-    async def _drive(self, ctx: object, core: MisaCore,
-                     drive_view: PackedView, bus_view: PackedView) -> None:
+    async def _drive(self, ctx: object, core: MisaCore, views: _BusViews) -> None:
         context: _RunContext = self._context
         bfm: MemoryBfm = context.bfm
 
         while (True):
-            addr, request, write, write_data, state, boundary = \
-                bus_view.unpack(ctx.get(bus_view.value))
-
+            addr: int = ctx.get(core.mem_addr)
             mapped, caps = bfm.responses(addr)
+            ctx.set(views.caps.value, views.caps.pack((mapped, caps)))
+
+            settled, request, write, write_data = views.request.unpack(
+                ctx.get(views.request.value)
+            )
+            if (settled != addr):
+                context.failure = (
+                    f"mem_addr moved from {addr:#06x} to {settled:#06x} when the capability "
+                    f"response was driven; the BFM answers the address it saw first, so it "
+                    f"cannot be a function of mem_mapped or mem_caps"
+                )
+                return
+
             ready, data = bfm.settle(
                 context.cycles, addr, bool(request), bool(write), write_data
             )
-            ctx.set(drive_view.value, drive_view.pack((ready, data, mapped, caps)))
+            ctx.set(views.data.value, views.data.pack((ready, data)))
 
-            state, boundary = bus_view.unpack(ctx.get(bus_view.value))[4:6]
+            state, boundary = views.probe.unpack(ctx.get(views.probe.value))
 
             if (state == HALTED_CODE):
                 context.states.append(self._sample(ctx, core, bfm, True))
@@ -136,10 +155,10 @@ class AmaranthTarget(Target):
 
             context.cycles += 1
             if (context.cycles > context.max_cycles):
-                context.stuck = (
+                context.failure = (
                     f"no halt and no further boundary after {context.max_cycles} cycles "
                     f"({len(context.states)} states so far, requested {context.steps}, "
-                    f"state_data={state}, mem_addr={addr:#06x})"
+                    f"state_data={state}, mem_addr={addr:#06x}); the core is stuck"
                 )
                 return
             await ctx.tick()
@@ -170,8 +189,8 @@ class AmaranthTarget(Target):
         simulator.run()
 
         context: _RunContext = self._context
-        if (context.stuck):
-            raise RuntimeError(f"{self.name}: {context.stuck}; the core is stuck")
+        if (context.failure):
+            raise RuntimeError(f"{self.name}: {context.failure}")
         return RunResult(context.states, context.bfm, context.cycles)
 
 

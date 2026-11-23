@@ -17,29 +17,42 @@ sections.
 Tests are run with the pytest library. The following command line options are available to change
 test behavior:
 
-| Option         | Purpose                                                                                |
+| Option | Purpose |
 |----------------|----------------------------------------------------------------------------------------|
-| `--target`     | Which target model to run tests against.                                               |
-| `--compare`    | Compare every state ("lockstep") or only the final state after a test program is run.  |
-| `--latency`    | The memory access latency pattern to use when `MisaCore` performs memory transactions. |
+| `--target` | Which target model to run tests against.  |
+| `--compare` | Compare every state ("lockstep") or only the final state after a test program is run.  |
+| `--latency` | The memory access latency pattern to use when `MisaCore` performs memory transactions. |
 | `--exhaustive` | Whether to run the full number of tests for every campaign, or only a quicker subset.  |
-| `--seeds`      | The number of random seeds to use per test campaign.                                                                                       |
+| `--seeds` | The number of random seeds to use per test campaign.  |
 
 The following pytest markers are also available:
 
-| Marker        | Purpose                                                       |
+| Marker | Purpose |
 |---------------|---------------------------------------------------------------|
-| `subset`      | Part of the Level B and Level B test subset.                  |
-| `exhaustive`  | Long tests that are only run when `--exhaustive` is provided. |
-| `random`      | Tests with randomized inputs.                                 |
-| `equivalence` | Formal verification and netlist equivalence tests.            |
-| `slow`        | Long-running tests.                                           |
+| `subset` | Part of the Level B and Level B test subset.  |
+| `exhaustive` | Long tests that are only run when `--exhaustive` is provided. |
+| `random` | Tests with randomized inputs.  |
+| `equivalence` | Formal verification and netlist equivalence tests.  |
+| `slow` | Long-running tests.  |
 
 Some examples of running the tests include:
 
 ```
 pytest                                   # amaranth level, lockstep, quick campaign sizes
+pytest --exhaustive                      # amaranth level, lockstep, full campaign sizes
 pytest --latency=fixed4                  # present a 4-cycle memory to MisaCore
 pytest --latency=random                  # present a memory with random latency to MisaCore
 pytest -m subset                         # only run tests in the verilog/gates subset
+pytest tests/test_units.py               # just the standalone units, no oracle needed
 ```
+
+## Campaigns
+
+| Module | Purpose |
+|-------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `test_harness.py` | Tests the testbench itself (state file serdes, state record replay, the memory BFM, instruction boundary detection, etc).  |
+| `test_units.py` | `AluUnit`, `CmpUnit`, `DecoderUnit`, `GpRegFile`, `CsrRegFile` and `MpuUnit` individual tests. `--exhaustive` covers every ALU operand pair and every instruction word against every `EXTNS` value. |
+
+`test_units.py` is the only campaign that does not use `misa-spec` as a golden model, because the
+units have no architectural state in common with the `misa-spec` state files. Its uses a separate
+reference model written from the ISA manual.
