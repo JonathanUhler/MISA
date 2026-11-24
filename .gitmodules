@@ -1,0 +1,3 @@
+[submodule "ttsky-verilog-misa"]
+	path = ttsky-verilog-misa
+	url = git@github.com:JonathanUhler/ttsky-verilog-misa.git
