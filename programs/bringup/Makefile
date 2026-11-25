@@ -1,17 +1,25 @@
-.PHONY: all firsttest memtest
+.PHONY: all clean
 
 
-all: firsttest memtest
+MISA_AS ?= misa-as
+
+EXTNS := -e dynamichw syscall privilege interrupt
+
+PROGRAMS := firsttest memtest synctest mputest inttest
+BINARIES := $(addprefix bin/, $(addsuffix .bin, $(PROGRAMS)))
+
+COMMON  := common/vectors.S common/bringup.h common/finishtest.h
 
 
-%.bin: %.S common/handlers.S common/vectors.S common/memmap.ld
+all: $(BINARIES)
+
+
+bin/%.bin: %.S $(COMMON) common/memmap.ld
 	@mkdir -p bin
-	misa-as $< common/handlers.S common/vectors.S \
-            -l="-M common/memmap.ld -g bin/$*.g"    \
-            -o bin/$@
+	$(MISA_AS) $< common/vectors.S $(EXTNS)  \
+            -l="-M common/memmap.ld -g bin/$*.g" \
+            -o $@
 
 
-firsttest: firsttest.bin
-
-
-memtest: memtest.bin
+clean:
+	rm -rf bin

@@ -43,6 +43,7 @@ The following pytest markers are also available:
 | `test_units.py` | `AluUnit`, `CmpUnit`, `DecoderUnit`, `GpRegFile`, `CsrRegFile` and `MpuUnit` individual tests. `--exhaustive` covers every ALU operand pair and every instruction word against every `EXTNS` value. |
 | `test_sweep.py` | Executes one instruction from a known state and compares the whole architectural state, for every one of the 65536 instruction words. |
 | `test_directed.py` | A set of directed tests that verify conformance for behavior in the ISA manual (decode legality, flags, addressing, fault precedence, vector reads, special registers, and each extension). |
+| `test_programs.py` | Runs every program in `programs/bringup` against `misa-spec`, and checks that each one halts with the correct finish code it reports on success. |
 
 ### `test_units` Reference Model
 
@@ -67,3 +68,25 @@ one-instruction sweep test campaign:
 | `S6` | User Mode with an MPU which grants instruction fetch and nothing else. |
 | `S7` | Inside a system call context. |
 | `S8` | Inside an interrupt context. |
+
+### `test_programs` Bringup Programs
+
+The bringup programs in `programs/bringup` are written in MISA assembly, assembled with the MISA
+toolchain, and are ultimately intended to be run on real hardware. Each one is run two ways:
+
+1. In lockstep against `misa-spec` from reset to check for mid-program divergences.
+2. Run in only the testbench (without `misa-spec`) to check that the extended status of `CAUSE`
+   is the correct macro code emitted by the program on successful execution.
+   
+Each program is run with both the minimal set of `EXTNS` that it requires, and will all extensions
+enabled.
+
+The following programs are run:
+
+| Program | Checks |
+|-------------|-------------------------------------------------------------------------------------------------------------------------|
+| `firsttest` | The shortest program which can halt.  |
+| `memtest` | Writes and reads back `0xAA` and `0x55` at every byte below the `text` section.  |
+| `synctest` | System calls. |
+| `mputest` | MPU configuration and fault conditions checks.  |
+| `inttest` | The canonical interrupt handler in the ISA manual.  |

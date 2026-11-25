@@ -1,7 +1,25 @@
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+from subprocess import CompletedProcess
+
 from misa_hw.grammar import GpReg, Op
 
 from memory import MEMORY_SIZE
 
+
+REPO_ROOT: Path = Path(__file__).resolve().parents[2]
+INSTALL_DIR: Path = REPO_ROOT / "install"
+BRINGUP_DIR: Path = REPO_ROOT / "programs" / "bringup"
+BRINGUP_BIN: Path = BRINGUP_DIR / "bin"
+BRINGUP_MEMMAP: Path = BRINGUP_DIR / "common" / "memmap.ld"
+BRINGUP_CODES: Path = BRINGUP_DIR / "common" / "finishtest.h"
+
+ASSEMBLER: str = "misa-as"
+MAKE: str = "make"
+MACRO: re.Pattern = re.compile(r"#macro\s+([A-Za-z_][A-Za-z0-9_]*)\s+(\S+)\s*#endm")
 
 HALT_WORD: int = 0x0000
 
@@ -105,6 +123,10 @@ def cause_reserved(cause: int) -> int:
     return (cause >> 6) & 0b11
 
 
+def cause_kind(cause: int) -> int:
+    return cause_reason(cause) | (cause_type(cause) << 3)
+
+
 def cause_status(cause: int) -> int:
     return (cause >> 8) & 0xFF
 
@@ -165,3 +187,50 @@ def block_image(blocks: dict, vectors: dict = None, memory: bytearray = None,
         image[addr:addr + 2] = word_bytes(target)
 
     return bytes(image)
+
+
+def macro_values(text: str) -> dict:
+    return {name: int(value, 0) for name, value in MACRO.findall(text)}
+
+
+def bringup_names() -> tuple:
+    return tuple(sorted(path.stem for path in BRINGUP_DIR.glob("*.S")))
+
+
+def bringup_image(name: str) -> bytes:
+    return (BRINGUP_BIN / f"{name}.bin").read_bytes()
+
+
+def toolchain_env() -> dict:
+    if (not shutil.which(MAKE)):
+        return None
+
+    path: str = os.environ.get("PATH", "")
+    if (not shutil.which(ASSEMBLER)):
+        if (not (INSTALL_DIR / ASSEMBLER).is_file()):
+            return None
+        path = f"{INSTALL_DIR}{os.pathsep}{path}"
+
+    return {**os.environ, "PATH": path}
+
+
+def rebuild_bringup(scratch: Path) -> dict:
+    env: dict = toolchain_env()
+    if (env is None):
+        raise FileNotFoundError(
+            f"cannot rebuild the bringup programs: {MAKE} and {ASSEMBLER} both have to be "
+            f"available, and {ASSEMBLER} was not on PATH or in {INSTALL_DIR}"
+        )
+
+    tree: Path = scratch / BRINGUP_DIR.name
+    shutil.copytree(BRINGUP_DIR, tree, ignore = shutil.ignore_patterns(BRINGUP_BIN.name))
+
+    result: CompletedProcess = subprocess.run(
+        [MAKE, "-C", str(tree)], capture_output = True, env = env
+    )
+    if (result.returncode != 0):
+        detail: str = result.stderr.decode("utf-8", errors = "replace").strip()
+        raise RuntimeError(f"{MAKE} exited {result.returncode} in {tree}: {detail}")
+
+    built: Path = tree / BRINGUP_BIN.name
+    return {path.stem: path.read_bytes() for path in sorted(built.glob("*.bin"))}

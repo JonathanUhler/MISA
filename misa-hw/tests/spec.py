@@ -6,10 +6,9 @@ from subprocess import CompletedProcess
 from tempfile import TemporaryDirectory
 
 from memory import MEMORY_SIZE, MemMap
+from programs import REPO_ROOT
 from state import MisaState, parse_spec_text
 
-
-REPO_ROOT: Path = Path(__file__).resolve().parents[2]
 
 EXE_ENV_VAR: str = "MISA_SPEC_EXE"
 EXE_CANDIDATES: tuple = (
@@ -124,6 +123,13 @@ class SpecDriver:
         return self._run([
             "q0", self._image_path, format_steps(steps), str(extns), "-", self._map_path
         ])
+
+
+    def memmap_of_file(self, image: bytes, map_path: Path) -> MemMap:
+        self._write_image(image)
+        return MisaState.from_spec_text(
+            self._run(["q0", self._image_path, "0", "0", "-", map_path])
+        )[1]
 
 
     def qi(self, state: MisaState, memmap: MemMap, steps: int = None,

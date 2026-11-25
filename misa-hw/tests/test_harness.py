@@ -1,27 +1,23 @@
 from dataclasses import replace
-from pathlib import Path
 
 from pytest import fixture, mark, raises
 
 from misa_hw.grammar import AccessKind, CsrReg, FaultKind, GpReg, Op
 
 from compare import DivergenceError, check_lengths, final, lockstep
-from conftest import BRINGUP_DIR
 from memory import (
     CAPS_RWX, CAPS_EXECUTE, CAPS_READ, CAPS_WRITE, caps_from_name, caps_to_name,
     MemoryLatency, ZeroLatency, FixedLatency, RandomLatency,
     MEMORY_SIZE, MemMap, MemoryBfm
 )
 from programs import (
-    FAULT_VECTOR, RESET_VECTOR, SYSCALL_VECTOR, VECTOR_TABLE_LO, cause_word, encode, patched
+    FAULT_VECTOR, RESET_VECTOR, SYSCALL_VECTOR, VECTOR_TABLE_LO, bringup_image, cause_word,
+    encode, patched
 )
 from spec import SpecDriver, split_records
 from state import MisaState
 from target import RunResult, Target
 
-
-FIRSTTEST: Path = BRINGUP_DIR / "bin" / "firsttest.bin"
-MEMTEST: Path = BRINGUP_DIR / "bin" / "memtest.bin"
 
 MEMTEST_STEPS: int = 200
 
@@ -47,12 +43,12 @@ MPU_REGION_1: int = 0x0A08
 
 @fixture(scope = "session")
 def firsttest_image() -> bytes:
-    return FIRSTTEST.read_bytes()
+    return bringup_image("firsttest")
 
 
 @fixture(scope = "session")
 def memtest_image() -> bytes:
-    return MEMTEST.read_bytes()
+    return bringup_image("memtest")
 
 
 @mark.parametrize("name, bits", [

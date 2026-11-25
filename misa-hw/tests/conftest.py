@@ -1,14 +1,9 @@
-from pathlib import Path
-
 from pytest import Config, FixtureRequest, MarkDecorator, Parser, fixture, mark
 
 from memory import FixedLatency, MemMap, MemoryLatency, RandomLatency, ZeroLatency
 from spec import SpecDriver
 from target import AmaranthTarget, Target
 
-
-REPO_ROOT: Path = Path(__file__).resolve().parents[2]
-BRINGUP_DIR: Path = REPO_ROOT / "programs" / "bringup"
 
 TARGETS: dict = {
     "amaranth": AmaranthTarget

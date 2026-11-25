@@ -41,3 +41,15 @@ Memtest_Loop_0x55_Good:
 MemTest_Loop_End:
         
         Finish_Test(MEMTEST_SUCCESS)
+
+
+Fault_Handler:
+        Finish_Fault
+
+
+Syscall_Handler:
+        Finish_Test(UNEXPECTED_SYSCALL)
+
+
+Interrupt_Handler:
+        Finish_Test(UNEXPECTED_INTERRUPT)

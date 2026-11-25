@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from random import Random
+import re
 
 from misa_hw.grammar import AccessKind
 
@@ -12,6 +13,14 @@ CAPS_WRITE: int = AccessKind.WRITE
 CAPS_EXECUTE: int = AccessKind.EXECUTE
 CAPS_RWX: int = CAPS_READ | CAPS_WRITE | CAPS_EXECUTE
 CAPS_NAME_BITS: dict = (("r", CAPS_READ), ("w", CAPS_WRITE), ("x", CAPS_EXECUTE))
+
+MEMMAP_COMMENT: re.Pattern = re.compile(r"//[^\n]*|/\*.*?\*/", re.DOTALL)
+MEMMAP_ROW: re.Pattern = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)([^;]*);")
+MEMMAP_REGION: re.Pattern = re.compile(
+    r"^\s*(0[xX][0-9a-fA-F]+)\s*-\s*(0[xX][0-9a-fA-F]+)\s*:\s*(-|[rwx]+)\s*$"
+)
+MEMMAP_MEMORY: str = "memory"
+MEMMAP_IGNORED: tuple = ("section", "mpu")
 
 
 def caps_to_name(caps: int) -> str:
@@ -60,6 +69,44 @@ class MemMap:
     @classmethod
     def from_rows(cls, rows: tuple) -> "MemMap":
         return cls(tuple(MemRegion(lo, hi, caps_from_name(name)) for lo, hi, name in rows))
+
+
+    @classmethod
+    def from_memmap_text(cls, text: str) -> "MemMap":
+        body: str = MEMMAP_COMMENT.sub(" ", text)
+        regions: list = []
+        read: int = 0
+
+        for row in MEMMAP_ROW.finditer(body):
+            if (body[read:row.start()].strip()):
+                raise ValueError(
+                    f"'{body[read:row.start()].strip()}' is not a memory map statement; every "
+                    f"statement names memory, section or mpu and ends with a semicolon"
+                )
+            read = row.end()
+
+            keyword: str = row.group(1).lower()
+            if (keyword in MEMMAP_IGNORED):
+                continue
+            if (keyword != MEMMAP_MEMORY):
+                raise ValueError(
+                    f"unknown memory map statement '{row.group(1)}', expected memory, section "
+                    f"or mpu"
+                )
+
+            bounds: re.Match = MEMMAP_REGION.match(row.group(2))
+            if (not bounds):
+                raise ValueError(
+                    f"'memory{row.group(2)};' is not an address range and a capability name, as "
+                    f"in 'memory 0x0000 - 0x00FF : rwx ;'"
+                )
+            regions.append(MemRegion(int(bounds.group(1), 16), int(bounds.group(2), 16),
+                                     caps_from_name(bounds.group(3))))
+
+        if (body[read:].strip()):
+            raise ValueError(f"'{body[read:].strip()}' is a memory map statement with no semicolon")
+
+        return cls(tuple(regions)) if (regions) else cls.everything()
 
 
     def caps_at(self, addr: int) -> int:

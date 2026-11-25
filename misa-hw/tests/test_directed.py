@@ -10,7 +10,7 @@ from generators import DEFAULT_EXTNS, HANDLER_BASE, INTERRUPT_BASE, SYSCALL_BASE
 from memory import CAPS_READ, CAPS_RWX, CAPS_WRITE, MEMORY_SIZE, MemMap, MemoryLatency
 from programs import (
     FAULT_VECTOR, INTERRUPT_VECTOR, PAGE_SIZE, PROGRAM_BASE, RESET_VECTOR, SYSCALL_VECTOR,
-    VECTOR_TABLE_LO, alu_inst, block_image, cause_reserved, cause_reason, cause_status,
+    VECTOR_TABLE_LO, alu_inst, block_image, cause_kind, cause_reserved, cause_reason, cause_status,
     cause_type, cause_word, csr_write_words, flags_word, halt_inst, jal_inst, jmp_csr_inst,
     jmp_inst, load_inst, mpu_pages, mpu_region, rrc_inst, rsr_inst, set_inst, store_inst,
     syscall_inst, wsr_inst
@@ -181,11 +181,10 @@ def handler_index(states: list, handler: int = HANDLER_BASE) -> int:
 
 
 def describe_cause(cause: int) -> str:
-    reason: int = cause_reason(cause)
-    kind: int = reason | (cause_type(cause) << 3)
+    kind: int = cause_kind(cause)
     name: str = FaultKind(kind).name if (kind in tuple(FaultKind)) else "unassigned"
-    return f"{cause:#06x} (reason {reason:#05b} type {cause_type(cause):#05b} {name}, " \
-           f"extended status {cause_status(cause):#04x})"
+    return f"{cause:#06x} (reason {cause_reason(cause):#05b} type {cause_type(cause):#05b} " \
+           f"{name}, extended status {cause_status(cause):#04x})"
 
 
 def expect_fault(states: list, kind: int, status: int = 0x00, at: int = PROGRAM_BASE,
