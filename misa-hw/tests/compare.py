@@ -35,24 +35,36 @@ def check_lengths(oracle_states: list, design: RunResult, steps: int) -> None:
         return
 
     oracle_halted: bool = oracle_states[-1].halted
-    design_halted: bool = design.states[-1].halted if (design.states) else False
     raise DivergenceError(
         f"the design produced {produced} states and the oracle {expected}"
         f" (requested steps={steps}; oracle halted={oracle_halted},"
-        f" design halted={design_halted}, design ran {design.cycles} cycles).\n"
+        f" design halted={design.halted}, design ran {design.cycles} cycles).\n"
         f"  A short design trace means the core stalled or a boundary was missed, not that the\n"
         f"  comparison may be truncated to the shorter of the two."
     )
 
 
-def single_step(label: str, entry: MisaState, expected: MisaState, design: RunResult,
-                ignore: tuple = BOUNDARY_IGNORED) -> None:
-    if (len(design.states) != 2):
-        halted: bool = bool(design.states) and design.states[-1].halted
+def check_count(design: RunResult, states: int, steps: int) -> None:
+    if (design.observed() == states):
+        return
+    raise DivergenceError(
+        f"the design passed through {design.observed()} states where the oracle passed through "
+        f"{states} (requested steps={steps}; design halted={design.halted} after "
+        f"{design.boundaries} boundaries and {design.cycles} cycles).\n"
+        f"  A design which retired fewer instructions than the oracle did is a stalled core or a\n"
+        f"  missed boundary, and its final state matching proves nothing."
+    )
+
+
+def steps_from(label: str, entry: MisaState, expected: MisaState, design: RunResult,
+               steps: int = 1, ignore: tuple = BOUNDARY_IGNORED) -> None:
+    owed: int = steps + 1
+    if (len(design.states) != owed) and (not (expected.halted and design.halted)):
         raise DivergenceError(
-            f"{label}: the design produced {len(design.states)} states for one instruction, "
-            f"where it owes the boundary before it and the state after it (it ran "
-            f"{design.cycles} cycles and {'halted' if (halted) else 'did not halt'})"
+            f"{label}: the design produced {len(design.states)} states for {steps} "
+            f"instruction{'' if (steps == 1) else 's'}, where it owes the boundary before them "
+            f"and the state after each (it ran {design.cycles} cycles and "
+            f"{'halted' if (design.halted) else 'did not halt'})"
         )
 
     injected: list = entry.diff(design.states[0], ignore = ignore + ("memory",))
@@ -65,8 +77,14 @@ def single_step(label: str, entry: MisaState, expected: MisaState, design: RunRe
     diffs: list = expected.diff(design.states[-1], ignore = ignore)
     if (diffs):
         raise DivergenceError(
-            f"{label}\n" + format_divergence(1, entry, expected, design.states[-1], diffs)
+            f"{label}\n"
+            + format_divergence(len(design.states) - 1, entry, expected, design.states[-1], diffs)
         )
+
+
+def single_step(label: str, entry: MisaState, expected: MisaState, design: RunResult,
+                ignore: tuple = BOUNDARY_IGNORED) -> None:
+    steps_from(label, entry, expected, design, steps = 1, ignore = ignore)
 
 
 def check_reset_arguments(init: CoreInit, state: MisaState, extns: int) -> None:
@@ -117,24 +135,50 @@ def final(target: Target, spec: SpecDriver, image: bytes, memmap: MemMap,
     if (state is not None):
         oracle_final: MisaState = spec.qi(state, memmap, steps = steps)[-1]
         result: RunResult = target.run(
-            image, state.to_core_init(), steps, (), memmap, latency
+            image, state.to_core_init(), steps, (), memmap, latency, record = False
         )
     else:
         oracle_final = spec.q0(image, memmap, extns, steps = steps)[-1]
-        result = target.run(image, init, steps, (), memmap, latency, reset_extns = extns)
+        result = target.run(image, init, steps, (), memmap, latency, reset_extns = extns,
+                            record = False)
+
+    if (not result.states):
+        raise DivergenceError(
+            f"the design produced no state at all after {result.cycles} cycles and "
+            f"{result.boundaries} boundaries, where the oracle ended "
+            f"{'halted' if (oracle_final.halted) else 'running'} at pc={oracle_final.pc:#06x}"
+        )
 
     design_final: MisaState = result.states[-1]
     if (oracle_final.halted != design_final.halted):
         raise DivergenceError(
             f"the oracle halted={oracle_final.halted} and the design "
             f"halted={design_final.halted} after steps={steps} "
-            f"({len(result.states)} design states, {result.cycles} cycles)"
+            f"({result.boundaries} design boundaries, {result.cycles} cycles)"
         )
+    if (not oracle_final.halted) and (steps is not None):
+        check_count(result, steps + 1, steps)
 
     diffs: list = oracle_final.diff(design_final, ignore = ignore)
     if (diffs):
         raise DivergenceError(format_divergence(
-            len(result.states) - 1, None, oracle_final, design_final, diffs
+            result.observed() - 1, None, oracle_final, design_final, diffs
         ))
 
     return oracle_final
+
+
+def compared(mode: str, target: Target, spec: SpecDriver, image: bytes, memmap: MemMap,
+             init: CoreInit = None, state: MisaState = None, steps: int = None,
+             extns: int = None, latency: MemoryLatency = None,
+             ignore: tuple = BOUNDARY_IGNORED) -> list:
+    if (mode not in COMPARISONS):
+        raise ValueError(f"'{mode}' is not a comparison mode; use one of {sorted(COMPARISONS)}")
+    return COMPARISONS[mode](target, spec, image, memmap, init = init, state = state,
+                             steps = steps, extns = extns, latency = latency, ignore = ignore)
+
+
+COMPARISONS: dict = {
+    "lockstep": lockstep,
+    "final": lambda *args, **changes: [final(*args, **changes)]
+}

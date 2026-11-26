@@ -5,7 +5,7 @@ from pytest import MarkDecorator, fixture, mark, raises, skip
 
 from misa_hw.grammar import Extn, FaultKind
 
-from compare import lockstep
+from compare import final, lockstep
 from generators import DEFAULT_EXTNS
 from memory import MemMap, MemoryLatency
 from programs import (
@@ -85,6 +85,7 @@ RUNS: tuple = tuple(
 )
 SHORT_RUNS: tuple = tuple(run for run in RUNS if (run[0].halts))
 LONG_RUNS: tuple = tuple(run for run in RUNS if (not run[0].halts))
+LONG_PROGRAMS: tuple = tuple(program for program in PROGRAMS if (not program.halts))
 
 
 def label(value: object) -> str:
@@ -247,6 +248,18 @@ def test_a_long_program_reaches_its_finish_code_in_the_oracle(spec: SpecDriver,
                                                               extns: int) -> None:
     states: list = spec.q0(bringup_image(program.name), bringup_memmap, extns, steps = LONG_LIMIT)
     expect_finish(program, states, codes)
+
+
+@mark.exhaustive
+@mark.slow
+@mark.parametrize("program", LONG_PROGRAMS, ids = label)
+def test_a_long_program_reaches_its_finish_code_on_the_design(target: Target, spec: SpecDriver,
+                                                              bringup_memmap: MemMap,
+                                                              latency: MemoryLatency, codes: dict,
+                                                              program: Bringup) -> None:
+    ended: MisaState = final(target, spec, bringup_image(program.name), bringup_memmap,
+                             steps = LONG_LIMIT, extns = DEFAULT_EXTNS, latency = latency)
+    expect_finish(program, [ended], codes)
 
 
 def test_the_finish_check_notices_a_program_which_failed(target: Target, bringup_memmap: MemMap,

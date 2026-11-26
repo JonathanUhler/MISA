@@ -19,10 +19,21 @@ DEFAULT_MAX_CYCLES: int = 1 << 20
 
 class RunResult:
 
-    def __init__(self, states: list, bfm: MemoryBfm, cycles: int) -> None:
+    def __init__(self, states: list, bfm: MemoryBfm, cycles: int, boundaries: int = None) -> None:
         self.states: list = states
         self.bfm: MemoryBfm = bfm
         self.cycles: int = cycles
+        self.boundaries: int = (len(states) - int(self.halted)) if (boundaries is None) \
+            else boundaries
+
+
+    @property
+    def halted(self) -> bool:
+        return bool(self.states) and self.states[-1].halted
+
+
+    def observed(self) -> int:
+        return self.boundaries + int(self.halted)
 
 
 class PackedView:
@@ -59,13 +70,23 @@ class _BusViews:
 
 class _RunContext:
 
-    def __init__(self, bfm: MemoryBfm, steps: int, max_cycles: int) -> None:
+    def __init__(self, bfm: MemoryBfm, steps: int, max_cycles: int, record: bool) -> None:
         self.bfm: MemoryBfm = bfm
         self.steps: int = steps
         self.max_cycles: int = max_cycles
+        self.record: bool = record
         self.states: list = []
+        self.boundaries: int = 0
         self.cycles: int = 0
         self.failure: str = None
+
+
+    def ends_here(self) -> bool:
+        return (self.steps is not None) and (self.boundaries > self.steps)
+
+
+    def wanted(self) -> bool:
+        return (self.record) or (self.ends_here())
 
 
 class Target(ABC):
@@ -77,7 +98,7 @@ class Target(ABC):
     @abstractmethod
     def run(self, image: bytes, init: CoreInit, steps: int, interrupts: tuple,
             memmap: MemMap, latency: MemoryLatency = None, reset_extns: int = None,
-            max_cycles: int = None) -> RunResult:
+            max_cycles: int = None, record: bool = True) -> RunResult:
         ...
 
 
@@ -152,15 +173,17 @@ class AmaranthTarget(Target):
                 context.states.append(self._sample(ctx, core, bfm, True))
                 return
             if (boundary):
-                context.states.append(self._sample(ctx, core, bfm, False))
-                if (context.steps is not None) and (len(context.states) > context.steps):
+                context.boundaries += 1
+                if (context.wanted()):
+                    context.states.append(self._sample(ctx, core, bfm, False))
+                if (context.ends_here()):
                     return
 
             context.cycles += 1
             if (context.cycles > context.max_cycles):
                 context.failure = (
                     f"no halt and no further boundary after {context.max_cycles} cycles "
-                    f"({len(context.states)} states so far, requested {context.steps}, "
+                    f"({context.boundaries} boundaries so far, requested {context.steps}, "
                     f"state_data={state}, mem_addr={addr:#06x}); the core is stuck"
                 )
                 return
@@ -169,7 +192,7 @@ class AmaranthTarget(Target):
 
     def run(self, image: bytes, init: CoreInit, steps: int, interrupts: tuple,
             memmap: MemMap, latency: MemoryLatency = None, reset_extns: int = None,
-            max_cycles: int = None) -> RunResult:
+            max_cycles: int = None, record: bool = True) -> RunResult:
         if (interrupts):
             raise NotImplementedError(
                 "interrupt schedules are driven by the interrupt campaign, which owns the "
@@ -186,7 +209,7 @@ class AmaranthTarget(Target):
             max_cycles = DEFAULT_MAX_CYCLES if (steps is None) \
                 else CYCLES_PER_BOUNDARY * (steps + 2)
 
-        self._context = _RunContext(MemoryBfm(image, memmap, latency), steps, max_cycles)
+        self._context = _RunContext(MemoryBfm(image, memmap, latency), steps, max_cycles, record)
         if (not fresh):
             simulator.reset()
         simulator.run()
@@ -194,7 +217,7 @@ class AmaranthTarget(Target):
         context: _RunContext = self._context
         if (context.failure):
             raise RuntimeError(f"{self.name}: {context.failure}")
-        return RunResult(context.states, context.bfm, context.cycles)
+        return RunResult(context.states, context.bfm, context.cycles, context.boundaries)
 
 
     def _sample(self, ctx: object, core: MisaCore, bfm: MemoryBfm, halted: bool) -> MisaState:

@@ -1,14 +1,15 @@
 from dataclasses import replace
 
-from pytest import fixture, mark, raises, skip
+from pytest import mark, raises, skip
 
 from misa_hw.grammar import CsrReg, FaultKind, GpReg, Op
 from misa_hw.init import CoreInit
 
 from compare import DivergenceError, lockstep, single_step
 from generators import (
-    ALL_ENCODINGS, DEFAULT_EXTNS, HALT_RESERVED, HANDLER_BASE, NIBBLE_RESERVED, SEEDS, Seed,
-    SeedProgram, representative_encodings, seed_problems, seed_program
+    ALL_ENCODINGS, CAMPAIGN_MEMMAP, DEFAULT_EXTNS, HALT_RESERVED, HANDLER_BASE, NIBBLE_RESERVED,
+    SEEDS, Seed, SeedProgram, compatible_seeds, representative_encodings, seed_label,
+    seed_problems, seed_program, selected_seeds
 )
 from memory import MemMap, MemoryLatency
 from programs import PAGE_SIZE, PROGRAM_BASE, patched, set_inst, word_bytes
@@ -17,7 +18,7 @@ from state import MisaState
 from target import RunResult, Target
 
 
-SWEEP_MEMMAP: MemMap = MemMap.everything()
+SWEEP_MEMMAP: MemMap = CAMPAIGN_MEMMAP
 
 SWEEP_EXTNS: tuple = (0xF, 0x0)
 QUICK_EXTNS: tuple = (0xF,)
@@ -29,55 +30,10 @@ REPRESENTATIVE_MAXIMUM: int = 3000
 EXTNS_VALUES: tuple = tuple(range(1 << 4))
 EXTNS_CROSS_SEED: Seed = SEEDS[1]
 
+label: object = seed_label
 
-def label(value: object) -> str:
-    return value.name if (isinstance(value, Seed)) else f"extns{value:#x}"
-
-
-def compatible(extns_values: tuple) -> tuple:
-    return tuple(
-        (seed, extns) for seed in SEEDS for extns in extns_values
-        if ((extns & seed.requires) == seed.requires)
-    )
-
-
-FULL_GRID: tuple = compatible(SWEEP_EXTNS)
-REPRESENTATIVE_GRID: tuple = compatible(QUICK_EXTNS) + ((SEEDS[0], 0x0),)
-
-
-def seed_state(spec: SpecDriver, program: SeedProgram, extns: int) -> MisaState:
-    state: MisaState = spec.q0(program.image, SWEEP_MEMMAP, extns, steps = program.presteps,
-                               interrupts = program.interrupts)[-1]
-    problems: list = seed_problems(program, state)
-    if (problems):
-        raise AssertionError(
-            f"the {program.seed.name} prologue did not produce the state it describes "
-            f"({program.seed.purpose}):\n" + "\n".join(
-                f"  {name}: the seed describes {expected!r}, the oracle produced {produced!r}"
-                for name, expected, produced in problems
-            )
-        )
-    return state
-
-
-@fixture(scope = "session")
-def seeds(spec: SpecDriver) -> object:
-    cache: dict = {}
-
-    def resolve(seed: Seed, extns: int) -> tuple:
-        key: tuple = (seed.name, extns)
-        if (key not in cache):
-            program: SeedProgram = seed_program(seed)
-            cache[key] = (program, seed_state(spec, program, extns))
-        return cache[key]
-
-    return resolve
-
-
-def selected_seeds(exhaustive: bool, seed_count: int) -> tuple:
-    if (seed_count is not None):
-        return SEEDS[:seed_count]
-    return SEEDS if (exhaustive) else SEEDS[:1]
+FULL_GRID: tuple = compatible_seeds(SWEEP_EXTNS)
+REPRESENTATIVE_GRID: tuple = compatible_seeds(QUICK_EXTNS) + ((SEEDS[0], 0x0),)
 
 
 def sweep_label(program: SeedProgram, extns: int, word: int) -> str:

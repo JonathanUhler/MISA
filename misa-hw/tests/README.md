@@ -20,7 +20,7 @@ test behavior:
 | Option | Purpose |
 |----------------|----------------------------------------------------------------------------------------|
 | `--target` | Which target model to run tests against.  |
-| `--compare` | Compare every state ("lockstep") or only the final state after a test program is run.  |
+| `--compare` | Compare every state ("lockstep") or only the final state after a test program is run. |
 | `--latency` | The memory access latency pattern to use when `MisaCore` performs memory transactions. |
 | `--exhaustive` | Whether to run the full number of tests for every campaign, or only a quicker subset.  |
 | `--seeds` | The number of seeds to use per test campaign.  |
@@ -44,6 +44,9 @@ The following pytest markers are also available:
 | `test_sweep.py` | Executes one instruction from a known state and compares the whole architectural state, for every one of the 65536 instruction words. |
 | `test_directed.py` | A set of directed tests that verify conformance for behavior in the ISA manual (decode legality, flags, addressing, fault precedence, vector reads, special registers, and each extension). |
 | `test_programs.py` | Runs every program in `programs/bringup` against `misa-spec`, and checks that each one halts with the correct finish code it reports on success. |
+| `test_pairs.py` | Executes two-instruction sequences from a known state. |
+| `test_random.py` | Fills memory with random bytes and a valid vector table. |
+| `test_weighted.py` | Generates structured random programs from a set of profiles, each with a valid prologue, body, and epilogue. |
 
 ### `test_units` Reference Model
 
@@ -51,11 +54,11 @@ The following pytest markers are also available:
 units have no architectural state in common with the `misa-spec` state files. Its uses a separate
 reference model written from the ISA manual.
 
-### `test_sweep` Seeds
+### `test_sweep` and `test_pairs` Seeds
 
 Executing one instruction from the canonical reset state is unlikely to catch many bugs, since the
 reset state is highly normal. Instead, the following initial/seed states are provided for the
-one-instruction sweep test campaign:
+one- and two-instruction sweep test campaigns:
 
 | Seed | State |
 |------|---------------------------------------------------------------------------------|
@@ -90,3 +93,31 @@ The following programs are run:
 | `synctest` | System calls. |
 | `mputest` | MPU configuration and fault conditions checks.  |
 | `inttest` | The canonical interrupt handler in the ISA manual.  |
+
+### `test_weighted` Profiles
+
+The weighted programs test uses a set of configuration parameters, which together form a profile.
+The configuration values are:
+
+- Program length
+- Probability of generating a deliberately faulting instruction
+- The value of `EXTNS` on reset
+- Whether a function body runs in User Mode
+- Whether the memory map has holes in it
+- Whether a function body uses the stack, and how many nested calls are performed
+- Whether a function makes a system call
+- Whether a function writes `EXTNS`
+
+The profiles are:
+
+| Profile | Configuration |
+|--------------|-------------------------------------------------------------------------------------|
+| `plain` | Machine Mode with a complete memory map that grants every access to every address. |
+| `faults` | `plain` with 1/20 instructions intended to cause a fault. |
+| `holes` | A memory map with an unmapped region, a region which grants nothing, a read-only region, and an unmapped half of the vector table. |
+| `user` | User Mode with an MPU which grants minimal permissions and one overlapping region. |
+| `userfaults` | User Mode with memory-access-related faults. |
+| `calls` | Subroutines two deep, saving and restoring `RADDR` through the stack. |
+| `syscalls` | System calls returning through `RETSC`. |
+| `narrow` | Only Dynamic Hardware enabled at reset. |
+| `dynamic` | Disabled extensions at runtime. |

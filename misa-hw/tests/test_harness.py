@@ -4,7 +4,7 @@ from pytest import fixture, mark, raises
 
 from misa_hw.grammar import AccessKind, CsrReg, FaultKind, GpReg, Op
 
-from compare import DivergenceError, check_lengths, final, lockstep
+from compare import DivergenceError, check_count, check_lengths, final, lockstep
 from memory import (
     CAPS_RWX, CAPS_EXECUTE, CAPS_READ, CAPS_WRITE, caps_from_name, caps_to_name,
     MemoryLatency, ZeroLatency, FixedLatency, RandomLatency,
@@ -234,6 +234,45 @@ def test_check_lengths_rejects_a_short_design_trace() -> None:
 def test_check_lengths_accepts_equal_traces() -> None:
     equal: RunResult = RunResult([_halted_state(False)] * 5, None, 99)
     check_lengths([_halted_state(False)] * 5, equal, 4)
+
+
+def test_check_count_rejects_a_design_which_retired_fewer() -> None:
+    short: RunResult = RunResult([_halted_state(False)], None, 99, 3)
+    assert short.observed() == 3
+    with raises(DivergenceError, match = "passed through 3 states where the oracle passed"):
+        check_count(short, 5, 4)
+    check_count(short, 3, 2)
+
+
+def test_a_non_recording_run_keeps_only_the_state_it_ends_on(target: Target,
+                                                             memtest_image: bytes,
+                                                             everything: MemMap) -> None:
+    recorded: RunResult = target.run(memtest_image, None, 40, (), everything, None,
+                                     reset_extns = 0xF)
+    terse: RunResult = target.run(memtest_image, None, 40, (), everything, None,
+                                  reset_extns = 0xF, record = False)
+
+    assert len(recorded.states) == 41, "a recording run keeps one state per boundary"
+    assert len(terse.states) == 1, "and a non-recording one keeps the last of them"
+    assert terse.states[-1] == recorded.states[-1]
+    assert terse.boundaries == recorded.boundaries == 41
+    assert terse.observed() == recorded.observed() == len(recorded.states)
+    assert not terse.halted
+
+
+def test_a_non_recording_run_still_keeps_the_halt(target: Target, firsttest_image: bytes,
+                                                  everything: MemMap) -> None:
+    recorded: RunResult = target.run(firsttest_image, None, None, (), everything, None,
+                                     reset_extns = 0xF)
+    terse: RunResult = target.run(firsttest_image, None, None, (), everything, None,
+                                  reset_extns = 0xF, record = False)
+
+    assert recorded.states[-1].halted and terse.states[-1].halted
+    assert terse.states[-1] == recorded.states[-1]
+    assert len(terse.states) == 1
+    assert terse.boundaries == recorded.boundaries == len(recorded.states) - 1, \
+        "the halted state is the one state no boundary marks"
+    assert terse.observed() == recorded.observed() == len(recorded.states)
 
 
 def _halted_state(halted: bool) -> MisaState:

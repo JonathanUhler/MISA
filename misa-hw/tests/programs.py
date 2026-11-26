@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from random import Random
 import re
 import shutil
 import subprocess
@@ -160,6 +161,10 @@ def filled_memory(fill: int = HALT_WORD) -> bytearray:
 
 def patterned_memory() -> bytearray:
     return bytearray((addr ^ (addr >> 8)) & 0xFF for addr in range(MEMORY_SIZE))
+
+
+def random_memory(seed: int) -> bytearray:
+    return bytearray(Random(seed).randbytes(MEMORY_SIZE))
 
 
 def block_image(blocks: dict, vectors: dict = None, memory: bytearray = None,
