@@ -388,6 +388,12 @@ class MisaCore(Component):
             self.access_kind.eq(AccessKind.READ),
             self.vector_read.eq(1)
         ]
+        with m.If((self.vector_sel == VectorSelect.FAULT) & self.privilege_enabled):
+            m.d.comb += [
+                self.csr_reg_file.write_csr_reg.eq(CsrReg.PRIVS),
+                self.csr_reg_file.write_data.eq(0x0000),
+                self.csr_reg_file.write_enable.eq(1)
+            ]
         with m.If(self.access_denied):
             self.vector_fault(m)
         with m.Else():

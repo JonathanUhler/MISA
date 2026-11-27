@@ -1,10 +1,4 @@
 // Finish codes and reporters for the bringup programs.
-//
-// A bringup program ends by invoking Finish_Test with one of its finish macros. Finish_Test halts
-// the processor with that code using the RT register.
-//
-// Finish_Fault is for the fault handler of a program which expects no fault. It transfers the fault
-// Reason and Type to a register and then halts with that register.
 
 #macro FAULT_TAG 0x80 #endm
 
@@ -39,10 +33,17 @@
 #macro INTTEST_FAILED_FLAGS   0x43 #endm
 #macro INTTEST_FAILED_COUNT   0x44 #endm
 
+// A bringup program ends by invoking Finish_Test with one of the finish codes above. Finish_Test
+// halts the processor with that code using the RT register.
+
 #macro Finish_Test(code)
     SET RT code
     HALT RT
 #endm
+
+// Finish_Fault is for the fault handler of a program which expects no fault. It transfers the
+// fault Reason and Type to a register and then halts with that register, tagged so the campaign
+// can tell a reported fault from a finish code.
 
 #macro Finish_Fault
     RSR CAUSE RSCRATCH

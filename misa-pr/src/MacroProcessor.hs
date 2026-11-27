@@ -19,6 +19,7 @@ type MacroMap = [(String, [String], String)]
 data Chunk
   = Macro String String
   | PolyMacro String [String] String
+  | Verbatim String
   | SourceChunk String
   deriving (Show)
 
@@ -56,14 +57,34 @@ parseMacro = do
   return (Macro key val)
 
 
+parseAnyMacro :: Parser Chunk
+parseAnyMacro = try parsePolyMacro <|> parseMacro
+
+
+parseVerbatim :: Parser Chunk
+parseVerbatim = Verbatim <$> choice [try parseLineComment, try parseBlockComment, parseLiteral]
+  where parseLineComment = do
+          open <- string "//"
+          body <- manyTill anySingle (try (lookAhead eol) <|> (eof >> return ""))
+          return (open ++ body)
+        parseBlockComment = do
+          open <- string "/*"
+          body <- someTill anySingle (string "*/")
+          return (open ++ body ++ "*/")
+        parseLiteral = do
+          body <- char '"' *> manyTill anySingle (char '"')
+          return ("\"" ++ body ++ "\"")
+
+
 parseSourceChunk :: Parser Chunk
 parseSourceChunk = do
-  content <- some (notFollowedBy parseMacro *> anySingle)
+  content <- some (notFollowedBy (try parseAnyMacro <|> parseVerbatim) *> anySingle)
   return (SourceChunk content)
 
 
 parseChunks :: Parser [Chunk]
-parseChunks = many (try parsePolyMacro <|> try parseMacro <|> parseSourceChunk) <* eof
+parseChunks =
+  many (try parsePolyMacro <|> try parseMacro <|> try parseVerbatim <|> parseSourceChunk) <* eof
 
 
 replaceMacro :: String -> (String, [String], String) -> String
@@ -98,6 +119,7 @@ resolveChunks chunks macroDefs = acc macroDefs chunks
         acc _      []                         = ""
         acc macros ((Macro k v) : rest)       = acc ((k, [], v) : macros) rest
         acc macros ((PolyMacro k a v) : rest) = acc ((k, a, v) : macros) rest
+        acc macros ((Verbatim s) : rest)      = s ++ (acc macros rest)
         acc macros ((SourceChunk s) : rest)   = (replaceMacros macros s) ++ (acc macros rest)
 
 

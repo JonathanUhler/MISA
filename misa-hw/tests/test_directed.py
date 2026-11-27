@@ -944,12 +944,18 @@ def test_vec_02_an_unreadable_fault_vector_at_reset_halts_without_executing(
         "every read was refused, so none of them should have been performed"
 
 
-def test_vec_03_an_unreadable_fault_vector_loses_the_original_cause(
-        directed: Directed) -> None:
-    memmap: MemMap = memmap_hole(FAULT_VECTOR, FAULT_VECTOR + 1)
-    states: list = directed.run(directed_image((ILLEGAL_WORD,)), memmap)
+VEC_03_MODES: tuple = (((), "machine-mode"), (USER_MODE_WORDS, "user-mode"))
 
-    assert len(states) == 2, "the illegal instruction is the only step the run can take"
+
+@mark.parametrize("prologue, name", VEC_03_MODES, ids = label)
+def test_vec_03_an_unreadable_fault_vector_loses_the_original_cause(directed: Directed,
+                                                                    prologue: tuple,
+                                                                    name: str) -> None:
+    memmap: MemMap = memmap_hole(FAULT_VECTOR, FAULT_VECTOR + 1)
+    states: list = directed.run(directed_image(prologue + (ILLEGAL_WORD,)), memmap)
+
+    assert len(states) == len(prologue) + 2, \
+        "the illegal instruction is the last step the run can take"
     assert states[-1].halted, "a failed fault vector read is terminal"
     assert states[-1].csrs["fault"] == FAULT_VECTOR, \
         "FAULT describes the vector read, not the instruction which led to it"
@@ -957,18 +963,6 @@ def test_vec_03_an_unreadable_fault_vector_loses_the_original_cause(
         "the cause of the original fault is overwritten by the cause of the vector read and is "
         "unrecoverable"
     )
-
-
-@mark.xfail(reason = "misa-hw does not clear PRIVS.R on the halting vector-read path; the write "
-                     "lives in TRAP_ENTER, which TRAP_HALT_CAUSE never reaches (plan section "
-                     "6.10). Remove this expectation when the design writes it.",
-            strict = True)
-def test_vec_03_an_unreadable_fault_vector_still_leaves_machine_mode(
-        directed: Directed) -> None:
-    memmap: MemMap = memmap_hole(FAULT_VECTOR, FAULT_VECTOR + 1)
-    states: list = directed.run(directed_image(USER_MODE_WORDS + (ILLEGAL_WORD,)), memmap)
-
-    assert states[-1].halted
     assert states[-1].masked_csr("privs") == 0x0000, (
         "the processor sets PRIVS.R to 0 before it reads the vector, so a fault taken in User "
         "Mode must halt in Machine Mode"
