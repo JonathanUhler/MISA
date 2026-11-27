@@ -1,9 +1,11 @@
 from pytest import Config, FixtureRequest, MarkDecorator, Metafunc, Parser, fixture, mark
 
+from compare import Directed
 from generators import (
     CAMPAIGN_SEEDS, PROFILE_SEEDS, Seed, SeedProgram, seed_program, seed_state
 )
 from memory import FixedLatency, MemMap, MemoryLatency, RandomLatency, ZeroLatency
+from programs import BRINGUP_MEMMAP, finish_codes
 from spec import SpecDriver
 from target import AmaranthTarget, Target
 
@@ -98,9 +100,24 @@ def seed_count(request: FixtureRequest) -> int:
     return request.config.getoption("--seeds")
 
 
+@fixture
+def directed(target: Target, spec: SpecDriver, latency: MemoryLatency) -> Directed:
+    return Directed(target, spec, latency)
+
+
 @fixture(scope = "session")
 def everything() -> MemMap:
     return MemMap.everything()
+
+
+@fixture(scope = "session")
+def bringup_memmap() -> MemMap:
+    return MemMap.from_memmap_text(BRINGUP_MEMMAP.read_text(encoding = "utf-8"))
+
+
+@fixture(scope = "session")
+def codes() -> dict:
+    return finish_codes()
 
 
 @fixture(scope = "session")

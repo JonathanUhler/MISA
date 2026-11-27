@@ -1,8 +1,17 @@
-from memory import MemMap, MemoryLatency
+from dataclasses import dataclass, replace
+
+from misa_hw.grammar import FaultKind
 from misa_hw.init import CoreInit
+
+from generators import DEFAULT_EXTNS, HANDLER_BASE
+from memory import MemMap, MemoryLatency
+from programs import PROGRAM_BASE, cause_kind, cause_reason, cause_status, cause_type, cause_word
 from spec import SpecDriver
 from state import BOUNDARY_IGNORED, MisaState
-from target import RunResult, Target
+from target import RunResult, Target, pin_schedule
+
+
+EVERYTHING: MemMap = MemMap.everything()
 
 
 class DivergenceError(AssertionError):
@@ -96,21 +105,31 @@ def check_reset_arguments(init: CoreInit, state: MisaState, extns: int) -> None:
         raise ValueError("a resumed run takes EXTNS from the state; do not also pass extns")
 
 
+def interrupt_arguments(interrupts: tuple, pin: tuple) -> tuple:
+    if (pin is None):
+        return pin_schedule(interrupts)
+    return pin
+
+
 def lockstep(target: Target, spec: SpecDriver, image: bytes, memmap: MemMap,
              init: CoreInit = None, state: MisaState = None, steps: int = None,
              extns: int = None, latency: MemoryLatency = None,
-             ignore: tuple = BOUNDARY_IGNORED) -> list:
+             ignore: tuple = BOUNDARY_IGNORED, interrupts: tuple = (),
+             pin: tuple = None) -> list:
     check_reset_arguments(init, state, extns)
+    driven: tuple = interrupt_arguments(interrupts, pin)
 
     if (state is not None):
-        oracle_states: list = spec.qi(state, memmap, steps = steps, trace = True)
+        oracle_states: list = spec.qi(state, memmap, steps = steps, interrupts = interrupts,
+                                      trace = True)
         result: RunResult = target.run(
-            image, state.to_core_init(), steps, (), memmap, latency
+            image, state.to_core_init(), steps, driven, memmap, latency
         )
     else:
-        oracle_states = spec.q0(image, memmap, extns, steps = steps, trace = True)
+        oracle_states = spec.q0(image, memmap, extns, steps = steps, interrupts = interrupts,
+                                trace = True)
         result = target.run(
-            image, init, steps, (), memmap, latency, reset_extns = extns
+            image, init, steps, driven, memmap, latency, reset_extns = extns
         )
 
     check_lengths(oracle_states, result, steps)
@@ -129,17 +148,20 @@ def lockstep(target: Target, spec: SpecDriver, image: bytes, memmap: MemMap,
 def final(target: Target, spec: SpecDriver, image: bytes, memmap: MemMap,
           init: CoreInit = None, state: MisaState = None, steps: int = None,
           extns: int = None, latency: MemoryLatency = None,
-          ignore: tuple = BOUNDARY_IGNORED) -> MisaState:
+          ignore: tuple = BOUNDARY_IGNORED, interrupts: tuple = (),
+          pin: tuple = None) -> MisaState:
     check_reset_arguments(init, state, extns)
+    driven: tuple = interrupt_arguments(interrupts, pin)
 
     if (state is not None):
-        oracle_final: MisaState = spec.qi(state, memmap, steps = steps)[-1]
+        oracle_final: MisaState = spec.qi(state, memmap, steps = steps,
+                                          interrupts = interrupts)[-1]
         result: RunResult = target.run(
-            image, state.to_core_init(), steps, (), memmap, latency, record = False
+            image, state.to_core_init(), steps, driven, memmap, latency, record = False
         )
     else:
-        oracle_final = spec.q0(image, memmap, extns, steps = steps)[-1]
-        result = target.run(image, init, steps, (), memmap, latency, reset_extns = extns,
+        oracle_final = spec.q0(image, memmap, extns, steps = steps, interrupts = interrupts)[-1]
+        result = target.run(image, init, steps, driven, memmap, latency, reset_extns = extns,
                             record = False)
 
     if (not result.states):
@@ -171,14 +193,122 @@ def final(target: Target, spec: SpecDriver, image: bytes, memmap: MemMap,
 def compared(mode: str, target: Target, spec: SpecDriver, image: bytes, memmap: MemMap,
              init: CoreInit = None, state: MisaState = None, steps: int = None,
              extns: int = None, latency: MemoryLatency = None,
-             ignore: tuple = BOUNDARY_IGNORED) -> list:
+             ignore: tuple = BOUNDARY_IGNORED, interrupts: tuple = (),
+             pin: tuple = None) -> list:
     if (mode not in COMPARISONS):
         raise ValueError(f"'{mode}' is not a comparison mode; use one of {sorted(COMPARISONS)}")
     return COMPARISONS[mode](target, spec, image, memmap, init = init, state = state,
-                             steps = steps, extns = extns, latency = latency, ignore = ignore)
+                             steps = steps, extns = extns, latency = latency, ignore = ignore,
+                             interrupts = interrupts, pin = pin)
 
 
 COMPARISONS: dict = {
     "lockstep": lockstep,
     "final": lambda *args, **changes: [final(*args, **changes)]
 }
+
+
+def state_at(states: list, pc: int) -> MisaState:
+    for state in states:
+        if (state.pc == pc):
+            return state
+    raise AssertionError(
+        f"no state of the run sat at pc={pc:#06x}; the run visited "
+        f"{', '.join(f'{state.pc:#06x}' for state in states)}"
+    )
+
+
+def handler_index(states: list, handler: int = HANDLER_BASE) -> int:
+    for index, state in enumerate(states):
+        if (state.pc == handler):
+            return index
+    raise AssertionError(
+        f"the run never entered the handler at {handler:#06x}; it ended "
+        f"{'halted' if (states[-1].halted) else 'running'} at pc={states[-1].pc:#06x} with "
+        f"cause={states[-1].masked_csr('cause'):#06x} fault={states[-1].csrs['fault']:#06x}"
+    )
+
+
+def handler_entries(states: list, handler: int = HANDLER_BASE) -> int:
+    return sum(1 for state in states if (state.pc == handler))
+
+
+def describe_cause(cause: int) -> str:
+    kind: int = cause_kind(cause)
+    name: str = FaultKind(kind).name if (kind in tuple(FaultKind)) else "unassigned"
+    return f"{cause:#06x} (reason {cause_reason(cause):#05b} type {cause_type(cause):#05b} " \
+           f"{name}, extended status {cause_status(cause):#04x})"
+
+
+def expect_fault(states: list, kind: int, status: int = 0x00, at: int = PROGRAM_BASE,
+                 handler: int = HANDLER_BASE) -> MisaState:
+    entry: MisaState = states[handler_index(states, handler)]
+    expected: int = cause_word(kind, status)
+
+    assert entry.masked_csr("cause") == expected, (
+        f"the handler was entered with CAUSE {describe_cause(entry.masked_csr('cause'))} where "
+        f"the manual requires {describe_cause(expected)}"
+    )
+    assert entry.csrs["fault"] == at, (
+        f"FAULT is {entry.csrs['fault']:#06x} where the manual requires {at:#06x}, the address "
+        f"the fault was detected at"
+    )
+    return entry
+
+
+def expect_no_fault(states: list) -> MisaState:
+    for state in states:
+        assert state.pc != HANDLER_BASE, (
+            f"the run entered the fault handler with CAUSE "
+            f"{describe_cause(state.masked_csr('cause'))} and FAULT {state.csrs['fault']:#06x}"
+        )
+    return states[-1]
+
+
+@dataclass(frozen = True)
+class Directed:
+
+    target: Target
+    spec: SpecDriver
+    latency: MemoryLatency
+
+
+    def run(self, image: bytes, memmap: MemMap = EVERYTHING, steps: int = None,
+            extns: int = DEFAULT_EXTNS, interrupts: tuple = (), pin: tuple = None) -> list:
+        return lockstep(self.target, self.spec, image, memmap, steps = steps, extns = extns,
+                        latency = self.latency, interrupts = interrupts, pin = pin)
+
+
+    def resume(self, state: MisaState, image: bytes, memmap: MemMap = EVERYTHING,
+               steps: int = None, interrupts: tuple = (), pin: tuple = None) -> list:
+        return lockstep(self.target, self.spec, image, memmap, state = state, steps = steps,
+                        latency = self.latency, interrupts = interrupts, pin = pin)
+
+
+    def journal(self, image: bytes, memmap: MemMap = EVERYTHING, steps: int = None,
+                extns: int = DEFAULT_EXTNS, pin: tuple = (), linger: int = 0) -> RunResult:
+        return self.target.run(image, None, steps, pin, memmap, self.latency,
+                               reset_extns = extns, linger = linger)
+
+
+    def oracle(self, image: bytes, memmap: MemMap = EVERYTHING, steps: int = None,
+               extns: int = DEFAULT_EXTNS, interrupts: tuple = ()) -> list:
+        return self.spec.q0(image, memmap, extns, steps = steps, interrupts = interrupts,
+                            trace = True)
+
+
+    def seed(self, image: bytes, memmap: MemMap = EVERYTHING, extns: int = DEFAULT_EXTNS,
+             csrs: dict = None, regs: dict = None, **changes: object) -> MisaState:
+        state: MisaState = MisaState.from_spec_text(
+            self.spec.state_file_text(image, memmap, extns)
+        )[0]
+
+        if (csrs):
+            changes["csrs"] = {**state.csrs, **csrs}
+        if (regs):
+            values: list = list(state.gp_regs)
+            for slot, value in regs.items():
+                values[slot] = value
+            changes["gp_regs"] = tuple(values)
+
+        return replace(state, **changes)

@@ -1,25 +1,32 @@
-from dataclasses import dataclass, replace
+from importlib import import_module
 import re
+from types import ModuleType
 
-from pytest import MarkDecorator, fixture, mark
+from pytest import MarkDecorator, mark
 
 from misa_hw.grammar import AccessKind, CmpFlag, CsrReg, Extn, FaultKind, GpReg, Op, OverflowKind
 
-from compare import lockstep
-from generators import DEFAULT_EXTNS, HANDLER_BASE, INTERRUPT_BASE, SYSCALL_BASE, USER_MODE
-from memory import CAPS_READ, CAPS_RWX, CAPS_WRITE, MEMORY_SIZE, MemMap, MemoryLatency
+from compare import (
+    Directed, EVERYTHING, describe_cause, expect_fault, expect_no_fault, handler_index, state_at
+)
+from generators import (
+    DEFAULT_EXTNS, HANDLER_BASE, ILLEGAL_WORD, INTERRUPT_BASE, SYSCALL_BASE, USER_MODE,
+    USER_MODE_WORDS, USER_PAGE_REGION, directed_image
+)
+from memory import (
+    CAPS_READ, CAPS_RWX, CAPS_WRITE, MEMORY_SIZE, MemMap, memmap_hole, memmap_with
+)
 from programs import (
     FAULT_VECTOR, INTERRUPT_VECTOR, PAGE_SIZE, PROGRAM_BASE, RESET_VECTOR, SYSCALL_VECTOR,
-    VECTOR_TABLE_LO, alu_inst, block_image, cause_kind, cause_reserved, cause_reason, cause_status,
+    VECTOR_TABLE_LO, addr_of, alu_inst, cause_kind, cause_reserved, cause_reason, cause_status,
     cause_type, cause_word, csr_write_words, flags_word, halt_inst, jal_inst, jmp_csr_inst,
     jmp_inst, load_inst, mpu_pages, mpu_region, rrc_inst, rsr_inst, set_inst, store_inst,
     syscall_inst, wsr_inst
 )
-from spec import SpecDriver
 from state import (
     CSR_WRITE_MASKS, MisaState, RESERVED_CSRS, USER_READABLE_CSRS, USER_WRITABLE_CSRS
 )
-from target import RunResult, Target
+from target import RunResult
 
 
 pytestmark: MarkDecorator = mark.subset
@@ -29,24 +36,10 @@ CATALOGUE: dict = {
     "CSR": 7, "SC": 11, "INT": 11, "PRV": 15, "DHW": 5, "RST": 5
 }
 
-PIN_CAMPAIGN: str = (
-    "taking an interrupt requires driving the interrupt pin, whose mapping onto an instruction "
-    "boundary belongs to the interrupt timing campaign (plan sections 6.1 and 9.8) and is "
-    "deliberately not reachable through the generic lockstep path"
-)
-DEFERRED: dict = {
-    "VEC-05": PIN_CAMPAIGN,
-    "INT-01": PIN_CAMPAIGN,
-    "INT-07": PIN_CAMPAIGN,
-    "INT-08": PIN_CAMPAIGN,
-    "INT-09": PIN_CAMPAIGN,
-    "INT-10": PIN_CAMPAIGN,
-    "INT-11": PIN_CAMPAIGN,
-    "RST-04": PIN_CAMPAIGN
-}
-TEST_ID: re.Pattern = re.compile(r"^test_([a-z]+)_(\d\d)_")
+CATALOGUE_MODULES: tuple = ("test_directed", "test_interrupts")
+DEFERRED: dict = {}
 
-EVERYTHING: MemMap = MemMap.everything()
+TEST_ID: re.Pattern = re.compile(r"^test_([a-z]+)_(\d\d)_")
 
 NO_DYNAMICHW: int = DEFAULT_EXTNS & ~Extn.DYNAMICHW
 NO_SYSCALL: int = DEFAULT_EXTNS & ~Extn.SYSCALL
@@ -63,153 +56,6 @@ DATA_BASE: int = 0x0200
 HALT_CAUSE: int = cause_word(FaultKind.HALT)
 
 PROGRAM_PAGE: int = PROGRAM_BASE >> 8
-USER_PAGE_REGION: int = mpu_region(PROGRAM_PAGE, 0, 0, CAPS_RWX)
-USER_MODE_WORDS: tuple = (
-    csr_write_words(CsrReg.MPUCF, USER_PAGE_REGION) + csr_write_words(CsrReg.PRIVS, USER_MODE)
-)
-
-
-def addr_of(index: int, base: int = PROGRAM_BASE) -> int:
-    return base + 2 * index
-
-
-def directed_image(words: tuple, vectors: dict = None, blocks: dict = None,
-                   data: dict = None, memory: bytearray = None) -> bytes:
-    all_blocks: dict = {PROGRAM_BASE: words}
-    all_blocks.update(blocks or {})
-
-    all_vectors: dict = {
-        INTERRUPT_VECTOR: INTERRUPT_BASE, SYSCALL_VECTOR: SYSCALL_BASE,
-        FAULT_VECTOR: HANDLER_BASE, RESET_VECTOR: PROGRAM_BASE
-    }
-    all_vectors.update(vectors or {})
-
-    return block_image(all_blocks, all_vectors, memory, data)
-
-
-def memmap_with(rows: tuple) -> MemMap:
-    listed: tuple = tuple(row for row in rows if (row[2] is not None))
-    covered: list = [(0x0000, MEMORY_SIZE - 1)]
-
-    for lo, hi, caps in rows:
-        if (caps is not None):
-            continue
-        remaining: list = []
-        for start, end in covered:
-            if (end < lo) or (start > hi):
-                remaining.append((start, end))
-                continue
-            if (start < lo):
-                remaining.append((start, lo - 1))
-            if (end > hi):
-                remaining.append((hi + 1, end))
-        covered = remaining
-
-    return MemMap.from_rows(listed + tuple((lo, hi, "rwx") for lo, hi in covered))
-
-
-def memmap_hole(lo: int, hi: int, caps: str = None) -> MemMap:
-    return memmap_with(((lo, hi, caps),))
-
-
-@dataclass(frozen = True)
-class Directed:
-
-    target: Target
-    spec: SpecDriver
-    latency: MemoryLatency
-
-
-    def run(self, image: bytes, memmap: MemMap = EVERYTHING, steps: int = None,
-            extns: int = DEFAULT_EXTNS) -> list:
-        return lockstep(self.target, self.spec, image, memmap, steps = steps, extns = extns,
-                        latency = self.latency)
-
-
-    def resume(self, state: MisaState, image: bytes, memmap: MemMap = EVERYTHING,
-               steps: int = None) -> list:
-        return lockstep(self.target, self.spec, image, memmap, state = state, steps = steps,
-                        latency = self.latency)
-
-
-    def journal(self, image: bytes, memmap: MemMap = EVERYTHING, steps: int = None,
-                extns: int = DEFAULT_EXTNS) -> RunResult:
-        return self.target.run(image, None, steps, (), memmap, self.latency, reset_extns = extns)
-
-
-    def seed(self, image: bytes, memmap: MemMap = EVERYTHING, extns: int = DEFAULT_EXTNS,
-             csrs: dict = None, regs: dict = None, **changes: object) -> MisaState:
-        state: MisaState = MisaState.from_spec_text(
-            self.spec.state_file_text(image, memmap, extns)
-        )[0]
-
-        if (csrs):
-            changes["csrs"] = {**state.csrs, **csrs}
-        if (regs):
-            values: list = list(state.gp_regs)
-            for slot, value in regs.items():
-                values[slot] = value
-            changes["gp_regs"] = tuple(values)
-
-        return replace(state, **changes)
-
-
-@fixture
-def directed(target: Target, spec: SpecDriver, latency: MemoryLatency) -> Directed:
-    return Directed(target, spec, latency)
-
-
-def state_at(states: list, pc: int) -> MisaState:
-    for state in states:
-        if (state.pc == pc):
-            return state
-    raise AssertionError(
-        f"no state of the run sat at pc={pc:#06x}; the run visited "
-        f"{', '.join(f'{state.pc:#06x}' for state in states)}"
-    )
-
-
-def handler_index(states: list, handler: int = HANDLER_BASE) -> int:
-    for index, state in enumerate(states):
-        if (state.pc == handler):
-            return index
-    raise AssertionError(
-        f"the run never entered the handler at {handler:#06x}; it ended "
-        f"{'halted' if (states[-1].halted) else 'running'} at pc={states[-1].pc:#06x} with "
-        f"cause={states[-1].masked_csr('cause'):#06x} fault={states[-1].csrs['fault']:#06x}"
-    )
-
-
-def describe_cause(cause: int) -> str:
-    kind: int = cause_kind(cause)
-    name: str = FaultKind(kind).name if (kind in tuple(FaultKind)) else "unassigned"
-    return f"{cause:#06x} (reason {cause_reason(cause):#05b} type {cause_type(cause):#05b} " \
-           f"{name}, extended status {cause_status(cause):#04x})"
-
-
-def expect_fault(states: list, kind: int, status: int = 0x00, at: int = PROGRAM_BASE,
-                 handler: int = HANDLER_BASE) -> MisaState:
-    entry: MisaState = states[handler_index(states, handler)]
-    expected: int = cause_word(kind, status)
-
-    assert entry.masked_csr("cause") == expected, (
-        f"the handler was entered with CAUSE {describe_cause(entry.masked_csr('cause'))} where "
-        f"the manual requires {describe_cause(expected)}"
-    )
-    assert entry.csrs["fault"] == at, (
-        f"FAULT is {entry.csrs['fault']:#06x} where the manual requires {at:#06x}, the address "
-        f"the fault was detected at"
-    )
-    return entry
-
-
-def expect_no_fault(states: list) -> MisaState:
-    for state in states:
-        assert state.pc != HANDLER_BASE, (
-            f"the run entered the fault handler with CAUSE "
-            f"{describe_cause(state.masked_csr('cause'))} and FAULT {state.csrs['fault']:#06x}"
-        )
-    return states[-1]
 
 
 def catalogue_ids() -> set:
@@ -221,10 +67,12 @@ def catalogue_ids() -> set:
 
 def implemented_ids() -> set:
     found: set = set()
-    for name in tuple(globals()):
-        matched: re.Match = TEST_ID.match(name)
-        if (matched):
-            found.add(f"{matched.group(1).upper()}-{matched.group(2)}")
+    for name in CATALOGUE_MODULES:
+        module: ModuleType = import_module(name)
+        for symbol in tuple(vars(module)):
+            matched: re.Match = TEST_ID.match(symbol)
+            if (matched):
+                found.add(f"{matched.group(1).upper()}-{matched.group(2)}")
     return found
 
 
@@ -850,7 +698,6 @@ def test_mem_13_a_register_base_store_into_the_table_is_a_vector_write(directed:
 
 TOP_WORD: int = MEMORY_SIZE - 1
 UNMAPPED_PAGE: int = 0x8000
-ILLEGAL_WORD: int = rrc_inst(GpReg.RB, GpReg.RA, reserved = 0x1)
 
 
 def jump_words(target: int) -> tuple:

@@ -3,14 +3,14 @@ from pathlib import Path
 
 from pytest import MarkDecorator, fixture, mark, raises, skip
 
-from misa_hw.grammar import Extn, FaultKind
+from misa_hw.grammar import Extn
 
 from compare import final, lockstep
 from generators import DEFAULT_EXTNS
 from memory import MemMap, MemoryLatency
 from programs import (
-    BRINGUP_CODES, BRINGUP_MEMMAP, RESET_VECTOR, SYSCALL_VECTOR, bringup_image, bringup_names,
-    cause_kind, cause_status, macro_values, rebuild_bringup, toolchain_env
+    BRINGUP_CODES, BRINGUP_MEMMAP, FAULT_TAG, RESET_VECTOR, SYSCALL_VECTOR, bringup_image,
+    bringup_names, expect_finish, rebuild_bringup, toolchain_env
 )
 from spec import SpecDriver
 from state import MisaState
@@ -22,8 +22,6 @@ pytestmark: MarkDecorator = mark.subset
 HALT_LIMIT: int = 100000
 PREFIX_STEPS: int = 10000
 LONG_LIMIT: int = 2000000
-
-FAULT_TAG: str = "FAULT_TAG"
 
 BRINGUP_MAP_TEXT: str = BRINGUP_MEMMAP.read_text(encoding = "utf-8")
 
@@ -90,47 +88,6 @@ LONG_PROGRAMS: tuple = tuple(program for program in PROGRAMS if (not program.hal
 
 def label(value: object) -> str:
     return value.name if (isinstance(value, Bringup)) else f"extns{value:#x}"
-
-
-@fixture(scope = "session")
-def codes() -> dict:
-    return macro_values(BRINGUP_CODES.read_text(encoding = "utf-8"))
-
-
-@fixture(scope = "session")
-def bringup_memmap() -> MemMap:
-    return MemMap.from_memmap_text(BRINGUP_MAP_TEXT)
-
-
-def describe_finish(code: int, codes: dict) -> str:
-    if (code & codes[FAULT_TAG]):
-        kind: int = code & ~codes[FAULT_TAG]
-        named: str = FaultKind(kind).name if (kind in tuple(FaultKind)) else "an unassigned cause"
-        return f"{code:#04x}, the fault handler reporting {named}"
-
-    names: tuple = tuple(sorted(name for name, value in codes.items() if (value == code)))
-    return f"{code:#04x} ({names[0] if (names) else 'which finishtest.h does not name'})"
-
-
-def expect_finish(program: Bringup, states: list, codes: dict) -> MisaState:
-    final: MisaState = states[-1]
-    expected: int = codes[program.expected]
-
-    assert final.halted, (
-        f"{program.name} did not halt in {program.steps} instructions; it reached pc="
-        f"{final.pc:#06x} with cause={final.masked_csr('cause'):#06x}"
-    )
-
-    cause: int = final.masked_csr("cause")
-    assert cause_kind(cause) == FaultKind.HALT, (
-        f"{program.name} halted with cause={cause:#06x}, whose reason and type are not those of "
-        f"a HALT instruction; only a HALT can halt the processor"
-    )
-    assert cause_status(cause) == expected, (
-        f"{program.name} finished with {describe_finish(cause_status(cause), codes)} where it "
-        f"passes with {describe_finish(expected, codes)}"
-    )
-    return final
 
 
 def test_the_campaign_covers_every_bringup_program() -> None:
@@ -238,7 +195,7 @@ def test_a_bringup_program_halts_with_its_finish_code(target: Target, bringup_me
                                                       program: Bringup, extns: int) -> None:
     result: RunResult = target.run(bringup_image(program.name), None, program.steps, (),
                                    bringup_memmap, latency, reset_extns = extns)
-    expect_finish(program, result.states, codes)
+    expect_finish(program.name, codes[program.expected], result.states, codes)
 
 
 @mark.parametrize("program, extns", LONG_RUNS, ids = label)
@@ -247,7 +204,7 @@ def test_a_long_program_reaches_its_finish_code_in_the_oracle(spec: SpecDriver,
                                                               codes: dict, program: Bringup,
                                                               extns: int) -> None:
     states: list = spec.q0(bringup_image(program.name), bringup_memmap, extns, steps = LONG_LIMIT)
-    expect_finish(program, states, codes)
+    expect_finish(program.name, codes[program.expected], states, codes)
 
 
 @mark.exhaustive
@@ -259,7 +216,7 @@ def test_a_long_program_reaches_its_finish_code_on_the_design(target: Target, sp
                                                               program: Bringup) -> None:
     ended: MisaState = final(target, spec, bringup_image(program.name), bringup_memmap,
                              steps = LONG_LIMIT, extns = DEFAULT_EXTNS, latency = latency)
-    expect_finish(program, [ended], codes)
+    expect_finish(program.name, codes[program.expected], [ended], codes)
 
 
 def test_the_finish_check_notices_a_program_which_failed(target: Target, bringup_memmap: MemMap,
@@ -271,7 +228,7 @@ def test_the_finish_check_notices_a_program_which_failed(target: Target, bringup
     result: RunResult = target.run(bytes(broken), None, program.steps, (), bringup_memmap, None,
                                    reset_extns = DEFAULT_EXTNS)
     with raises(AssertionError, match = "SYNCTEST_SUCCESS"):
-        expect_finish(program, result.states, codes)
+        expect_finish(program.name, codes[program.expected], result.states, codes)
 
 
 def test_the_checked_in_binaries_match_their_sources(tmp_path: Path) -> None:

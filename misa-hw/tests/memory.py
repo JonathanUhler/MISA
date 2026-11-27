@@ -164,6 +164,31 @@ class MemMap:
         return f"MemMap({rows})"
 
 
+def memmap_with(rows: tuple) -> MemMap:
+    listed: tuple = tuple(row for row in rows if (row[2] is not None))
+    covered: list = [(0x0000, MEMORY_SIZE - 1)]
+
+    for lo, hi, caps in rows:
+        if (caps is not None):
+            continue
+        remaining: list = []
+        for start, end in covered:
+            if (end < lo) or (start > hi):
+                remaining.append((start, end))
+                continue
+            if (start < lo):
+                remaining.append((start, lo - 1))
+            if (end > hi):
+                remaining.append((hi + 1, end))
+        covered = remaining
+
+    return MemMap.from_rows(listed + tuple((lo, hi, "rwx") for lo, hi in covered))
+
+
+def memmap_hole(lo: int, hi: int, caps: str = None) -> MemMap:
+    return memmap_with(((lo, hi, caps),))
+
+
 class MemoryLatency(ABC):
 
     name: str

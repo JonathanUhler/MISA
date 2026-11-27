@@ -6,9 +6,10 @@ import shutil
 import subprocess
 from subprocess import CompletedProcess
 
-from misa_hw.grammar import GpReg, Op
+from misa_hw.grammar import FaultKind, GpReg, Op
 
 from memory import MEMORY_SIZE
+from state import MisaState
 
 
 REPO_ROOT: Path = Path(__file__).resolve().parents[2]
@@ -21,6 +22,8 @@ BRINGUP_CODES: Path = BRINGUP_DIR / "common" / "finishtest.h"
 ASSEMBLER: str = "misa-as"
 MAKE: str = "make"
 MACRO: re.Pattern = re.compile(r"#macro\s+([A-Za-z_][A-Za-z0-9_]*)\s+(\S+)\s*#endm")
+
+FAULT_TAG: str = "FAULT_TAG"
 
 HALT_WORD: int = 0x0000
 
@@ -194,8 +197,46 @@ def block_image(blocks: dict, vectors: dict = None, memory: bytearray = None,
     return bytes(image)
 
 
+def addr_of(index: int, base: int = PROGRAM_BASE) -> int:
+    return base + 2 * index
+
+
 def macro_values(text: str) -> dict:
     return {name: int(value, 0) for name, value in MACRO.findall(text)}
+
+
+def finish_codes() -> dict:
+    return macro_values(BRINGUP_CODES.read_text(encoding = "utf-8"))
+
+
+def describe_finish(code: int, codes: dict) -> str:
+    if (code & codes[FAULT_TAG]):
+        kind: int = code & ~codes[FAULT_TAG]
+        named: str = FaultKind(kind).name if (kind in tuple(FaultKind)) else "an unassigned cause"
+        return f"{code:#04x}, the fault handler reporting {named}"
+
+    names: tuple = tuple(sorted(name for name, value in codes.items() if (value == code)))
+    return f"{code:#04x} ({names[0] if (names) else 'which finishtest.h does not name'})"
+
+
+def expect_finish(name: str, expected: int, states: list, codes: dict) -> MisaState:
+    final: MisaState = states[-1]
+
+    assert final.halted, (
+        f"{name} did not halt in {len(states) - 1} instructions; it reached pc="
+        f"{final.pc:#06x} with cause={final.masked_csr('cause'):#06x}"
+    )
+
+    cause: int = final.masked_csr("cause")
+    assert cause_kind(cause) == FaultKind.HALT, (
+        f"{name} halted with cause={cause:#06x}, whose reason and type are not those of a HALT "
+        f"instruction; only a HALT can halt the processor"
+    )
+    assert cause_status(cause) == expected, (
+        f"{name} finished with {describe_finish(cause_status(cause), codes)} where it passes with "
+        f"{describe_finish(expected, codes)}"
+    )
+    return final
 
 
 def bringup_names() -> tuple:

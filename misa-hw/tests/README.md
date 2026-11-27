@@ -47,6 +47,7 @@ The following pytest markers are also available:
 | `test_pairs.py` | Executes two-instruction sequences from a known state. |
 | `test_random.py` | Fills memory with random bytes and a valid vector table. |
 | `test_weighted.py` | Generates structured random programs from a set of profiles, each with a valid prologue, body, and epilogue. |
+| `test_interrupts.py` | Tests the interrupt pin edge detection and interrupt handler. |
 
 ### `test_units` Reference Model
 

@@ -57,6 +57,15 @@ RESTRICTIVE_REGIONS: tuple = (
     mpu_region(PROGRAM_BASE >> 8, 0, 0, CAPS_EXECUTE),
 )
 
+PROGRAM_PAGE: int = PROGRAM_BASE >> 8
+USER_PAGE_REGION: int = mpu_region(PROGRAM_PAGE, 0, 0, CAPS_RWX)
+
+USER_MODE_WORDS: tuple = (
+    csr_write_words(CsrReg.MPUCF, USER_PAGE_REGION) + csr_write_words(CsrReg.PRIVS, USER_MODE)
+)
+
+ILLEGAL_WORD: int = rrc_inst(GpReg.RB, GpReg.RA, reserved = 0x1)
+
 
 @dataclass(frozen = True)
 class Seed:
@@ -393,6 +402,17 @@ CAMPAIGN_VECTORS: dict = {
     INTERRUPT_VECTOR: INTERRUPT_BASE, SYSCALL_VECTOR: SYSCALL_BASE,
     FAULT_VECTOR: HANDLER_BASE, RESET_VECTOR: PROGRAM_BASE
 }
+
+
+def directed_image(words: tuple, vectors: dict = None, blocks: dict = None,
+                   data: dict = None, memory: bytearray = None) -> bytes:
+    all_blocks: dict = {PROGRAM_BASE: words}
+    all_blocks.update(blocks or {})
+
+    all_vectors: dict = dict(CAMPAIGN_VECTORS)
+    all_vectors.update(vectors or {})
+
+    return block_image(all_blocks, all_vectors, memory, data)
 
 PAGE_COUNT: int = MEMORY_SIZE // PAGE_SIZE
 RANDOM_CAPS: tuple = (
